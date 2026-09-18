@@ -1,0 +1,190 @@
+package com.neoworksuite.neocanvas.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import com.neoworksuite.neocanvas.core.store.LoadResult
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.neoworksuite.neocanvas.core.model.CanvasDocument
+import com.neoworksuite.neocanvas.core.model.DocumentHistory
+import com.neoworksuite.neocanvas.core.model.Layer
+import com.neoworksuite.neocanvas.core.model.LayerPayload
+
+internal enum class InspectorPresentation { Docked, Overlay }
+internal fun inspectorPresentation(panel: InspectorPanel): InspectorPresentation =
+    if (panel == InspectorPanel.Brushes) InspectorPresentation.Overlay else InspectorPresentation.Docked
+
+@Composable
+fun rememberEditorState(fileActions: EditorFileActions = UnavailableEditorFileActions): EditorState = remember {
+        EditorState(
+            DocumentHistory(
+                CanvasDocument(
+                    id = "new-local-document",
+                    width = 2048,
+                    height = 1536,
+                    layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+                ),
+            ), fileActions,
+        )
+}
+
+/** Shared, local-first creative studio host for Android tablets and Windows. */
+@Composable
+fun NeoCanvasApp(
+    fileActions: EditorFileActions = UnavailableEditorFileActions,
+    state: EditorState = rememberEditorState(fileActions),
+) = MaterialTheme {
+    var destination by remember { mutableStateOf(AppDestination.Gallery) }
+    LocalLibraryDialogs(state)
+    NewCanvasDialog(state)
+    LaunchedEffect(state) {
+        state.checkRecovery()
+        while (true) {
+            delay(30_000)
+            state.autosaveRecovery()
+        }
+    }
+    if (state.recoveryChecking || state.recoveryCandidate != null) {
+        val available = state.recoveryCandidate is LoadResult.Success
+        AlertDialog(
+            onDismissRequest = {},
+            containerColor = NeoCanvasColors.panel,
+            title = { Text(if (state.recoveryChecking) "Checking local recovery…" else "Local recovery snapshot", color = NeoCanvasColors.paper) },
+            text = { Text(
+                if (state.recoveryChecking) "Checking this device for your last recovery copy."
+                else if (available) "A previous local snapshot is available. It may be older than your saved document. Recover it to inspect and save it, or start fresh. Starting fresh allows future autosaves to replace this recovery copy."
+                else "The previous recovery copy could not be opened. Starting fresh allows future autosaves to replace it. Your manually saved documents are unchanged.",
+                color = NeoCanvasColors.muted,
+            ) },
+            confirmButton = {
+                if (available) TextButton(onClick = { state.restoreRecovery(); destination = AppDestination.Editor }) { Text("Recover snapshot") }
+            },
+            dismissButton = {
+                if (!state.recoveryChecking) TextButton(onClick = { state.dismissRecovery() }) { Text("Start fresh") }
+            },
+        )
+    }
+    if (state.pendingDocumentAction != null) {
+        AlertDialog(
+            onDismissRequest = { state.cancelDocumentAction() },
+            containerColor = NeoCanvasColors.panel,
+            title = { Text("Save your changes?", color = NeoCanvasColors.paper) },
+            text = { Text(state.documentActionError?.let { "Save failed: $it\n\nYour canvas is still open. Retry saving or cancel to return to it." }
+                ?: "This canvas has unsaved changes. Save before continuing, or discard them.", color = NeoCanvasColors.muted) },
+            confirmButton = { TextButton(onClick = { state.saveAndContinue() }) { Text("Save and continue") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { state.cancelDocumentAction() }) { Text("Cancel") }
+                    TextButton(onClick = { state.discardAndContinue() }) { Text("Discard") }
+                }
+            },
+        )
+    }
+    if (destination == AppDestination.Gallery && !state.recoveryChecking && state.recoveryCandidate == null) {
+        GalleryScreen(
+            actions = fileActions,
+            onNew = { destination = AppDestination.Editor; state.newCanvasDialogVisible = true },
+            onImportDocument = { if (state.importDocument()) destination = AppDestination.Editor },
+            onImportImage = { destination = AppDestination.Editor; state.importImage() },
+            onOpen = { name -> if (state.openFromGallery(name)) destination = AppDestination.Editor },
+        )
+    } else BoxWithConstraints(
+        Modifier.fillMaxSize()
+            .background(NeoCanvasColors.workspace)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || !event.isCtrlPressed) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.Z -> { state.undo(); true }
+                    Key.Y -> { state.redo(); true }
+                    else -> false
+                }
+            },
+    ) {
+        val compact = maxWidth < 860.dp
+        val inspectorHeight = (maxHeight * .42f).coerceAtMost(320.dp)
+        Column(Modifier.fillMaxSize()) {
+            StudioTopBar(state, compact, onGallery = { state.requestClose { destination = AppDestination.Gallery } })
+            if (compact) {
+                Column(Modifier.weight(1f).fillMaxWidth()) {
+                    CanvasWorkspace(state, Modifier.weight(1f).fillMaxWidth())
+                    if (state.inspectorVisible && inspectorPresentation(state.inspectorPanel) == InspectorPresentation.Docked) {
+                        StudioInspector(
+                            state = state,
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth().height(inspectorHeight),
+                        )
+                    }
+                }
+            } else {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
+                    CanvasWorkspace(state, Modifier.fillMaxHeight().weight(1f))
+                    if (state.inspectorVisible && inspectorPresentation(state.inspectorPanel) == InspectorPresentation.Docked) {
+                        StudioInspector(
+                            state = state,
+                            compact = false,
+                            modifier = Modifier.fillMaxHeight().width(324.dp),
+                        )
+                    }
+                }
+            }
+            state.statusMessage?.let { message ->
+                Text(
+                    message,
+                    color = NeoCanvasColors.muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.background(NeoCanvasColors.chrome).fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+            }
+        }
+        if (state.inspectorVisible && inspectorPresentation(state.inspectorPanel) == InspectorPresentation.Overlay) {
+            Box(
+                Modifier.align(Alignment.Center).fillMaxWidth(.9f).fillMaxHeight(.86f)
+                    .widthIn(max = 840.dp).heightIn(max = 720.dp)
+                    .clip(RoundedCornerShape(16.dp)).background(NeoCanvasColors.panel)
+                    .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(16.dp)),
+            ) {
+                StudioInspector(state, compact = false, modifier = Modifier.fillMaxSize())
+                Text("×", color = NeoCanvasColors.paper, fontSize = 22.sp,
+                    modifier = Modifier.align(Alignment.TopEnd).clickable { state.inspectorVisible = false }
+                        .padding(horizontal = 15.dp, vertical = 8.dp))
+            }
+        }
+    }
+}
+
+private enum class AppDestination { Gallery, Editor }

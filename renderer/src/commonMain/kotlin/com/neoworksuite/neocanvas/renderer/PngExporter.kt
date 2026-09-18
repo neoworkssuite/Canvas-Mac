@@ -1,0 +1,127 @@
+package com.neoworksuite.neocanvas.renderer
+
+import com.neoworksuite.neocanvas.core.model.CanvasDocument
+import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.TileAddress
+import com.neoworksuite.neocanvas.core.store.SaveResult
+import kotlin.math.max
+import kotlin.math.min
+
+/** A flattened RGBA8 image that can be written as a standards-compliant PNG. */
+class PngImage(val width: Int, val height: Int, rgba: ByteArray) {
+    val rgba: ByteArray = rgba.copyOf()
+
+    init {
+        require(width > 0 && height > 0) { "PNG dimensions must be positive." }
+        require(this.rgba.size == width * height * 4) { "PNG pixels do not match its dimensions." }
+    }
+
+    fun rgbaAt(x: Int, y: Int): ByteArray {
+        require(x in 0 until width && y in 0 until height) { "Pixel is outside the PNG." }
+        val offset = (y * width + x) * 4
+        return rgba.copyOfRange(offset, offset + 4)
+    }
+
+    fun encode(): ByteArray = PngEncoder.encode(width, height, rgba)
+}
+
+/** Host-owned output boundary; it deliberately has no network or account capability. */
+fun interface PngTarget {
+    fun write(bytes: ByteArray)
+}
+
+/** Composites visible raster layers at document resolution and writes a local PNG when requested. */
+object PngExporter {
+    fun export(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>, target: PngTarget): SaveResult = try {
+        target.write(render(document, tiles).encode())
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PNG: ${error.message ?: "unknown output error"}")
+    }
+
+    fun render(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): PngImage {
+        val output = ByteArray(document.width * document.height * 4)
+        document.layers.filter { it.visible && it.opacity > 0f }.forEach { layer ->
+            val raster = layer.payload as? LayerPayload.Raster
+                ?: return@forEach
+            raster.tileAddresses.forEach { address ->
+                val pixels = tiles[address] ?: return@forEach
+                require(pixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
+                compositeTile(output, document.width, document.height, address, pixels, layer.opacity, layer.blendMode)
+            }
+        }
+        return PngImage(document.width, document.height, output)
+    }
+
+    private fun compositeTile(output: ByteArray, outputWidth: Int, outputHeight: Int, address: TileAddress, tile: ByteArray,
+        opacity: Float, blendMode: com.neoworksuite.neocanvas.core.model.LayerBlendMode) {
+        val startX = address.x * TILE_SIZE_PIXELS
+        val startY = address.y * TILE_SIZE_PIXELS
+        val fromX = max(0, startX)
+        val fromY = max(0, startY)
+        val toX = min(outputWidth, startX + TILE_SIZE_PIXELS)
+        val toY = min(outputHeight, startY + TILE_SIZE_PIXELS)
+        if (fromX >= toX || fromY >= toY) return
+
+        for (y in fromY until toY) for (x in fromX until toX) {
+            val tileOffset = ((y - startY) * TILE_SIZE_PIXELS + (x - startX)) * 4
+            val outputOffset = (y * outputWidth + x) * 4
+            LayerCompositor.compositePixel(output, outputOffset, tile, tileOffset, opacity, blendMode)
+        }
+    }
+}
+
+private object PngEncoder {
+    private val signature = byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10)
+
+    fun encode(width: Int, height: Int, pixels: ByteArray): ByteArray {
+        val rows = Bytes().apply {
+            repeat(height) { y -> byte(0); bytes(pixels, y * width * 4, width * 4) }
+        }.toByteArray()
+        return Bytes().apply {
+            bytes(signature)
+            chunk("IHDR", Bytes().apply { intBig(width); intBig(height); byte(8); byte(6); byte(0); byte(0); byte(0) }.toByteArray())
+            chunk("IDAT", zlibStore(rows))
+            chunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
+    private fun Bytes.chunk(type: String, data: ByteArray) {
+        intBig(data.size); bytes(type.encodeToByteArray()); bytes(data); intBig(crc32(type.encodeToByteArray() + data))
+    }
+
+    private fun zlibStore(data: ByteArray): ByteArray = Bytes().apply {
+        byte(0x78); byte(0x01)
+        var offset = 0
+        do {
+            val count = min(65_535, data.size - offset)
+            byte(if (offset + count == data.size) 1 else 0)
+            byte(count); byte(count ushr 8); byte(count.inv()); byte(count.inv() ushr 8)
+            bytes(data, offset, count); offset += count
+        } while (offset < data.size)
+        intBig(adler32(data))
+    }.toByteArray()
+
+    private fun crc32(data: ByteArray): Int {
+        var value = -1
+        data.forEach { byte ->
+            value = value xor (byte.toInt() and 0xff)
+            repeat(8) { value = if ((value and 1) != 0) (value ushr 1) xor 0xedb88320.toInt() else value ushr 1 }
+        }
+        return value.inv()
+    }
+
+    private fun adler32(data: ByteArray): Int {
+        var a = 1; var b = 0
+        data.forEach { byte -> a = (a + (byte.toInt() and 0xff)) % 65_521; b = (b + a) % 65_521 }
+        return (b shl 16) or a
+    }
+
+    private class Bytes {
+        private val data = ArrayList<Byte>()
+        fun byte(value: Int) { data += value.toByte() }
+        fun bytes(value: ByteArray, offset: Int = 0, length: Int = value.size - offset) { repeat(length) { data += value[offset + it] } }
+        fun intBig(value: Int) { byte(value ushr 24); byte(value ushr 16); byte(value ushr 8); byte(value) }
+        fun toByteArray(): ByteArray = data.toByteArray()
+    }
+}

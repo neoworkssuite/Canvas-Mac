@@ -1,0 +1,801 @@
+package com.neoworksuite.neocanvas.ui
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import com.neoworksuite.neocanvas.brushes.BrushDefinition
+import com.neoworksuite.neocanvas.brushes.BuiltInBrushes
+import com.neoworksuite.neocanvas.core.model.AddRasterLayer
+import com.neoworksuite.neocanvas.core.model.ApplyRasterPatch
+import com.neoworksuite.neocanvas.core.model.CanvasDocument
+import com.neoworksuite.neocanvas.core.model.DeleteLayer
+import com.neoworksuite.neocanvas.core.model.DocumentCommand
+import com.neoworksuite.neocanvas.core.model.DocumentHistory
+import com.neoworksuite.neocanvas.core.model.DuplicateLayer
+import com.neoworksuite.neocanvas.core.model.MoveLayer
+import com.neoworksuite.neocanvas.core.model.RenameLayer
+import com.neoworksuite.neocanvas.core.model.SetLayerOpacity
+import com.neoworksuite.neocanvas.core.model.SetLayerVisibility
+import com.neoworksuite.neocanvas.core.model.LayerBlendMode
+import com.neoworksuite.neocanvas.core.model.SetLayerAlphaLocked
+import com.neoworksuite.neocanvas.core.model.SetLayerBlendMode
+import com.neoworksuite.neocanvas.core.model.MergeRasterLayerDown
+import com.neoworksuite.neocanvas.core.model.TileAddress
+import com.neoworksuite.neocanvas.core.model.Layer
+import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.store.LoadResult
+import com.neoworksuite.neocanvas.core.store.SaveResult
+import com.neoworksuite.neocanvas.renderer.RasterColor
+import com.neoworksuite.neocanvas.renderer.RasterPoint
+import com.neoworksuite.neocanvas.renderer.Rasterizer
+import com.neoworksuite.neocanvas.renderer.TileKey
+import com.neoworksuite.neocanvas.renderer.TileStore
+
+enum class Tool { Brush, Eraser, Pan, Fill, Eyedropper, Select, MoveSelection }
+enum class InspectorPanel { Layers, Brushes, Colors }
+enum class PendingDocumentAction { New, Open, Close }
+data class DrawPoint(val x: Float, val y: Float, val pressure: Float = 1f)
+
+/**
+ * Shared editor coordinator. Pixels live in [tileStore], while every visible document mutation
+ * is recorded in [history]. Tile snapshots pair with history entries so undo/redo restores both
+ * metadata and raster pixels without exposing renderer types to the core module.
+ */
+class EditorState(
+    val history: DocumentHistory,
+    private val fileActions: EditorFileActions = UnavailableEditorFileActions,
+    val tileStore: TileStore = TileStore(),
+) {
+    private var documentRevision by mutableIntStateOf(0)
+    private var editVersion by mutableIntStateOf(0)
+    private var savedVersion by mutableIntStateOf(0)
+    private var nextVersion = 0
+    private val undoVersions = mutableListOf<Int>()
+    private val redoVersions = mutableListOf<Int>()
+    val hasUnsavedChanges: Boolean get() = editVersion != savedVersion
+    val supportsSaveAs: Boolean get() = fileActions.supportsSaveAs
+    val supportsLocalLibrary: Boolean get() = fileActions.supportsLocalLibrary
+    var localDocuments: List<String>? by mutableStateOf(null)
+        private set
+    var namingLocalCopy by mutableStateOf(false)
+        private set
+    var libraryError: String? by mutableStateOf(null)
+        private set
+    fun closeLocalLibrary() { localDocuments = null; namingLocalCopy = false; libraryError = null }
+    fun saveNamedCopy(name: String) {
+        if (!namingLocalCopy) return
+        val result = try { fileActions.saveNamedCopy(name, document, tilesForDocument()) }
+            catch (error: Exception) { SaveResult.Failure(error.message ?: "Unable to save copy") }
+        if (result == SaveResult.Success) {
+            savedVersion = editVersion
+            closeLocalLibrary()
+            statusMessage = "Saved local copy: ${name.trim()}"
+        } else if (result is SaveResult.Failure) libraryError = result.message
+    }
+    fun openLocalDocument(name: String) {
+        if (name !in localDocuments.orEmpty()) return
+        val result = try { fileActions.openLocalDocument(name) }
+            catch (error: Exception) { LoadResult.Failure(error.message ?: "Unable to open document") }
+        acceptOpenResult(result)
+        if (result is LoadResult.Success) closeLocalLibrary() else libraryError = statusMessage
+    }
+    fun openFromGallery(name: String): Boolean {
+        val result = try { fileActions.openLocalDocument(name) }
+            catch (error: Exception) { LoadResult.Failure(error.message ?: "Unable to open document") }
+        acceptOpenResult(result)
+        return result is LoadResult.Success
+    }
+    fun importDocument(): Boolean {
+        val result = try { fileActions.open() }
+            catch (error: Exception) { LoadResult.Failure(error.message ?: "Unable to import document") }
+        acceptOpenResult(result)
+        return result is LoadResult.Success
+    }
+    fun saveAs(): Boolean {
+        if (fileActions.supportsLocalLibrary) { namingLocalCopy = true; libraryError = null; return false }
+        val result = fileActions.saveAs(document, tilesForDocument())
+        applySaveResult(result, "Saved local document copy")
+        if (result == SaveResult.Success) savedVersion = editVersion
+        return result == SaveResult.Success
+    }
+    var pendingDocumentAction: PendingDocumentAction? by mutableStateOf(null)
+        private set
+    var documentActionError: String? by mutableStateOf(null)
+        private set
+    private var closeAfterConfirmation: (() -> Unit)? = null
+    var newCanvasDialogVisible by mutableStateOf(false)
+    private var requestedCanvasSize: Pair<Int, Int>? = null
+    var recoveryChecking by mutableStateOf(true)
+        private set
+    var recoveryCandidate: LoadResult? by mutableStateOf(null)
+        private set
+    private var lastRecoveryVersion = -1
+
+    suspend fun checkRecovery() {
+        if (!recoveryChecking) return
+        recoveryCandidate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            try { if (fileActions.supportsRecovery) fileActions.loadRecovery() else null }
+            catch (error: Exception) { LoadResult.Failure("Could not read recovery copy: ${error.message}") }
+        }
+        recoveryChecking = false
+    }
+    fun dismissRecovery() { recoveryCandidate = null }
+    fun restoreRecovery() {
+        val recovered = recoveryCandidate as? LoadResult.Success ?: return
+        // Startup recovery must never silently replace work created in this session.
+        if (hasUnsavedChanges) { statusMessage = "Save your current artwork before recovering another canvas"; return }
+        history.reset(recovered.document)
+        fileActions.resetDocumentTarget()
+        tileStore.restore(recovered.tiles)
+        undoTileStates.clear(); redoTileStates.clear()
+        markCleanDocument()
+        editVersion = ++nextVersion
+        activeLayerId = document.layers.lastOrNull()?.id
+        clearSelection(); resetView()
+        documentRevision++
+        recoveryCandidate = null
+        statusMessage = "Recovered local snapshot — save it to keep this version"
+    }
+    suspend fun autosaveRecovery() {
+        if (!fileActions.supportsRecovery || recoveryChecking || recoveryCandidate != null ||
+            !hasUnsavedChanges || editVersion == lastRecoveryVersion) return
+        val version = editVersion
+        val snapshot = document
+        val tiles = tilesForDocument()
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            try { fileActions.saveRecovery(snapshot, tiles) }
+            catch (error: Exception) { SaveResult.Failure("Could not write recovery copy: ${error.message}") }
+        }
+        if (result == SaveResult.Success) lastRecoveryVersion = version
+        else if (result is SaveResult.Failure) statusMessage = "Autosave failed: ${result.message}. Save your artwork manually."
+    }
+    private val undoTileStates = mutableListOf<Map<TileKey, ByteArray>>()
+    private val redoTileStates = mutableListOf<Map<TileKey, ByteArray>>()
+
+    var activeLayerId: String? by mutableStateOf(history.current.layers.lastOrNull()?.id)
+    var brush: BrushDefinition by mutableStateOf(BuiltInBrushes.pencil)
+    var color: Color by mutableStateOf(Color(0xFF1B1C20))
+    var brushSize: Float by mutableFloatStateOf(BuiltInBrushes.pencil.baseSize)
+    var fillTolerance: Int by mutableIntStateOf(0)
+    var brushOpacity: Float by mutableFloatStateOf(1f)
+    var stabilization: Float by mutableFloatStateOf(0f)
+    var symmetry: com.neoworksuite.neocanvas.renderer.DrawingSymmetry by mutableStateOf(com.neoworksuite.neocanvas.renderer.DrawingSymmetry.None)
+    var tool: Tool by mutableStateOf(Tool.Brush)
+    var selection: CanvasSelection? by mutableStateOf(null)
+        private set
+    var selectionMode: SelectionShape by mutableStateOf(SelectionShape.Rectangle)
+    var transformSession: TransformSession? by mutableStateOf(null)
+        private set
+    fun clearSelection() { transformSession = null; selection = null }
+    fun beginTransform(): Boolean {
+        val bounds = selection ?: return false
+        if (bounds.invertedRegion != null) {
+            statusMessage = "Invert selections cannot be transformed as one rectangular object"
+            return false
+        }
+        val layerId = activeLayerId ?: return false
+        val layer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked }
+        if (layer == null) {
+            statusMessage = "Select an unlocked visible layer before transforming"
+            return false
+        }
+        transformSession = TransformSession(bounds)
+        tool = Tool.MoveSelection
+        statusMessage = "Transform active — drag artwork or handles, then Apply"
+        return true
+    }
+    fun updateTransform(
+        translationX: Float = transformSession?.translationX ?: 0f,
+        translationY: Float = transformSession?.translationY ?: 0f,
+        scale: Float = transformSession?.scale ?: 1f,
+        rotationDegrees: Float = transformSession?.rotationDegrees ?: 0f,
+    ) {
+        val current = transformSession ?: return
+        if (!translationX.isFinite() || !translationY.isFinite() || !scale.isFinite() ||
+            scale <= 0f || !rotationDegrees.isFinite()) return
+        transformSession = current.copy(translationX = translationX, translationY = translationY,
+            scale = scale.coerceIn(.02f, 50f), rotationDegrees = rotationDegrees)
+    }
+    private fun transformPatch(): Pair<com.neoworksuite.neocanvas.renderer.RasterPatch, CanvasSelection>? {
+        val session = transformSession ?: return null
+        val layerId = activeLayerId ?: return null
+        if (document.layers.none { it.id == layerId && it.visible && !it.locked }) return null
+        val target = session.targetBounds(document.width, document.height) ?: return null
+        val patch = com.neoworksuite.neocanvas.renderer.RasterMove.move(
+            tileStore, layerId, session.sourceBounds.left, session.sourceBounds.top,
+            session.sourceBounds.right, session.sourceBounds.bottom,
+            target.left - session.sourceBounds.left, target.top - session.sourceBounds.top,
+            document.width, document.height,
+            resizedWidth = target.right - target.left, resizedHeight = target.bottom - target.top,
+            sampling = if (smoothResizing) com.neoworksuite.neocanvas.renderer.ResizeSampling.Smooth
+                else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel,
+            degrees = session.rotationDegrees,
+        )
+        return patch to target
+    }
+    fun previewTransform(): com.neoworksuite.neocanvas.renderer.RasterPatch? = transformPatch()?.first
+    fun cancelTransform() {
+        if (transformSession == null) return
+        transformSession = null
+        statusMessage = "Transform cancelled"
+    }
+    fun applyTransform(): Boolean {
+        val (patch, target) = transformPatch() ?: run {
+            statusMessage = "Transform is outside the canvas or too large"
+            return false
+        }
+        if (patch.keys.isNotEmpty()) {
+            val layerId = activeLayerId ?: return false
+            val before = tileStore.snapshot()
+            tileStore.applyPatch(patch)
+            execute(ApplyRasterPatch(layerId, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        }
+        selection = target
+        transformSession = null
+        statusMessage = "Transform applied"
+        return true
+    }
+    fun selectLayerArtwork() {
+        val id = activeLayerId ?: return
+        val layer = document.layers.firstOrNull { it.id == id && it.visible } ?: return
+        val raster = layer.payload as? LayerPayload.Raster ?: return
+        var left = document.width
+        var top = document.height
+        var right = 0
+        var bottom = 0
+        raster.tileAddresses.forEach { key ->
+            val bytes = tileStore.read(key) ?: return@forEach
+            for (index in 3 until bytes.size step 4) {
+                if (bytes[index].toInt() == 0) continue
+                val pixel = index / 4
+                val x = key.x * 256 + pixel % 256
+                val y = key.y * 256 + pixel / 256
+                if (x !in 0 until document.width || y !in 0 until document.height) continue
+                left = minOf(left, x); top = minOf(top, y)
+                right = maxOf(right, x + 1); bottom = maxOf(bottom, y + 1)
+            }
+        }
+        if (right <= left || bottom <= top) {
+            clearSelection()
+            statusMessage = "This layer has no artwork to select"
+            return
+        }
+        selection = CanvasSelection(left, top, right, bottom)
+        tool = Tool.MoveSelection
+        statusMessage = "Layer artwork selected; drag to move or use transform controls"
+    }
+
+    fun previewSelectionMove(dx: Int, dy: Int): com.neoworksuite.neocanvas.renderer.RasterPatch? {
+        val bounds = selection ?: return null
+        val layer = activeLayerId ?: return null
+        if (document.layers.none { it.id == layer && it.visible && !it.locked }) return null
+        val moveX = dx.coerceIn(-bounds.left, document.width - bounds.right)
+        val moveY = dy.coerceIn(-bounds.top, document.height - bounds.bottom)
+        if (moveX == 0 && moveY == 0) return null
+        return com.neoworksuite.neocanvas.renderer.RasterMove.move(tileStore, layer,
+            bounds.left, bounds.top, bounds.right, bounds.bottom, moveX, moveY, document.width, document.height)
+    }
+    fun importImage() {
+        val targetDocument = document.id
+        fileActions.importImage { result ->
+            result.fold(onSuccess = { image ->
+                if (image != null && document.id == targetDocument) insertImage(image)
+            }, onFailure = { statusMessage = "Could not import image: ${it.message}" })
+        }
+    }
+    fun insertImage(image: ImportedImage) {
+        val fit = minOf(1.0, document.width.toDouble() / image.width, document.height.toDouble() / image.height)
+        val width = (image.width * fit).toInt().coerceAtLeast(1)
+        val height = (image.height * fit).toInt().coerceAtLeast(1)
+        val left = (document.width - width) / 2
+        val top = (document.height - height) / 2
+        val id = nextLayerId()
+        val tiles = mutableMapOf<TileKey, ByteArray>()
+        for (y in 0 until height) for (x in 0 until width) {
+            val sx = ((x + .5) * image.width / width).toInt().coerceAtMost(image.width - 1)
+            val sy = ((y + .5) * image.height / height).toInt().coerceAtMost(image.height - 1)
+            val pixel = image.argb[sy * image.width + sx]
+            if (pixel ushr 24 == 0) continue
+            val tx = x + left
+            val ty = y + top
+            val bytes = tiles.getOrPut(TileKey(id, tx / 256, ty / 256)) { ByteArray(256 * 256 * 4) }
+            val i = ((ty % 256) * 256 + tx % 256) * 4
+            bytes[i] = (pixel ushr 16).toByte()
+            bytes[i + 1] = (pixel ushr 8).toByte()
+            bytes[i + 2] = pixel.toByte()
+            bytes[i + 3] = (pixel ushr 24).toByte()
+        }
+        val before = tileStore.snapshot()
+        tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterPatch.of(tiles))
+        execute(com.neoworksuite.neocanvas.core.model.ImportRasterLayer(id, image.name.ifBlank { "Imported image" }, tiles.keys), before)
+        activeLayerId = id
+        selection = CanvasSelection(left, top, left + width, top + height)
+        tool = Tool.MoveSelection
+        resetView()
+        statusMessage = "Image imported. Drag to move; use selection controls to rotate or resize."
+    }
+    fun clearSelectedPixels() {
+        val bounds = selection ?: return
+        val layer = activeLayerId ?: return
+        if (document.layers.none { it.id == layer && it.visible && !it.locked }) return
+        val before = tileStore.snapshot()
+        val replacements = mutableMapOf<TileKey, ByteArray>()
+        val removals = mutableSetOf<TileKey>()
+        before.filterKeys { it.layerId == layer }.forEach { (key, original) ->
+            val left = maxOf(bounds.left, key.x * 256)
+            val right = minOf(bounds.right, (key.x + 1) * 256)
+            val top = maxOf(bounds.top, key.y * 256)
+            val bottom = minOf(bounds.bottom, (key.y + 1) * 256)
+            if (left >= right || top >= bottom) return@forEach
+            val bytes = original.copyOf()
+            for (y in top until bottom) for (x in left until right) {
+                val index = ((y % 256) * 256 + x % 256) * 4
+                for (channel in 0..3) bytes[index + channel] = 0
+            }
+            if (bytes.contentEquals(original)) return@forEach
+            if ((3 until bytes.size step 4).all { bytes[it].toInt() == 0 }) removals += key
+            else replacements[key] = bytes
+        }
+        if (replacements.isEmpty() && removals.isEmpty()) return
+        tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterPatch.of(replacements, removals))
+        execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        statusMessage = "Cleared selected pixels"
+    }
+    var smoothResizing: Boolean by mutableStateOf(true)
+    fun resizeSelection(factor: Float) {
+        require(factor.isFinite() && factor > 0f)
+        val bounds = selection ?: return
+        val layer = activeLayerId ?: return
+        if (document.layers.none { it.id == layer && it.visible && !it.locked }) return
+        val newWidth = kotlin.math.round((bounds.right - bounds.left) * factor).toInt().coerceAtLeast(1)
+        val newHeight = kotlin.math.round((bounds.bottom - bounds.top) * factor).toInt().coerceAtLeast(1)
+        if (newWidth > document.width || newHeight > document.height) {
+            statusMessage = "Resized selection would exceed the canvas. Select a smaller area."
+            return
+        }
+        val left = ((bounds.left + bounds.right - newWidth) / 2).coerceIn(0, document.width - newWidth)
+        val top = ((bounds.top + bounds.bottom - newHeight) / 2).coerceIn(0, document.height - newHeight)
+        val patch = com.neoworksuite.neocanvas.renderer.RasterMove.move(tileStore, layer,
+            bounds.left, bounds.top, bounds.right, bounds.bottom, left - bounds.left, top - bounds.top,
+            document.width, document.height, resizedWidth = newWidth, resizedHeight = newHeight,
+            sampling = if (smoothResizing) com.neoworksuite.neocanvas.renderer.ResizeSampling.Smooth
+                else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel)
+        if (patch.keys.isNotEmpty()) {
+            val before = tileStore.snapshot()
+            tileStore.applyPatch(patch)
+            execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        }
+        selection = CanvasSelection(left, top, left + newWidth, top + newHeight)
+        statusMessage = "Resized selection to $newWidth × $newHeight pixels"
+    }
+    fun rotateSelection(degrees: Float = 90f) {
+        val bounds = selection ?: return
+        val layer = activeLayerId ?: return
+        if (document.layers.none { it.id == layer && it.visible && !it.locked }) return
+        val (newWidth, newHeight) = com.neoworksuite.neocanvas.renderer.RasterMove.rotatedSize(
+            bounds.right - bounds.left, bounds.bottom - bounds.top, degrees)
+        if (newWidth > document.width || newHeight > document.height) {
+            statusMessage = "Rotated selection would exceed the canvas. Select a smaller area."
+            return
+        }
+        val left = ((bounds.left + bounds.right - newWidth) / 2).coerceIn(0, document.width - newWidth)
+        val top = ((bounds.top + bounds.bottom - newHeight) / 2).coerceIn(0, document.height - newHeight)
+        val patch = com.neoworksuite.neocanvas.renderer.RasterMove.move(tileStore, layer,
+            bounds.left, bounds.top, bounds.right, bounds.bottom, left - bounds.left, top - bounds.top,
+            document.width, document.height, rotateClockwise = degrees == 90f,
+            sampling = if (smoothResizing) com.neoworksuite.neocanvas.renderer.ResizeSampling.Smooth else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel,
+            degrees = if (degrees == 90f) 0f else degrees)
+        if (patch.keys.isNotEmpty()) {
+            val before = tileStore.snapshot()
+            tileStore.applyPatch(patch)
+            execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        }
+        selection = CanvasSelection(left, top, left + newWidth, top + newHeight)
+        statusMessage = "Rotated selection ${degrees.toInt()}°"
+    }
+    fun flipSelection(horizontal: Boolean) {
+        val bounds = selection ?: return
+        val layer = activeLayerId ?: return
+        if (document.layers.none { it.id == layer && it.visible && !it.locked }) return
+        val patch = com.neoworksuite.neocanvas.renderer.RasterFlip.flip(tileStore, layer,
+            bounds.left, bounds.top, bounds.right, bounds.bottom, document.width, document.height, horizontal)
+        if (patch.keys.isEmpty()) return
+        val before = tileStore.snapshot()
+        tileStore.applyPatch(patch)
+        execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        statusMessage = if (horizontal) "Flipped selection horizontally" else "Flipped selection vertically"
+    }
+    fun moveSelection(dx: Int, dy: Int) {
+        val bounds = selection ?: return
+        val layer = activeLayerId ?: return
+        if (document.layers.none { it.id == layer && it.visible && !it.locked }) return
+        val moveX = dx.coerceIn(-bounds.left, document.width - bounds.right)
+        val moveY = dy.coerceIn(-bounds.top, document.height - bounds.bottom)
+        val patch = previewSelectionMove(dx, dy) ?: return
+        if (patch.keys.isEmpty()) return
+        val before = tileStore.snapshot()
+        tileStore.applyPatch(patch)
+        execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        selection = CanvasSelection(bounds.left + moveX, bounds.top + moveY, bounds.right + moveX, bounds.bottom + moveY)
+        statusMessage = "Moved selected artwork on active layer"
+    }
+    fun selectRectangle(from: DrawPoint, to: DrawPoint) {
+        val left = kotlin.math.floor(minOf(from.x, to.x)).toInt().coerceIn(0, document.width)
+        val top = kotlin.math.floor(minOf(from.y, to.y)).toInt().coerceIn(0, document.height)
+        val right = (kotlin.math.floor(maxOf(from.x, to.x)).toInt() + 1).coerceIn(0, document.width)
+        val bottom = (kotlin.math.floor(maxOf(from.y, to.y)).toInt() + 1).coerceIn(0, document.height)
+        selection = if (right > left && bottom > top) CanvasSelection(left, top, right, bottom) else null
+    }
+    fun selectArea(points: List<DrawPoint>) {
+        if (points.isEmpty()) return
+        if (selectionMode == SelectionShape.Lasso) {
+            selection = CanvasSelection.lasso(points)?.let {
+                it.copy(left = it.left.coerceIn(0, document.width), top = it.top.coerceIn(0, document.height),
+                    right = it.right.coerceIn(0, document.width), bottom = it.bottom.coerceIn(0, document.height))
+            }
+            return
+        }
+        val from = points.first()
+        val to = points.last()
+        val left = kotlin.math.floor(minOf(from.x, to.x)).toInt().coerceIn(0, document.width)
+        val top = kotlin.math.floor(minOf(from.y, to.y)).toInt().coerceIn(0, document.height)
+        val right = (kotlin.math.floor(maxOf(from.x, to.x)).toInt() + 1).coerceIn(0, document.width)
+        val bottom = (kotlin.math.floor(maxOf(from.y, to.y)).toInt() + 1).coerceIn(0, document.height)
+        selection = if (right <= left || bottom <= top) null else if (selectionMode == SelectionShape.Ellipse)
+            CanvasSelection.ellipse(left, top, right, bottom) else CanvasSelection(left, top, right, bottom)
+    }
+    fun invertSelection() {
+        val current = selection ?: return
+        selection = if (current.invertedRegion != null) current.invertedRegion
+            else CanvasSelection(0, 0, document.width, document.height, invertedRegion = current)
+        transformSession = null
+        statusMessage = "Selection inverted"
+    }
+    var inspectorPanel: InspectorPanel by mutableStateOf(InspectorPanel.Layers)
+    var inspectorVisible: Boolean by mutableStateOf(true)
+    var zoom: Float by mutableFloatStateOf(1f)
+    var panX: Float by mutableFloatStateOf(0f)
+    var panY: Float by mutableFloatStateOf(0f)
+    var statusMessage: String? by mutableStateOf(null)
+    var palette: List<String> by mutableStateOf(emptyList())
+        private set
+    init {
+        try {
+            palette = fileActions.loadPalette().mapNotNull { parseColorHex(it)?.let(::colorHex) }.distinct().take(32)
+        } catch (error: Exception) { statusMessage = "Could not load local palette: ${error.message}" }
+    }
+    fun addPaletteColor() {
+        val hex = colorHex(color)
+        if (hex in palette) { statusMessage = "Colour already in palette"; return }
+        if (palette.size >= 32) { statusMessage = "Palette holds 32 colours. Remove one before adding another."; return }
+        updatePalette(palette + hex)
+    }
+    fun removePaletteColor(hex: String) { updatePalette(palette - hex) }
+    private fun updatePalette(next: List<String>) {
+        when (val result = fileActions.savePalette(next)) {
+            SaveResult.Success -> { palette = next; statusMessage = "Palette saved locally" }
+            is SaveResult.Failure -> { statusMessage = result.message }
+        }
+    }
+
+    val document: CanvasDocument get() { documentRevision; return history.current }
+    val canUndo: Boolean get() = history.canUndo
+    val canRedo: Boolean get() = history.canRedo
+
+    fun selectBrush(selection: BrushDefinition) {
+        brush = selection
+        tool = if (selection == BuiltInBrushes.eraser) Tool.Eraser else Tool.Brush
+        brushSize = selection.baseSize
+        brushOpacity = selection.opacity
+    }
+    fun showInspector(panel: InspectorPanel) { inspectorPanel = panel; inspectorVisible = true }
+    fun toggleInspector(panel: InspectorPanel) { if (inspectorVisible && inspectorPanel == panel) inspectorVisible = false else showInspector(panel) }
+
+    fun addLayer() {
+        val id = nextLayerId()
+        execute(AddRasterLayer(id, "Layer ${document.layers.size + 1}"))
+        activeLayerId = id
+        statusMessage = "Added a new local layer"
+    }
+    fun deleteActiveLayer() {
+        val id = activeLayerId ?: return
+        if (document.layers.any { it.id == id && it.locked }) { statusMessage = "Unlock this layer before deleting it"; return }
+        if (document.layers.size <= 1) { statusMessage = "Keep at least one drawing layer."; return }
+        execute(DeleteLayer(id))
+        activeLayerId = document.layers.lastOrNull()?.id
+    }
+    fun duplicateActiveLayer() {
+        val source = activeLayerId ?: return
+        val original = document.layers.firstOrNull { it.id == source } ?: return
+        val id = nextLayerId()
+        val command = DuplicateLayer(source, id, "${original.name} copy")
+        val before = tileStore.snapshot()
+        tileStore.copyTiles(command.rasterTileCopies(document))
+        execute(command, before)
+        activeLayerId = id
+    }
+    fun toggleLayerVisibility(id: String) { document.layers.find { it.id == id }?.let { execute(SetLayerVisibility(id, !it.visible)) } }
+    fun toggleLayerLock(id: String) {
+        document.layers.find { it.id == id }?.let {
+            execute(com.neoworksuite.neocanvas.core.model.SetLayerLocked(id, !it.locked))
+            statusMessage = if (it.locked) "Layer unlocked" else "Layer locked — unlock it to edit pixels or delete it"
+        }
+    }
+    fun toggleLayerAlphaLock(id: String) {
+        document.layers.find { it.id == id }?.let {
+            execute(SetLayerAlphaLocked(id, !it.alphaLocked))
+            statusMessage = if (it.alphaLocked) "Alpha unlocked" else "Alpha locked — paint stays inside existing pixels"
+        }
+    }
+    fun setLayerBlendMode(id: String, blendMode: LayerBlendMode) {
+        execute(SetLayerBlendMode(id, blendMode))
+        statusMessage = "Blend mode: ${blendMode.name}"
+    }
+    fun mergeActiveLayerDown() {
+        val sourceId = activeLayerId ?: return
+        val sourceIndex = document.layers.indexOfFirst { it.id == sourceId }
+        if (sourceIndex <= 0) { statusMessage = "There is no layer below to merge into"; return }
+        val source = document.layers[sourceIndex]
+        val destination = document.layers[sourceIndex - 1]
+        if (source.locked || destination.locked) { statusMessage = "Unlock both layers before merging"; return }
+        val before = tileStore.snapshot()
+        tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterLayerMerge.mergeDown(tileStore, destination, source))
+        val destinationAddresses = tileStore.keys.filterTo(linkedSetOf()) { it.layerId == destination.id }
+        execute(MergeRasterLayerDown(source.id, destination.id, destinationAddresses), before)
+        activeLayerId = destination.id
+        clearSelection()
+        statusMessage = "Merged ${source.name} down into ${destination.name}"
+    }
+    fun setLayerOpacity(id: String, opacity: Float) { execute(SetLayerOpacity(id, opacity.coerceIn(0f, 1f))) }
+    fun renameLayer(id: String, name: String) { if (name.isNotBlank()) execute(RenameLayer(id, name.trim())) }
+    fun moveLayer(id: String, index: Int) { execute(MoveLayer(id, index.coerceIn(0, document.layers.lastIndex))) }
+    /** Moves the active layer by one or more rows in the top-to-bottom Layers panel. */
+    fun reorderActiveLayerInDisplay(displayDelta: Int): Boolean {
+        val id = activeLayerId ?: return false
+        val sourceIndex = document.layers.indexOfFirst { it.id == id }
+        if (sourceIndex < 0) return false
+        val targetIndex = sourceIndex - displayDelta
+        if (targetIndex !in document.layers.indices || targetIndex == sourceIndex) return false
+        execute(MoveLayer(id, targetIndex))
+        statusMessage = "Reordered layer"
+        return true
+    }
+
+    /** Rasterizes one completed gesture into sparse tiles and commits its address patch to history. */
+    fun recordStroke(points: List<DrawPoint>) {
+        val layerId = activeLayerId ?: return
+        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return
+        val patch = previewStroke(points) ?: return
+        val before = tileStore.snapshot()
+        if (tileStore.applyPatch(patch).isEmpty()) return
+        val currentKeys = tileStore.keys
+        execute(ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys), before)
+    }
+
+    fun previewStroke(points: List<DrawPoint>): com.neoworksuite.neocanvas.renderer.RasterPatch? {
+        val layerId = activeLayerId ?: return null
+        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return null
+        val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
+        return Rasterizer.stroke(
+            existing = tileStore,
+            layerId = layerId,
+            points = com.neoworksuite.neocanvas.renderer.smoothStroke(
+                points.map { RasterPoint(it.x, it.y, normalizedPressure(it.pressure)) }, stabilization),
+            color = RasterColor((color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()),
+            size = brushSize,
+            opacity = brushOpacity,
+            mode = if (tool == Tool.Eraser) com.neoworksuite.neocanvas.brushes.BrushMode.ERASE else com.neoworksuite.neocanvas.brushes.BrushMode.PAINT,
+            canvasWidth = document.width,
+            canvasHeight = document.height,
+            acceptsPixel = { x, y -> selection?.contains(x, y) ?: true },
+            brush = if (tool == Tool.Eraser && brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE) BuiltInBrushes.eraser else brush,
+            symmetry = symmetry,
+            alphaLocked = activeLayer.alphaLocked,
+        )
+    }
+
+    fun undo(): Boolean {
+        if (!history.undo()) return false
+        redoVersions += editVersion
+        editVersion = undoVersions.removeLastOrNull() ?: 0
+        val previousTiles = undoTileStates.removeLastOrNull() ?: emptyMap()
+        redoTileStates += tileStore.snapshot()
+        tileStore.restore(previousTiles)
+        afterHistoryMove()
+        return true
+    }
+    fun redo(): Boolean {
+        if (!history.redo()) return false
+        undoVersions += editVersion
+        editVersion = redoVersions.removeLastOrNull() ?: 0
+        val nextTiles = redoTileStates.removeLastOrNull() ?: emptyMap()
+        undoTileStates += tileStore.snapshot()
+        tileStore.restore(nextTiles)
+        afterHistoryMove()
+        return true
+    }
+    fun zoomBy(multiplier: Float) { zoom = (zoom * multiplier).coerceIn(.20f, 6f) }
+    fun zoomAt(multiplier: Float, pointerX: Float, pointerY: Float, centerX: Float, centerY: Float) {
+        val previousZoom = zoom
+        zoomBy(multiplier)
+        val ratio = zoom / previousZoom
+        panX = pointerX - centerX - (pointerX - centerX - panX) * ratio
+        panY = pointerY - centerY - (pointerY - centerY - panY) * ratio
+    }
+    fun applyPointTool(point: DrawPoint) {
+        val x = point.x.toInt()
+        val y = point.y.toInt()
+        if (x !in 0 until document.width || y !in 0 until document.height) return
+        if (tool == Tool.Fill) {
+            val layer = activeLayerId ?: return
+            val activeLayer = document.layers.firstOrNull { it.id == layer && it.visible && !it.locked } ?: return
+            val patch = com.neoworksuite.neocanvas.renderer.FloodFill.fill(
+                tileStore, layer, document.width, document.height, x, y,
+                RasterColor((color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()),
+                acceptsPixel = { px, py -> selection?.contains(px, py) ?: true },
+                alphaLocked = activeLayer.alphaLocked,
+                tolerance = fillTolerance,
+            )
+            if (patch.keys.isEmpty()) return
+            val before = tileStore.snapshot()
+            tileStore.applyPatch(patch)
+            execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+            statusMessage = "Filled connected colour on active layer"
+        } else if (tool == Tool.Eyedropper) {
+            var r = NeoCanvasColors.paper.red
+            var g = NeoCanvasColors.paper.green
+            var b = NeoCanvasColors.paper.blue
+            document.layers.filter { it.visible }.forEach { layer ->
+                val bytes = tileStore.read(TileKey(layer.id, x / 256, y / 256)) ?: return@forEach
+                val i = ((y % 256) * 256 + x % 256) * 4
+                val alpha = (bytes[i + 3].toInt() and 255) / 255f * layer.opacity
+                r = (bytes[i].toInt() and 255) / 255f * alpha + r * (1f - alpha)
+                g = (bytes[i + 1].toInt() and 255) / 255f * alpha + g * (1f - alpha)
+                b = (bytes[i + 2].toInt() and 255) / 255f * alpha + b * (1f - alpha)
+            }
+            color = Color(r, g, b)
+            tool = Tool.Brush
+            statusMessage = "Sampled visible colour"
+        }
+    }
+    fun resetView() { zoom = 1f; panX = 0f; panY = 0f }
+
+    fun save(): Boolean {
+        val result = fileActions.save(document, tilesForDocument())
+        applySaveResult(result, "Saved locally")
+        if (result == SaveResult.Success) savedVersion = editVersion
+        return result == SaveResult.Success
+    }
+    fun exportPng() = applySaveResult(fileActions.exportPng(document, tilesForDocument()), "Exported PNG locally")
+    fun newDocument(width: Int = document.width, height: Int = document.height): Boolean {
+        if (width !in 1..8192 || height !in 1..8192 || width.toLong() * height > 16_000_000) {
+            statusMessage = "Choose dimensions from 1–8192 pixels, up to 16 million pixels total"
+            return false
+        }
+        requestedCanvasSize = width to height
+        newCanvasDialogVisible = false
+        if (hasUnsavedChanges) { pendingDocumentAction = PendingDocumentAction.New; return true }
+        createNewDocument()
+        return true
+    }
+    fun requestClose(onConfirmed: () -> Unit) {
+        if (!hasUnsavedChanges) { onConfirmed(); return }
+        closeAfterConfirmation = onConfirmed
+        pendingDocumentAction = PendingDocumentAction.Close
+    }
+    fun cancelDocumentAction() {
+        requestedCanvasSize = null
+        pendingDocumentAction = null
+        documentActionError = null
+        closeAfterConfirmation = null
+    }
+    fun saveAndContinue() {
+        if (pendingDocumentAction == null) return
+        if (save()) discardAndContinue() else documentActionError = statusMessage
+    }
+    fun discardAndContinue() {
+        val action = pendingDocumentAction ?: return
+        pendingDocumentAction = null
+        documentActionError = null
+        val close = closeAfterConfirmation
+        closeAfterConfirmation = null
+        when (action) {
+            PendingDocumentAction.New -> createNewDocument()
+            PendingDocumentAction.Open -> openDocument()
+            PendingDocumentAction.Close -> close?.invoke()
+        }
+    }
+    private fun markCleanDocument() {
+        undoVersions.clear(); redoVersions.clear()
+        editVersion = ++nextVersion
+        savedVersion = editVersion
+    }
+    private fun createNewDocument() {
+        val (width, height) = requestedCanvasSize ?: (document.width to document.height)
+        requestedCanvasSize = null
+        fileActions.resetDocumentTarget()
+        clearSelection()
+        resetView()
+        history.reset(CanvasDocument.blank(width, height).copy(
+            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+        ))
+        tileStore.restore(emptyMap())
+        undoTileStates.clear(); redoTileStates.clear()
+        markCleanDocument()
+        activeLayerId = "layer-1"
+        documentRevision++
+        statusMessage = "New local canvas"
+    }
+    fun open() {
+        if (hasUnsavedChanges) { pendingDocumentAction = PendingDocumentAction.Open; return }
+        openDocument()
+    }
+    private fun openDocument() {
+        if (fileActions.supportsLocalLibrary) {
+            libraryError = null
+            localDocuments = try { fileActions.listLocalDocuments() } catch (error: Exception) {
+                libraryError = error.message ?: "Unable to list local documents"
+                emptyList()
+            }
+            return
+        }
+        acceptOpenResult(fileActions.open())
+    }
+    private fun acceptOpenResult(result: LoadResult) {
+        when (result) {
+            is LoadResult.Success -> {
+                clearSelection()
+                resetView()
+                history.reset(result.document)
+                tileStore.restore(result.tiles)
+                undoTileStates.clear(); redoTileStates.clear()
+                markCleanDocument()
+                activeLayerId = document.layers.lastOrNull()?.id
+                documentRevision++
+                statusMessage = "Opened local NeoCanvas document"
+            }
+            is LoadResult.Failure -> statusMessage = result.message
+            is LoadResult.Corrupt -> statusMessage = "Could not open: ${result.message}"
+            is LoadResult.Incompatible -> statusMessage = "Unsupported document: ${result.message}"
+        }
+    }
+
+    /** Excludes cached tiles made orphaned by layer deletion; packages require exact tile addresses. */
+    fun tilesForDocument(): Map<TileAddress, ByteArray> {
+        val valid = document.layers.flatMap { layer ->
+            (layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster)?.tileAddresses.orEmpty()
+        }.toSet()
+        return tileStore.snapshot().filterKeys { it in valid }
+    }
+
+    private fun applySaveResult(result: SaveResult, success: String) {
+        statusMessage = when (result) {
+            SaveResult.Success -> success
+            is SaveResult.Failure -> buildString { append(result.message); result.recoveryPath?.let { append(" Recovery copy: $it") } }
+        }
+    }
+    private fun execute(command: DocumentCommand, tilesBefore: Map<TileKey, ByteArray> = tileStore.snapshot()) {
+        history.execute(command)
+        undoVersions += editVersion
+        redoVersions.clear()
+        editVersion = ++nextVersion
+        undoTileStates += tilesBefore
+        redoTileStates.clear()
+        documentRevision++
+    }
+    private fun afterHistoryMove() {
+        clearSelection()
+        documentRevision++
+        activeLayerId = activeLayerId?.takeIf { id -> document.layers.any { it.id == id } } ?: document.layers.lastOrNull()?.id
+    }
+    private fun nextLayerId(): String {
+        var ordinal = document.layers.size + 1
+        while (document.layers.any { it.id == "layer-$ordinal" }) ordinal++
+        return "layer-$ordinal"
+    }
+}
+
+fun normalizedPressure(reported: Float?): Float = reported?.takeIf { it in 0f..1f } ?: 1f

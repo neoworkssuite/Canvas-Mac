@@ -1,0 +1,37 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+**/build/
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# Local NeoCanvas toolchains
+work/
+outputs/
+
+# Apple / Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+.DS_Store
+
+# Apple signing - NEVER COMMIT
+*.p12
+*.mobileprovision
+*.provisionprofile
+AuthKey_*.p8
+
+# Packages
+*.apk
+*.aab
+*.ipa
+*.dmg
+*.pkg
+*.msi
+*.exe
