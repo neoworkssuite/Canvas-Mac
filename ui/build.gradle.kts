@@ -19,6 +19,18 @@ kotlin {
         }
     }
 
+    val iosTargets = listOf(
+        iosArm64(),
+        iosSimulatorArm64()
+    )
+
+    iosTargets.forEach { target ->
+        target.binaries.framework {
+            baseName = "NeoCanvasKit"
+            isStatic = true
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core"))
