@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  ipad-simulator:
-    name: Build iPad Simulator
+  ipad-build:
+    name: Build NeoCanvas for iPad
     runs-on: macos-26
 
     steps:
@@ -68,9 +68,14 @@ jobs:
       - name: Show generated Xcode project
         run: |
           cd iosApp
+
           xcodebuild \
             -project NeoCanvas.xcodeproj \
             -list
+
+      # ========================================================
+      # APPLE SILICON IPAD SIMULATOR
+      # ========================================================
 
       - name: Build NeoCanvas for iPad Simulator
         run: |
@@ -89,20 +94,91 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             build
 
-      - name: Locate NeoCanvas app
+      - name: Verify iPad Simulator app
         run: |
-          echo "=== Simulator products ==="
+          APP="iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/NeoCanvas.app"
 
-          find \
-            iosApp/build/DerivedData/Build/Products \
-            -maxdepth 3 \
-            -name "*.app" \
-            -print
+          test -d "$APP"
+
+          echo "Simulator app:"
+          du -sh "$APP"
+
+          echo
+          echo "Executable:"
+          file "$APP/NeoCanvas"
+
+          echo
+          echo "Info.plist:"
+          plutil -p "$APP/Info.plist" | head -80
 
       - name: Upload iPad simulator build
         uses: actions/upload-artifact@v4
         with:
           name: NeoCanvas-iPad-Simulator
           path: iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/NeoCanvas.app
+          if-no-files-found: error
+          retention-days: 14
+
+      # ========================================================
+      # REAL IPAD / IOS ARM64
+      # ========================================================
+
+      - name: Build NeoCanvasKit for physical iPad
+        run: |
+          ./gradlew :ui:linkReleaseFrameworkIosArm64
+
+          FRAMEWORK="ui/build/bin/iosArm64/releaseFramework/NeoCanvasKit.framework"
+
+          test -d "$FRAMEWORK"
+
+          echo "Real-device Kotlin framework:"
+          du -sh "$FRAMEWORK"
+
+          echo
+          file "$FRAMEWORK/NeoCanvasKit"
+
+      - name: Build unsigned NeoCanvas for physical iPad
+        run: |
+          cd iosApp
+
+          xcodebuild \
+            -project NeoCanvas.xcodeproj \
+            -scheme NeoCanvas \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$PWD/build/DeviceDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            build
+
+      - name: Verify physical iPad app
+        run: |
+          APP="iosApp/build/DeviceDerivedData/Build/Products/Release-iphoneos/NeoCanvas.app"
+
+          test -d "$APP"
+
+          echo "Physical iPad app:"
+          du -sh "$APP"
+
+          echo
+          echo "Executable architecture:"
+          file "$APP/NeoCanvas"
+
+          echo
+          echo "Info.plist:"
+          plutil -p "$APP/Info.plist" | head -100
+
+          echo
+          echo "Embedded frameworks:"
+          find "$APP" -maxdepth 3 -type d -name "*.framework" -print
+
+      - name: Upload unsigned physical iPad build
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-iPad-Device-Unsigned
+          path: iosApp/build/DeviceDerivedData/Build/Products/Release-iphoneos/NeoCanvas.app
           if-no-files-found: error
           retention-days: 14
