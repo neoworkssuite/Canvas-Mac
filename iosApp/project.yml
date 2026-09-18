@@ -3,7 +3,7 @@ name: NeoCanvas
 options:
   bundleIdPrefix: com.neoworksuite
   deploymentTarget:
-    iOS: "14.0"
+    iOS: "15.0"
 
 configs:
   Debug: debug
@@ -21,7 +21,7 @@ targets:
     type: application
     platform: iOS
 
-    deploymentTarget: "14.0"
+    deploymentTarget: "15.0"
 
     sources:
       - path: NeoCanvas
@@ -37,6 +37,9 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: NeoCanvas
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
 
     preBuildScripts:
 
