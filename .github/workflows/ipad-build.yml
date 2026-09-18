@@ -1,0 +1,107 @@
+name: NeoCanvas iPad Build
+
+on:
+  push:
+    branches:
+      - main
+      - apple-platform
+  workflow_dispatch:
+
+jobs:
+  ipad-simulator:
+    name: Build iPad Simulator
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout NeoCanvas
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Show Apple toolchain
+        run: |
+          echo "=== macOS ==="
+          sw_vers
+
+          echo
+          echo "=== Architecture ==="
+          uname -m
+
+          echo
+          echo "=== Xcode ==="
+          xcodebuild -version
+
+          echo
+          echo "=== Java ==="
+          java -version
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Prepare executable scripts
+        run: |
+          chmod +x ./gradlew
+          chmod +x ./scripts/prepare-ios.sh
+
+      - name: Verify Gradle project
+        run: |
+          ./gradlew projects
+
+      - name: Run NeoCanvas shared tests
+        run: |
+          ./gradlew \
+            :core:desktopTest \
+            :brushes:desktopTest \
+            :renderer:desktopTest \
+            :ui:desktopTest
+
+      - name: Generate Xcode project
+        run: |
+          ./scripts/prepare-ios.sh
+
+      - name: Show generated Xcode project
+        run: |
+          cd iosApp
+          xcodebuild \
+            -project NeoCanvas.xcodeproj \
+            -list
+
+      - name: Build NeoCanvas for iPad Simulator
+        run: |
+          cd iosApp
+
+          xcodebuild \
+            -project NeoCanvas.xcodeproj \
+            -scheme NeoCanvas \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$PWD/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Locate NeoCanvas app
+        run: |
+          echo "=== Simulator products ==="
+
+          find \
+            iosApp/build/DerivedData/Build/Products \
+            -maxdepth 3 \
+            -name "*.app" \
+            -print
+
+      - name: Upload iPad simulator build
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-iPad-Simulator
+          path: iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/NeoCanvas.app
+          if-no-files-found: error
+          retention-days: 14
