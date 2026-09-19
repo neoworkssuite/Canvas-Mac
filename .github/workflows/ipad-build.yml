@@ -275,6 +275,80 @@ jobs:
           echo "=== SCREENSHOT ==="
           ls -lh artifacts/simulator/neocanvas-ipad.png
 
+      - name: Extended visual simulator validation
+        shell: bash
+        env:
+          UDID: ${{ steps.ipad.outputs.udid }}
+        run: |
+          APP="iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/NeoCanvas.app"
+          BUNDLE_ID="com.neoworksuite.neocanvas"
+
+          mkdir -p artifacts/simulator
+
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
+
+          echo "=== LIGHT MODE ==="
+          xcrun simctl ui "$UDID" appearance light
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" | tee artifacts/simulator/light-launch.txt
+          sleep 4
+          xcrun simctl io "$UDID" screenshot artifacts/simulator/neocanvas-light.png
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID"
+
+          echo "=== DARK MODE ==="
+          xcrun simctl ui "$UDID" appearance dark
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" | tee artifacts/simulator/dark-launch.txt
+          sleep 4
+          xcrun simctl io "$UDID" screenshot artifacts/simulator/neocanvas-dark.png
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID"
+
+          echo "=== COLD RELAUNCH STABILITY ==="
+          xcrun simctl ui "$UDID" appearance light
+
+          for ATTEMPT in 1 2 3; do
+            echo "Relaunch attempt $ATTEMPT"
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" | tee "artifacts/simulator/relaunch-$ATTEMPT.txt"
+            sleep 4
+            xcrun simctl io "$UDID" screenshot "artifacts/simulator/neocanvas-relaunch-$ATTEMPT.png"
+
+            if ! xcrun simctl terminate "$UDID" "$BUNDLE_ID"; then
+              echo "NeoCanvas did not remain alive on relaunch attempt $ATTEMPT."
+              exit 1
+            fi
+          done
+
+          echo "=== BUILT PLIST CONTRACT ==="
+          plutil -p "$APP/Info.plist" | tee artifacts/simulator/Info.plist-verified.txt
+
+          plutil -p "$APP/Info.plist" | grep -q 'CADisableMinimumFrameDurationOnPhone.*true'
+          plutil -p "$APP/Info.plist" | grep -q 'UIInterfaceOrientationPortrait'
+          plutil -p "$APP/Info.plist" | grep -q 'UIInterfaceOrientationLandscapeLeft'
+          plutil -p "$APP/Info.plist" | grep -q 'UIInterfaceOrientationLandscapeRight'
+
+          echo "=== SCREENSHOT DIMENSIONS ==="
+          for IMAGE in artifacts/simulator/neocanvas-ipad.png artifacts/simulator/neocanvas-light.png artifacts/simulator/neocanvas-dark.png artifacts/simulator/neocanvas-relaunch-*.png; do
+            test -s "$IMAGE"
+            echo "$IMAGE" | tee -a artifacts/simulator/screenshot-dimensions.txt
+            sips -g pixelWidth -g pixelHeight "$IMAGE" | tee -a artifacts/simulator/screenshot-dimensions.txt
+          done
+
+          echo "=== FINAL CLEAN LAUNCH ==="
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" | tee artifacts/simulator/final-launch.txt
+          sleep 4
+
+          if ! xcrun simctl terminate "$UDID" "$BUNDLE_ID"; then
+            echo "NeoCanvas failed final liveness check."
+            exit 1
+          fi
+
+          echo "NeoCanvas passed light mode, dark mode, three cold relaunches, plist checks, screenshot checks, and final liveness."
+
+          xcrun simctl spawn "$UDID" log show \
+            --last 8m \
+            --style compact \
+            --predicate 'process == "NeoCanvas"' \
+            > artifacts/simulator/neocanvas-extended.log 2>&1 || true
+
       - name: Upload iPad smoke test evidence
         if: always()
         uses: actions/upload-artifact@v4
