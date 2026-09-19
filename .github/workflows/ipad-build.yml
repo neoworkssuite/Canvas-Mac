@@ -189,30 +189,7 @@ jobs:
         run: |
           xcrun simctl shutdown all 2>/dev/null || true
 
-          UDID="$(xcrun simctl list devices available -j | python3 -c '
-import json
-import re
-import sys
-
-data = json.load(sys.stdin)["devices"]
-choices = []
-
-for runtime, devices in data.items():
-    match = re.search(r"iOS-(\d+)-(\d+)", runtime)
-    version = tuple(map(int, match.groups())) if match else (0, 0)
-
-    for device in devices:
-        name = device.get("name", "")
-        if device.get("isAvailable") and "iPad" in name:
-            preferred = 1 if "iPad Pro 13-inch" in name else 0
-            choices.append((version, preferred, name, device["udid"]))
-
-choices.sort()
-
-if choices:
-    version, preferred, name, udid = choices[-1]
-    print(udid)
-')"
+          UDID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin)["devices"]; devices=[d for group in data.values() for d in group if d.get("isAvailable") and "iPad" in d.get("name","")]; print(devices[0]["udid"] if devices else "")')"
 
           if [ -z "$UDID" ]; then
             echo "No available iPad Simulator found."
@@ -220,23 +197,10 @@ if choices:
             exit 1
           fi
 
-          NAME="$(xcrun simctl list devices available -j | python3 -c '
-import json
-import sys
-
-wanted = sys.argv[1]
-data = json.load(sys.stdin)["devices"]
-
-for devices in data.values():
-    for device in devices:
-        if device.get("udid") == wanted:
-            print(device.get("name", "Unknown iPad"))
-            raise SystemExit
-' "$UDID")"
+          NAME="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; wanted=sys.argv[1]; data=json.load(sys.stdin)["devices"]; print(next((d.get("name","Unknown iPad") for group in data.values() for d in group if d.get("udid")==wanted), "Unknown iPad"))' "$UDID")"
 
           echo "Selected simulator: $NAME"
           echo "UDID: $UDID"
-
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
@@ -329,4 +293,3 @@ for devices in data.values():
           if [ -n "$UDID" ]; then
             xcrun simctl shutdown "$UDID" 2>/dev/null || true
           fi
-
