@@ -35,3 +35,4 @@ AuthKey_*.p8
 *.pkg
 *.msi
 *.exe
+iosApp/NeoCanvas.xcodeproj/
