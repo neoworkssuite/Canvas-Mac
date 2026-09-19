@@ -182,3 +182,151 @@ jobs:
           path: iosApp/build/DeviceDerivedData/Build/Products/Release-iphoneos/NeoCanvas.app
           if-no-files-found: error
           retention-days: 14
+
+      - name: Pick and boot iPad Simulator
+        id: ipad
+        shell: bash
+        run: |
+          xcrun simctl shutdown all 2>/dev/null || true
+
+          UDID="$(xcrun simctl list devices available -j | python3 -c '
+import json
+import re
+import sys
+
+data = json.load(sys.stdin)["devices"]
+choices = []
+
+for runtime, devices in data.items():
+    match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+    version = tuple(map(int, match.groups())) if match else (0, 0)
+
+    for device in devices:
+        name = device.get("name", "")
+        if device.get("isAvailable") and "iPad" in name:
+            preferred = 1 if "iPad Pro 13-inch" in name else 0
+            choices.append((version, preferred, name, device["udid"]))
+
+choices.sort()
+
+if choices:
+    version, preferred, name, udid = choices[-1]
+    print(udid)
+')"
+
+          if [ -z "$UDID" ]; then
+            echo "No available iPad Simulator found."
+            xcrun simctl list devices available
+            exit 1
+          fi
+
+          NAME="$(xcrun simctl list devices available -j | python3 -c '
+import json
+import sys
+
+wanted = sys.argv[1]
+data = json.load(sys.stdin)["devices"]
+
+for devices in data.values():
+    for device in devices:
+        if device.get("udid") == wanted:
+            print(device.get("name", "Unknown iPad"))
+            raise SystemExit
+' "$UDID")"
+
+          echo "Selected simulator: $NAME"
+          echo "UDID: $UDID"
+
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Smoke test NeoCanvas on iPad Simulator
+        shell: bash
+        env:
+          UDID: ${{ steps.ipad.outputs.udid }}
+        run: |
+          APP="iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/NeoCanvas.app"
+          BUNDLE_ID="com.neoworksuite.neocanvas"
+
+          mkdir -p artifacts/simulator
+
+          if [ ! -d "$APP" ]; then
+            echo "NeoCanvas.app not found: $APP"
+            exit 1
+          fi
+
+          echo "Installing:"
+          echo "$APP"
+
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+
+          xcrun simctl install "$UDID" "$APP"
+
+          echo "=== FIRST LAUNCH ==="
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" \
+            | tee artifacts/simulator/first-launch.txt
+
+          echo "Allowing NeoCanvas to initialise..."
+          sleep 8
+
+          echo "=== LIVENESS CHECK ==="
+
+          if ! xcrun simctl terminate "$UDID" "$BUNDLE_ID"; then
+            echo "NeoCanvas was no longer running after startup."
+            exit 1
+          fi
+
+          echo "NeoCanvas remained running after startup."
+
+          echo "=== SECOND LAUNCH FOR SCREENSHOT ==="
+
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" \
+            | tee artifacts/simulator/second-launch.txt
+
+          sleep 3
+
+          xcrun simctl io "$UDID" screenshot \
+            artifacts/simulator/neocanvas-ipad.png
+
+          echo "=== APP INFO ==="
+
+          plutil -p "$APP/Info.plist" \
+            > artifacts/simulator/Info.plist.txt
+
+          file "$APP/NeoCanvas" \
+            > artifacts/simulator/executable.txt
+
+          echo "=== SIMULATOR APP LOG ==="
+
+          xcrun simctl spawn "$UDID" log show \
+            --last 3m \
+            --style compact \
+            --predicate 'process == "NeoCanvas"' \
+            > artifacts/simulator/neocanvas.log 2>&1 || true
+
+          echo "=== SCREENSHOT ==="
+          ls -lh artifacts/simulator/neocanvas-ipad.png
+
+      - name: Upload iPad smoke test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-iPad-Smoke-Test
+          path: artifacts/simulator/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Shut down iPad Simulator
+        if: always()
+        shell: bash
+        env:
+          UDID: ${{ steps.ipad.outputs.udid }}
+        run: |
+          if [ -n "$UDID" ]; then
+            xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          fi
+
