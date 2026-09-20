@@ -43,42 +43,82 @@ import kotlin.math.roundToInt
 
 @Composable
 fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
-    val selected = state.effectPreviewType ?: RasterEffectType.Blur
+    val selected = state.effectPreviewType
     val settings = state.effectPreviewSettings
-
-    LaunchedEffect(state.inspectorVisible, state.inspectorPanel, state.activeLayerId) {
-        if (
-            state.inspectorVisible &&
-            state.inspectorPanel == InspectorPanel.Effects &&
-            state.effectPreviewType == null
-        ) {
-            state.previewEffect(RasterEffectType.Blur, neutralEffectSettings(RasterEffectType.Blur))
-        }
-    }
 
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        InspectorHeading("FX", "Live adjustment")
+        if (selected == null) {
+            InspectorHeading("FX", "Choose an adjustment")
+            Text(
+                "Choose an effect to enter a focused live adjustment view. Nothing is changed until you start an effect.",
+                color = NeoCanvasColors.muted,
+                fontSize = 11.sp,
+            )
 
-        Text(
-            "Slide left or right on the canvas, or use the coloured controls below. Changes preview instantly.",
-            color = NeoCanvasColors.muted,
-            fontSize = 11.sp,
-        )
+            EffectSection(
+                title = "ADJUSTMENTS",
+                effects = listOf(
+                    RasterEffectType.HueSaturation,
+                    RasterEffectType.ColourBalance,
+                    RasterEffectType.Curves,
+                    RasterEffectType.GradientMap,
+                    RasterEffectType.Grayscale,
+                    RasterEffectType.Invert,
+                ),
+                currentColour = state.color,
+            ) { next -> state.previewEffect(next, neutralEffectSettings(next)) }
+
+            EffectSection(
+                title = "BLUR",
+                effects = listOf(
+                    RasterEffectType.Blur,
+                    RasterEffectType.MotionBlur,
+                ),
+                currentColour = state.color,
+            ) { next -> state.previewEffect(next, neutralEffectSettings(next)) }
+
+            EffectSection(
+                title = "EFFECTS",
+                effects = listOf(
+                    RasterEffectType.Sharpen,
+                    RasterEffectType.Noise,
+                    RasterEffectType.Bloom,
+                    RasterEffectType.Halftone,
+                    RasterEffectType.ChromaticAberration,
+                ),
+                currentColour = state.color,
+            ) { next -> state.previewEffect(next, neutralEffectSettings(next)) }
+
+            Text(
+                "Every effect tile stays the same size. Selecting one replaces this browser with only the controls for that effect.",
+                color = NeoCanvasColors.faint,
+                fontSize = 10.sp,
+            )
+            return@Column
+        }
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { state.commitEffectPreview() }) {
+                Text("‹ FX", color = NeoCanvasColors.accent)
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                "LIVE PREVIEW",
+                color = NeoCanvasColors.faint,
+                fontSize = 8.sp,
+                letterSpacing = .9.sp,
+            )
+        }
 
         LiveAdjustmentReadout(selected, settings.amount)
 
-        EffectGrid(
-            selected = selected,
-            currentColour = state.color,
-            onSelect = { next ->
-                if (next != selected) {
-                    state.commitEffectPreview()
-                    state.previewEffect(next, neutralEffectSettings(next))
-                }
-            },
+        Text(
+            "Slide left or right on the canvas, or use the coloured controls below.",
+            color = NeoCanvasColors.muted,
+            fontSize = 11.sp,
         )
 
         when (selected) {
@@ -247,13 +287,13 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
                 Text("Reset", color = NeoCanvasColors.accent)
             }
 
-            TextButton(onClick = { state.hideInspector(commitEffects = false) }) {
+            TextButton(onClick = { state.cancelEffectPreview() }) {
                 Text("Cancel", color = NeoCanvasColors.muted)
             }
         }
 
         Text(
-            "No Apply button — leaving FX commits the current preview as one undoable edit.",
+            "No Apply button — ‹ FX or leaving the panel commits the current preview as one undoable edit. Cancel reverts it.",
             color = NeoCanvasColors.faint,
             fontSize = 10.sp,
         )
@@ -316,46 +356,32 @@ private fun LiveAdjustmentReadout(type: RasterEffectType, amount: Float) {
 }
 
 @Composable
-private fun EffectGrid(
-    selected: RasterEffectType,
+private fun EffectSection(
+    title: String,
+    effects: List<RasterEffectType>,
     currentColour: Color,
     onSelect: (RasterEffectType) -> Unit,
 ) {
-    val effects = listOf(
-        RasterEffectType.Blur,
-        RasterEffectType.MotionBlur,
-        RasterEffectType.HueSaturation,
-        RasterEffectType.ColourBalance,
-        RasterEffectType.Curves,
-        RasterEffectType.GradientMap,
-        RasterEffectType.Sharpen,
-        RasterEffectType.Noise,
-        RasterEffectType.Bloom,
-        RasterEffectType.Halftone,
-        RasterEffectType.ChromaticAberration,
-        RasterEffectType.Grayscale,
-        RasterEffectType.Invert,
-    )
+    Text(title, color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .8.sp)
     effects.chunked(2).forEach { row ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             row.forEach { effect ->
-                val chosen = selected == effect
                 Row(
                     Modifier.weight(1f).height(62.dp).clip(RoundedCornerShape(11.dp))
-                        .background(if (chosen) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
+                        .background(NeoCanvasColors.panelRaised)
                         .clickable { onSelect(effect) }
                         .padding(horizontal = 10.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     EffectIcon(
                         type = effect,
-                        selected = chosen,
+                        selected = false,
                         currentColour = currentColour,
                         modifier = Modifier.size(30.dp),
                     )
                     Text(
                         effectName(effect),
-                        color = if (chosen) NeoCanvasColors.ink else NeoCanvasColors.paper,
+                        color = NeoCanvasColors.paper,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(start = 8.dp),
