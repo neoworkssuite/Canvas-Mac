@@ -132,6 +132,29 @@ class EditorStateTest {
         assertTrue(before.contentEquals(state.tileStore.read(key)!!))
     }
 
+    @Test fun crop_canvas_to_rectangular_selection_is_undoable() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(8, 8)))
+        state.insertImage(ImportedImage("Crop", 2, 2, IntArray(4) { 0xFFFF0000.toInt() }))
+        state.cancelTransform()
+        val beforeTiles = state.tileStore.snapshot()
+        assertEquals(8, state.document.width)
+        assertEquals(8, state.document.height)
+        assertEquals(CanvasSelection(3, 3, 5, 5), state.selection)
+
+        assertTrue(state.cropCanvasToSelection())
+        assertEquals(2, state.document.width)
+        assertEquals(2, state.document.height)
+        assertNull(state.selection)
+        assertTrue(state.tileStore.keys.all { it.x == 0 && it.y == 0 })
+
+        assertTrue(state.undo())
+        assertEquals(8, state.document.width)
+        assertEquals(8, state.document.height)
+        beforeTiles.forEach { (key, pixels) ->
+            assertTrue(pixels.contentEquals(state.tileStore.read(key)))
+        }
+    }
+
     @Test fun palette_normalizes_persists_and_retains_colours_on_save_failure() {
         var saved = listOf("#ff0000", "invalid", "#FF0000")
         var fail = false
