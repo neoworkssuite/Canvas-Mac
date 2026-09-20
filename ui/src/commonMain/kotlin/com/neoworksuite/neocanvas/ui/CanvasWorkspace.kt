@@ -33,12 +33,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
 
@@ -80,6 +84,7 @@ fun CanvasWorkspace(
         val currentOrigin by rememberUpdatedState(origin)
         val currentScale by rememberUpdatedState(scale)
         val currentCenter by rememberUpdatedState(Offset(leftInsetPx + usableWidth / 2f, viewportHeight / 2f))
+        val currentRotation by rememberUpdatedState(state.viewRotationDegrees)
         val previewPoints = inProgress.toList()
         val strokePreview = remember(previewPoints, document, state.tool, state.activeLayerId,
             state.brush, state.brushSize, state.brushOpacity, state.color, state.selection, state.stabilization, state.symmetry) {
@@ -94,6 +99,108 @@ fun CanvasWorkspace(
 
         Canvas(
             Modifier.fillMaxSize().onSizeChanged { viewport = it }
+                .pointerInput(document.id, viewport) {
+                    awaitEachGesture {
+                        val firstDown = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial,
+                        )
+                        var maxTouchCount = if (firstDown.type == PointerType.Stylus) 0 else 1
+                        var multiTouchStartedAt = 0L
+                        var lastEventTime = firstDown.uptimeMillis
+                        var transformStarted = false
+                        var accumulatedPan = Offset.Zero
+                        var accumulatedZoom = 1f
+                        var accumulatedRotation = 0f
+                        var touchTravel = 0f
+                        var stylusSeen = firstDown.type == PointerType.Stylus
+
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            lastEventTime = event.changes.maxOfOrNull { it.uptimeMillis } ?: lastEventTime
+                            stylusSeen = stylusSeen || event.changes.any { it.pressed && it.type == PointerType.Stylus }
+
+                            val touches = event.changes.filter { it.pressed && it.type != PointerType.Stylus }
+                            maxTouchCount = maxOf(maxTouchCount, touches.size)
+                            if (touches.size >= 2 && multiTouchStartedAt == 0L) multiTouchStartedAt = lastEventTime
+
+                            event.changes.filter { it.type != PointerType.Stylus && (it.pressed || it.previousPressed) }
+                                .forEach { touchTravel += (it.position - it.previousPosition).getDistance() }
+
+                            if (touches.size >= 2) {
+                                // Multi-touch always belongs to canvas navigation/shortcuts, never to a brush stroke.
+                                inProgress.clear()
+                                touches.forEach { it.consume() }
+
+                                if (touches.size == 2) {
+                                    val first = touches[0]
+                                    val second = touches[1]
+                                    val previousFirst = first.previousPosition
+                                    val previousSecond = second.previousPosition
+                                    val previousVector = previousSecond - previousFirst
+                                    val currentVector = second.position - first.position
+                                    val previousDistance = previousVector.getDistance().coerceAtLeast(.001f)
+                                    val zoomChange = (currentVector.getDistance() / previousDistance)
+                                        .takeIf { it.isFinite() && it > 0f } ?: 1f
+                                    val rotationChange = angleDeltaDegrees(previousVector, currentVector)
+                                    val previousCentroid = (previousFirst + previousSecond) / 2f
+                                    val currentCentroid = (first.position + second.position) / 2f
+                                    val panChange = currentCentroid - previousCentroid
+
+                                    accumulatedPan += panChange
+                                    accumulatedZoom *= zoomChange
+                                    accumulatedRotation += rotationChange
+
+                                    if (!transformStarted) {
+                                        transformStarted =
+                                            accumulatedPan.getDistance() > viewConfiguration.touchSlop ||
+                                                abs(accumulatedZoom - 1f) > .015f ||
+                                                abs(accumulatedRotation) > 1.5f
+                                    }
+                                    if (transformStarted) {
+                                        applyViewportTransform(
+                                            state = state,
+                                            baseCenter = currentCenter,
+                                            previousCentroid = previousCentroid,
+                                            currentCentroid = currentCentroid,
+                                            zoomChange = zoomChange,
+                                            rotationChange = rotationChange,
+                                        )
+                                    }
+                                }
+                            } else if (multiTouchStartedAt != 0L) {
+                                // Keep the remaining finger from becoming a new stroke while a multi-touch
+                                // gesture is winding down.
+                                event.changes.filter { it.type != PointerType.Stylus && (it.pressed || it.previousPressed) }
+                                    .forEach { it.consume() }
+                            }
+
+                            val anyTouchPressed = event.changes.any { it.pressed && it.type != PointerType.Stylus }
+                            if (!anyTouchPressed && multiTouchStartedAt != 0L) {
+                                val duration = (lastEventTime - multiTouchStartedAt).coerceAtLeast(0L)
+                                val tapTravelLimit = viewConfiguration.touchSlop * maxOf(2, maxTouchCount) * 1.5f
+
+                                if (!stylusSeen && !transformStarted && duration <= 350L && touchTravel <= tapTravelLimit) {
+                                    when (maxTouchCount) {
+                                        2 -> if (state.undo()) state.statusMessage = "Undo"
+                                        3 -> if (state.redo()) state.statusMessage = "Redo"
+                                    }
+                                } else if (
+                                    !stylusSeen && transformStarted && maxTouchCount == 2 &&
+                                    duration <= 280L && abs(accumulatedZoom - 1f) >= .35f &&
+                                    accumulatedPan.getDistance() <= viewConfiguration.touchSlop * 2.5f &&
+                                    abs(accumulatedRotation) <= 7f
+                                ) {
+                                    state.resetView()
+                                    state.statusMessage = "Fit canvas"
+                                }
+                                break
+                            }
+
+                            if (event.changes.none { it.pressed }) break
+                        }
+                    }
+                }
                 .pointerInput(state.tool, state.activeLayerId, state.brushSize, state.brushOpacity, document.id, viewport) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -105,10 +212,21 @@ fun CanvasWorkspace(
                     }
                     val gestureOrigin = currentOrigin
                     val gestureScale = currentScale
-                    fun point(position: Offset, pressure: Float) = DrawPoint(
-                        (position.x - gestureOrigin.x) / gestureScale,
-                        (position.y - gestureOrigin.y) / gestureScale,
-                        normalizedPressure(pressure))
+                    val gestureRotation = currentRotation
+                    val documentCenter = Offset(document.width / 2f, document.height / 2f)
+                    fun point(position: Offset, pressure: Float): DrawPoint {
+                        val unscaled = Offset(
+                            (position.x - gestureOrigin.x) / gestureScale,
+                            (position.y - gestureOrigin.y) / gestureScale,
+                        )
+                        val documentPoint = documentCenter +
+                            rotateOffset(unscaled - documentCenter, -gestureRotation)
+                        return DrawPoint(
+                            documentPoint.x,
+                            documentPoint.y,
+                            normalizedPressure(pressure),
+                        )
+                    }
                     val initial = point(down.position, if (down.type == PointerType.Stylus) down.pressure else 1f)
                     if (state.tool != Tool.Pan && (initial.x < 0f || initial.y < 0f ||
                         initial.x >= document.width || initial.y >= document.height)) return@awaitEachGesture
@@ -142,7 +260,8 @@ fun CanvasWorkspace(
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id }
-                            if (change == null || change.isConsumed || event.changes.count { it.pressed } > 1) {
+                            val pressedTouches = event.changes.count { it.pressed && it.type != PointerType.Stylus }
+                            if (change == null || change.isConsumed || pressedTouches > 1) {
                                 cancelled = true
                                 break
                             }
@@ -208,7 +327,11 @@ fun CanvasWorkspace(
                 }
             },
         ) {
-            withTransform({ translate(origin.x, origin.y); scale(scale, scale, pivot = Offset.Zero) }) {
+            withTransform({
+                translate(origin.x, origin.y)
+                scale(scale, scale, pivot = Offset.Zero)
+                rotate(state.viewRotationDegrees, pivot = Offset(document.width / 2f, document.height / 2f))
+            }) {
                 drawRect(NeoCanvasColors.paper, size = Size(document.width.toFloat(), document.height.toFloat()))
                 drawStoredTiles(state, transformPreview ?: movePreview ?: strokePreview, tileImages)
                 val symmetry = state.symmetry
@@ -351,4 +474,45 @@ internal object NeoCanvasColors {
     val line = Color(0xFF303744)
     val track = Color(0xFF3B4452)
     val disabled = Color(0xFF53606E)
+}
+
+
+private fun applyViewportTransform(
+    state: EditorState,
+    baseCenter: Offset,
+    previousCentroid: Offset,
+    currentCentroid: Offset,
+    zoomChange: Float,
+    rotationChange: Float,
+) {
+    val previousZoom = state.zoom
+    val nextZoom = (previousZoom * zoomChange).coerceIn(.20f, 6f)
+    val actualZoomChange = if (previousZoom > 0f) nextZoom / previousZoom else 1f
+    val canvasCenter = baseCenter + Offset(state.panX, state.panY)
+    val relativeToCanvasCenter = previousCentroid - canvasCenter
+    val transformedRelative = rotateOffset(relativeToCanvasCenter * actualZoomChange, rotationChange)
+    val nextCanvasCenter = currentCentroid - transformedRelative
+
+    state.zoom = nextZoom
+    state.panX = nextCanvasCenter.x - baseCenter.x
+    state.panY = nextCanvasCenter.y - baseCenter.y
+    state.rotateViewBy(rotationChange)
+}
+
+private fun angleDeltaDegrees(previous: Offset, current: Offset): Float {
+    if (previous.getDistance() <= .001f || current.getDistance() <= .001f) return 0f
+    val previousAngle = atan2(previous.y, previous.x)
+    val currentAngle = atan2(current.y, current.x)
+    return normalizeViewRotation((currentAngle - previousAngle) * 180f / kotlin.math.PI.toFloat())
+}
+
+private fun rotateOffset(offset: Offset, degrees: Float): Offset {
+    if (degrees == 0f) return offset
+    val radians = degrees * kotlin.math.PI.toFloat() / 180f
+    val cosine = cos(radians)
+    val sine = sin(radians)
+    return Offset(
+        x = offset.x * cosine - offset.y * sine,
+        y = offset.x * sine + offset.y * cosine,
+    )
 }
