@@ -41,16 +41,43 @@ object PngExporter {
 
     fun render(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): PngImage {
         val output = ByteArray(document.width * document.height * 4)
-        document.layers.filter { it.visible && it.opacity > 0f }.forEach { layer ->
-            val raster = layer.payload as? LayerPayload.Raster
-                ?: return@forEach
+        document.layers.forEachIndexed { index, layer ->
+            if (!layer.visible || layer.opacity <= 0f) return@forEachIndexed
+            val raster = layer.payload as? LayerPayload.Raster ?: return@forEachIndexed
+            val clippingBase = if (layer.clipping && index > 0) document.layers[index - 1] else null
+            val clippingRaster = clippingBase?.payload as? LayerPayload.Raster
             raster.tileAddresses.forEach { address ->
-                val pixels = tiles[address] ?: return@forEach
-                require(pixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
+                val sourcePixels = tiles[address] ?: return@forEach
+                require(sourcePixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
+                val pixels = if (layer.clipping) {
+                    val basePixels = clippingRaster?.let {
+                        tiles[TileAddress(clippingBase!!.id, address.x, address.y)]
+                    }
+                    clipAlpha(sourcePixels, basePixels)
+                } else sourcePixels
                 compositeTile(output, document.width, document.height, address, pixels, layer.opacity, layer.blendMode)
             }
         }
         return PngImage(document.width, document.height, output)
+    }
+
+    private fun clipAlpha(source: ByteArray, mask: ByteArray?): ByteArray {
+        if (mask == null) return ByteArray(source.size)
+        val output = source.copyOf()
+        var offset = 0
+        while (offset < output.size) {
+            val sourceAlpha = output[offset + 3].toInt() and 255
+            val maskAlpha = mask[offset + 3].toInt() and 255
+            val clippedAlpha = (sourceAlpha * maskAlpha + 127) / 255
+            output[offset + 3] = clippedAlpha.toByte()
+            if (clippedAlpha == 0) {
+                output[offset] = 0
+                output[offset + 1] = 0
+                output[offset + 2] = 0
+            }
+            offset += 4
+        }
+        return output
     }
 
     private fun compositeTile(output: ByteArray, outputWidth: Int, outputHeight: Int, address: TileAddress, tile: ByteArray,
