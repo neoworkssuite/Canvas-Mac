@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.selected
 import com.neoworksuite.neocanvas.renderer.DrawingSymmetry
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modifier, onGallery: () -> Unit = {}) {
@@ -62,7 +63,7 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
     val scope = rememberCoroutineScope()
     val scrollStep = with(LocalDensity.current) { 240.dp.toPx() }
     Row(
-        modifier = modifier.fillMaxWidth().height(58.dp).background(NeoCanvasColors.chrome).padding(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp).background(NeoCanvasColors.chrome).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -115,12 +116,16 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
                 "Layers" to { state.showInspector(InspectorPanel.Layers) },
                 "Brushes" to { state.showInspector(InspectorPanel.Brushes) },
                 "Colour and palette" to { state.showInspector(InspectorPanel.Colors) },
+                "FX / Adjustments" to { state.showInspector(InspectorPanel.Effects) },
+                "Settings" to { state.settingsVisible = true },
                 "Hide panel" to { state.inspectorVisible = false },
             ), active = state.inspectorVisible)
         } else {
+        StudioButton(Glyph.Fx, "FX and adjustments", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Effects) { state.toggleInspector(InspectorPanel.Effects) }
         StudioButton(Glyph.Palette, "Colour studio", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Colors) { state.toggleInspector(InspectorPanel.Colors) }
         StudioButton(Glyph.Library, "Brush library", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Brushes) { state.toggleInspector(InspectorPanel.Brushes) }
         StudioButton(Glyph.Layers, "Layers", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Layers) { state.toggleInspector(InspectorPanel.Layers) }
+        StudioButton(Glyph.Settings, "Settings") { state.settingsVisible = true }
         }
     }
 }
@@ -129,17 +134,17 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
 private fun StudioMenu(label: String, actions: List<Pair<String, () -> Unit>>, active: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        Box(Modifier.height(48.dp).clip(RoundedCornerShape(10.dp))
+        Box(Modifier.height(52.dp).clip(RoundedCornerShape(10.dp))
             .background(if (active || expanded) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
             .clickable { expanded = !expanded }
             .semantics { contentDescription = "$label menu" }
             .padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-            Text("$label ▾", color = if (active || expanded) NeoCanvasColors.ink else NeoCanvasColors.paper, fontSize = 12.sp)
+            Text("$label ▾", color = if (active || expanded) NeoCanvasColors.ink else NeoCanvasColors.paper, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
             containerColor = NeoCanvasColors.panelRaised) {
             actions.forEach { (title, action) ->
-                DropdownMenuItem(text = { Text(title, color = NeoCanvasColors.paper) }, onClick = {
+                DropdownMenuItem(text = { Text(title, color = NeoCanvasColors.paper, fontSize = 14.sp) }, onClick = {
                     expanded = false
                     action()
                 })
@@ -262,7 +267,7 @@ fun studioSliderColors() = SliderDefaults.colors(
     inactiveTrackColor = NeoCanvasColors.track,
 )
 
-private enum class Glyph { Previous, Next, New, Open, Save, Export, Brush, Eraser, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers }
+private enum class Glyph { Previous, Next, New, Open, Save, Export, Brush, Eraser, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -285,7 +290,7 @@ private fun StudioButton(glyph: Glyph, label: String, selected: Boolean = false,
     val surface = if (selected) NeoCanvasColors.accent else Color.Transparent
     StudioTooltip(label) {
     Box(
-        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(11.dp)).background(surface)
+        modifier = Modifier.size(54.dp).clip(RoundedCornerShape(12.dp)).background(surface)
             .clickable(enabled = enabled, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .semantics { contentDescription = label; this.selected = selected },
         contentAlignment = Alignment.Center,
@@ -302,7 +307,7 @@ private fun BrandMark() = androidx.compose.foundation.Image(
 )
 
 @Composable
-private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(20.dp)) {
+private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(26.dp)) {
     val w = size.width
     val h = size.height
     fun line(a: Offset, b: Offset, width: Float = 1.8f) = drawLine(color, a, b, width, StrokeCap.Round)
@@ -346,5 +351,21 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(20.dp
         Glyph.Palette -> { drawCircle(color, w * .35f, Offset(w * .50f, h * .50f), style = Stroke(1.9f)); drawCircle(color, 2f, Offset(w * .39f, h * .44f)); drawCircle(color, 2f, Offset(w * .57f, h * .40f)); drawCircle(color, 2f, Offset(w * .55f, h * .60f)) }
         Glyph.Library -> { drawRoundRect(color, Offset(w * .20f, h * .22f), Size(w * .60f, h * .56f), androidx.compose.ui.geometry.CornerRadius(4f, 4f), style = Stroke(1.8f)); line(Offset(w * .32f, h * .42f), Offset(w * .68f, h * .42f)); line(Offset(w * .32f, h * .58f), Offset(w * .57f, h * .58f)) }
         Glyph.Layers -> { drawRoundRect(color, Offset(w * .24f, h * .22f), Size(w * .52f, h * .14f), androidx.compose.ui.geometry.CornerRadius(2f, 2f)); drawRoundRect(color, Offset(w * .24f, h * .44f), Size(w * .52f, h * .14f), androidx.compose.ui.geometry.CornerRadius(2f, 2f)); drawRoundRect(color, Offset(w * .24f, h * .66f), Size(w * .52f, h * .14f), androidx.compose.ui.geometry.CornerRadius(2f, 2f)) }
+        Glyph.Fx -> {
+            line(Offset(w * .20f, h * .20f), Offset(w * .20f, h * .80f), 2.4f)
+            line(Offset(w * .20f, h * .34f), Offset(w * .45f, h * .34f), 2.4f)
+            line(Offset(w * .58f, h * .42f), Offset(w * .84f, h * .78f), 2.4f)
+            line(Offset(w * .84f, h * .42f), Offset(w * .58f, h * .78f), 2.4f)
+        }
+        Glyph.Settings -> {
+            drawCircle(color, w * .16f, Offset(w * .5f, h * .5f), style = Stroke(2.2f))
+            drawCircle(color, w * .05f, Offset(w * .5f, h * .5f))
+            repeat(8) { index ->
+                val angle = index * kotlin.math.PI.toFloat() / 4f
+                val from = Offset(w * .5f + kotlin.math.cos(angle) * w * .25f, h * .5f + kotlin.math.sin(angle) * h * .25f)
+                val to = Offset(w * .5f + kotlin.math.cos(angle) * w * .39f, h * .5f + kotlin.math.sin(angle) * h * .39f)
+                line(from, to, 2.2f)
+            }
+        }
     }
 }
