@@ -17,11 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,23 +29,17 @@ import kotlin.math.roundToInt
 
 @Composable
 fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
-    var selected by remember { mutableStateOf(RasterEffectType.Blur) }
-    var amount by remember { mutableFloatStateOf(0f) }
-    var secondary by remember { mutableFloatStateOf(0f) }
-    var tertiary by remember { mutableFloatStateOf(0f) }
+    val selected = state.effectPreviewType ?: RasterEffectType.Blur
+    val settings = state.effectPreviewSettings
 
-    fun resetValues(type: RasterEffectType) {
-        amount = 0f
-        secondary = 0f
-        tertiary = 0f
-        if (!effectHasContinuousStrength(type)) amount = 1f
-    }
-
-    LaunchedEffect(selected, amount, secondary, tertiary, state.activeLayerId, state.color) {
-        state.previewEffect(
-            selected,
-            RasterEffectSettings(amount = amount, secondary = secondary, tertiary = tertiary),
-        )
+    LaunchedEffect(state.inspectorVisible, state.inspectorPanel, state.activeLayerId) {
+        if (
+            state.inspectorVisible &&
+            state.inspectorPanel == InspectorPanel.Effects &&
+            state.effectPreviewType == null
+        ) {
+            state.previewEffect(RasterEffectType.Blur, neutralEffectSettings(RasterEffectType.Blur))
+        }
     }
 
     Column(
@@ -60,44 +49,61 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
         InspectorHeading("FX", "Live adjustment")
 
         Text(
-            "Adjustments preview directly on the canvas. Tap FX again or open another studio panel to commit the current adjustment.",
+            "Slide left or right on the canvas, or use the controls below. Changes preview instantly. Tap FX again or open another studio panel to commit.",
             color = NeoCanvasColors.muted,
             fontSize = 11.sp,
         )
 
-        LiveAdjustmentReadout(selected, amount)
+        LiveAdjustmentReadout(selected, settings.amount)
 
         EffectGrid(
             selected = selected,
             onSelect = { next ->
                 if (next != selected) {
                     state.commitEffectPreview()
-                    selected = next
-                    resetValues(next)
+                    state.previewEffect(next, neutralEffectSettings(next))
                 }
             },
         )
 
         when (selected) {
             RasterEffectType.Blur ->
-                EffectSlider("Gaussian blur", amount, 0f..1f) { amount = it }
+                EffectSlider("Gaussian blur", settings.amount, 0f..1f) {
+                    state.previewEffect(selected, settings.copy(amount = it))
+                }
 
             RasterEffectType.MotionBlur ->
-                EffectSlider("Motion blur", amount, 0f..1f) { amount = it }
+                EffectSlider("Motion blur", settings.amount, 0f..1f) {
+                    state.previewEffect(selected, settings.copy(amount = it))
+                }
 
             RasterEffectType.Curves ->
-                EffectSlider("Contrast curve", amount, -1f..1f) { amount = it }
+                EffectSlider("Contrast curve", settings.amount, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(amount = it))
+                }
 
             RasterEffectType.HueSaturation -> {
-                EffectSlider("Saturation", amount, -1f..1f) { amount = it }
-                EffectSlider("Hue shift", secondary, -1f..1f) { secondary = it }
-                EffectSlider("Brightness", tertiary, -1f..1f) { tertiary = it }
+                EffectSlider("Saturation", settings.amount, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(amount = it))
+                }
+                EffectSlider("Hue shift", settings.secondary, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(secondary = it))
+                }
+                EffectSlider("Brightness", settings.tertiary, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(tertiary = it))
+                }
             }
 
             RasterEffectType.ColourBalance -> {
-                EffectSlider("Red / Cyan", amount, -1f..1f) { amount = it }
-                EffectSlider("Green / Magenta", secondary, -1f..1f) { secondary = it }
-                EffectSlider("Blue / Yellow", tertiary, -1f..1f) { tertiary = it }
+                EffectSlider("Red / Cyan", settings.amount, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(amount = it))
+                }
+                EffectSlider("Green / Magenta", settings.secondary, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(secondary = it))
+                }
+                EffectSlider("Blue / Yellow", settings.tertiary, -1f..1f) {
+                    state.previewEffect(selected, settings.copy(tertiary = it))
+                }
             }
 
             RasterEffectType.GradientMap -> Text(
@@ -121,11 +127,7 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
         ) {
             TextButton(
                 onClick = {
-                    resetValues(selected)
-                    state.previewEffect(
-                        selected,
-                        RasterEffectSettings(amount = amount, secondary = secondary, tertiary = tertiary),
-                    )
+                    state.previewEffect(selected, neutralEffectSettings(selected))
                 },
             ) {
                 Text("Reset", color = NeoCanvasColors.accent)
@@ -137,20 +139,26 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
         }
 
         Text(
-            "No Apply button: the current preview is committed as one undoable step when you leave FX.",
+            "There is no Apply button. Leaving FX commits the current preview as one undoable edit.",
             color = NeoCanvasColors.faint,
             fontSize = 10.sp,
         )
     }
 }
 
+private fun neutralEffectSettings(type: RasterEffectType): RasterEffectSettings =
+    when (type) {
+        RasterEffectType.GradientMap,
+        RasterEffectType.Grayscale,
+        RasterEffectType.Invert -> RasterEffectSettings(amount = 1f)
+        else -> RasterEffectSettings(amount = 0f, secondary = 0f, tertiary = 0f)
+    }
+
 @Composable
 private fun LiveAdjustmentReadout(type: RasterEffectType, amount: Float) {
     val percent = when {
         !effectHasContinuousStrength(type) -> 100
-        type == RasterEffectType.HueSaturation ||
-            type == RasterEffectType.ColourBalance ||
-            type == RasterEffectType.Curves -> (amount * 100f).roundToInt()
+        type in signedEffects -> (amount * 100f).roundToInt()
         else -> (amount.coerceIn(0f, 1f) * 100f).roundToInt()
     }
 
