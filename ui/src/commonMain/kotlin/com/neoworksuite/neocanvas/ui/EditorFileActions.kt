@@ -29,6 +29,8 @@ interface EditorFileActions {
     }
     fun loadPalette(): List<String> = emptyList()
     fun savePalette(colors: List<String>): SaveResult = SaveResult.Failure("Palette storage is unavailable in this host.")
+    fun loadBrushLibrary(): ByteArray? = null
+    fun saveBrushLibrary(bytes: ByteArray): SaveResult = SaveResult.Failure("Brush library storage is unavailable in this host.")
     fun openExternalUrl(url: String): Boolean = false
     fun loadPreferences(): Map<String, String> = emptyMap()
     fun savePreferences(values: Map<String, String>): SaveResult =
