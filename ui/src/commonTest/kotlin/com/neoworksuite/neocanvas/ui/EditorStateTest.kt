@@ -8,6 +8,8 @@ import com.neoworksuite.neocanvas.core.model.LayerPayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorStateTest {
@@ -63,6 +65,7 @@ class EditorStateTest {
         assertEquals("Photo", state.document.layers.last().name)
         assertEquals(CanvasSelection(3, 3, 5, 4), state.selection)
         assertEquals(Tool.MoveSelection, state.tool)
+        assertNotNull(state.transformSession)
         val key = state.tileStore.keys.single()
         val pixels = state.tileStore.read(key)!!
         val offset = (3 * 256 + 3) * 4
@@ -88,6 +91,47 @@ class EditorStateTest {
         assertEquals(8, state.document.width)
         assertEquals(8, state.document.height)
     }
+    @Test fun effect_preview_is_non_destructive_until_it_is_committed() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(8, 8)))
+        state.insertImage(ImportedImage("Photo", 2, 2, IntArray(4) { 0xFF336699.toInt() }))
+        state.cancelTransform()
+        val key = state.tileStore.keys.single()
+        val before = state.tileStore.read(key)!!.copyOf()
+
+        assertTrue(
+            state.previewEffect(
+                com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert,
+                com.neoworksuite.neocanvas.renderer.RasterEffectSettings(amount = 1f),
+            ),
+        )
+        assertNotNull(state.effectPreviewPatch)
+        assertTrue(before.contentEquals(state.tileStore.read(key)!!))
+
+        assertTrue(state.commitEffectPreview())
+        assertFalse(before.contentEquals(state.tileStore.read(key)!!))
+        assertTrue(state.undo())
+        assertTrue(before.contentEquals(state.tileStore.read(key)!!))
+    }
+
+    @Test fun cancelling_effect_preview_leaves_the_active_layer_unchanged() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(8, 8)))
+        state.insertImage(ImportedImage("Photo", 2, 2, IntArray(4) { 0xFF336699.toInt() }))
+        state.cancelTransform()
+        val key = state.tileStore.keys.single()
+        val before = state.tileStore.read(key)!!.copyOf()
+
+        assertTrue(
+            state.previewEffect(
+                com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert,
+                com.neoworksuite.neocanvas.renderer.RasterEffectSettings(amount = 1f),
+            ),
+        )
+        state.cancelEffectPreview()
+
+        assertNull(state.effectPreviewPatch)
+        assertTrue(before.contentEquals(state.tileStore.read(key)!!))
+    }
+
     @Test fun palette_normalizes_persists_and_retains_colours_on_save_failure() {
         var saved = listOf("#ff0000", "invalid", "#FF0000")
         var fail = false
