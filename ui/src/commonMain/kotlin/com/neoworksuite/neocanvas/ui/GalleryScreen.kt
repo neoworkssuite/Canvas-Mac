@@ -92,6 +92,16 @@ fun GalleryScreen(
                 Button(onClick = onNew) { Text("+  New artwork") }
             }
 
+            if (GalleryPromotion.enabled && !stackOpen) {
+                KickstarterGalleryBanner(
+                    onOpen = {
+                        if (!actions.openExternalUrl(GalleryPromotion.url)) {
+                            message = GalleryPromotion.url
+                        }
+                    },
+                )
+            }
+
             if (selecting && selected.isNotEmpty()) {
                 Row(
                     Modifier.fillMaxWidth().background(NeoCanvasColors.panel).padding(horizontal = 20.dp, vertical = 9.dp),
@@ -198,6 +208,28 @@ fun GalleryScreen(
         }) { Text("Delete", color = Color(0xFFFF7777)) } },
         dismissButton = { TextButton(onClick = { deleteTargets = emptySet() }) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun KickstarterGalleryBanner(onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(NeoCanvasColors.chrome),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("N", color = NeoCanvasColors.accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(GalleryPromotion.title, color = NeoCanvasColors.paper, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(GalleryPromotion.message, color = NeoCanvasColors.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Button(onClick = onOpen) { Text("View Kickstarter") }
+    }
 }
 
 private fun Set<String>.toggle(value: String) = if (value in this) this - value else this + value
