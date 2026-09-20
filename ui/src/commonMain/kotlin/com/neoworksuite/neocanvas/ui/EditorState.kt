@@ -22,6 +22,7 @@ import com.neoworksuite.neocanvas.core.model.SetLayerVisibility
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.SetLayerAlphaLocked
 import com.neoworksuite.neocanvas.core.model.SetLayerBlendMode
+import com.neoworksuite.neocanvas.core.model.SetLayerClipping
 import com.neoworksuite.neocanvas.core.model.MergeRasterLayerDown
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.model.Layer
@@ -720,6 +721,18 @@ class EditorState(
             statusMessage = if (it.alphaLocked) "Alpha unlocked" else "Alpha locked — paint stays inside existing pixels"
         }
     }
+    fun toggleLayerClipping(id: String) {
+        val index = document.layers.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val layer = document.layers[index]
+        if (!layer.clipping && index == 0) {
+            statusMessage = "Clipping masks need a layer underneath"
+            return
+        }
+        execute(SetLayerClipping(id, !layer.clipping))
+        statusMessage = if (layer.clipping) "Clipping mask disabled" else "Clipping mask enabled"
+    }
+
     fun setLayerBlendMode(id: String, blendMode: LayerBlendMode) {
         execute(SetLayerBlendMode(id, blendMode))
         statusMessage = "Blend mode: ${blendMode.name}"
