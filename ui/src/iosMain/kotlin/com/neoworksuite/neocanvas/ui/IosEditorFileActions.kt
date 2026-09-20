@@ -58,6 +58,7 @@ internal class IosEditorFileActions(
     private val recoveryDirectory: String get() = join(libraryDirectory, "Recovery")
     private val exportDirectory: String get() = join(libraryDirectory, "Exports")
     private val palettePath: String get() = join(libraryDirectory, "palette.txt")
+    private val preferencesPath: String get() = join(libraryDirectory, "preferences.txt")
     private val recoveryPath: String get() = join(recoveryDirectory, "last-session.neocanvas")
 
     override val supportsLocalLibrary: Boolean = true
@@ -199,6 +200,23 @@ internal class IosEditorFileActions(
         ensureDirectory(libraryDirectory)
         return if (writeBytes(palettePath, colors.joinToString("\n").encodeToByteArray())) SaveResult.Success
             else SaveResult.Failure("Could not save palette locally on this iPad.")
+    }
+
+    override fun loadPreferences(): Map<String, String> {
+        val data = NSData.dataWithContentsOfFile(preferencesPath)?.toByteArray() ?: return emptyMap()
+        return runCatching {
+            data.decodeToString().lineSequence().mapNotNull { line ->
+                val split = line.indexOf('=')
+                if (split <= 0) null else line.substring(0, split) to line.substring(split + 1)
+            }.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    override fun savePreferences(values: Map<String, String>): SaveResult {
+        ensureDirectory(libraryDirectory)
+        val text = values.toSortedMap().entries.joinToString("\n") { (key, value) -> "$key=$value" }
+        return if (writeBytes(preferencesPath, text.encodeToByteArray())) SaveResult.Success
+            else SaveResult.Failure("Could not save NeoCanvas preferences on this iPad.")
     }
 
     override fun exportPng(
