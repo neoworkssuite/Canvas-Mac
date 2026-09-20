@@ -142,7 +142,9 @@ fun CanvasWorkspace(
                                     val previousDistance = previousVector.getDistance().coerceAtLeast(.001f)
                                     val zoomChange = (currentVector.getDistance() / previousDistance)
                                         .takeIf { it.isFinite() && it > 0f } ?: 1f
-                                    val rotationChange = angleDeltaDegrees(previousVector, currentVector)
+                                    val rotationChange = if (state.canvasRotationEnabled)
+                                        angleDeltaDegrees(previousVector, currentVector)
+                                    else 0f
                                     val previousCentroid = (previousFirst + previousSecond) / 2f
                                     val currentCentroid = (first.position + second.position) / 2f
                                     val panChange = currentCentroid - previousCentroid
@@ -201,9 +203,24 @@ fun CanvasWorkspace(
                         }
                     }
                 }
-                .pointerInput(state.tool, state.activeLayerId, state.brushSize, state.brushOpacity, document.id, viewport) {
+                .pointerInput(
+                    state.tool,
+                    state.activeLayerId,
+                    state.brushSize,
+                    state.brushOpacity,
+                    state.fingerPaintingEnabled,
+                    document.id,
+                    viewport,
+                ) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
+                    if (
+                        down.type != PointerType.Stylus &&
+                        !state.fingerPaintingEnabled &&
+                        state.tool in listOf(Tool.Brush, Tool.Eraser)
+                    ) {
+                        return@awaitEachGesture
+                    }
                     if (state.tool != Tool.Pan && state.tool != Tool.Eyedropper && state.tool != Tool.Select &&
                         state.document.layers.any { it.id == state.activeLayerId && it.locked }) {
                         state.statusMessage = "Layer is locked — unlock it in Layers to edit"
