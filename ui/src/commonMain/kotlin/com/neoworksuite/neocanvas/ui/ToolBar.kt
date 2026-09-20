@@ -84,6 +84,7 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
             "Export visible PNG…" to { state.exportPng() },
             ))
         })
+        StudioButton(Glyph.Settings, "Settings") { state.settingsVisible = true }
         if (toolScroll.maxValue > 0) {
             StudioButton(Glyph.Previous, "Show previous tools", enabled = toolScroll.canScrollBackward) {
                 scope.launch { toolScroll.animateScrollBy(-scrollStep) }
@@ -113,19 +114,21 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
         StudioButton(Glyph.Fit, "Fit canvas") { state.resetView() }
         if (compact) {
             StudioMenu("Studio", listOf(
-                "Layers" to { state.showInspector(InspectorPanel.Layers) },
                 "Brushes" to { state.showInspector(InspectorPanel.Brushes) },
                 "Colour and palette" to { state.showInspector(InspectorPanel.Colors) },
                 "FX / Adjustments" to { state.showInspector(InspectorPanel.Effects) },
-                "Settings" to { state.settingsVisible = true },
-                "Hide panel" to { state.inspectorVisible = false },
-            ), active = state.inspectorVisible)
+                "Hide panel" to { state.hideInspector() },
+            ), active = state.inspectorVisible && state.inspectorPanel != InspectorPanel.Layers)
+            StudioButton(
+                Glyph.Layers,
+                "Layers",
+                state.inspectorVisible && state.inspectorPanel == InspectorPanel.Layers,
+            ) { state.toggleInspector(InspectorPanel.Layers) }
         } else {
         StudioButton(Glyph.Fx, "FX and adjustments", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Effects) { state.toggleInspector(InspectorPanel.Effects) }
         StudioButton(Glyph.Palette, "Colour studio", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Colors) { state.toggleInspector(InspectorPanel.Colors) }
         StudioButton(Glyph.Library, "Brush library", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Brushes) { state.toggleInspector(InspectorPanel.Brushes) }
         StudioButton(Glyph.Layers, "Layers", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Layers) { state.toggleInspector(InspectorPanel.Layers) }
-        StudioButton(Glyph.Settings, "Settings") { state.settingsVisible = true }
         }
     }
 }
