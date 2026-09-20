@@ -472,7 +472,22 @@ class EditorState(
         smoothResizing = true
         inspectorVisible = false
         settingsVisible = false
+        persistPreferences()
         statusMessage = "NeoCanvas preferences reset"
+    }
+
+    fun persistPreferences() {
+        runCatching {
+            fileActions.savePreferences(
+                mapOf(
+                    "fingerPaintingEnabled" to fingerPaintingEnabled.toString(),
+                    "canvasRotationEnabled" to canvasRotationEnabled.toString(),
+                    "autoRecoveryEnabled" to autoRecoveryEnabled.toString(),
+                    "showStatusMessages" to showStatusMessages.toString(),
+                    "smoothResizing" to smoothResizing.toString(),
+                ),
+            )
+        }
     }
 
     var zoom: Float by mutableFloatStateOf(1f)
@@ -483,6 +498,16 @@ class EditorState(
     var palette: List<String> by mutableStateOf(emptyList())
         private set
     init {
+        try {
+            val preferences = fileActions.loadPreferences()
+            fingerPaintingEnabled = preferences["fingerPaintingEnabled"]?.toBoolean() ?: fingerPaintingEnabled
+            canvasRotationEnabled = preferences["canvasRotationEnabled"]?.toBoolean() ?: canvasRotationEnabled
+            autoRecoveryEnabled = preferences["autoRecoveryEnabled"]?.toBoolean() ?: autoRecoveryEnabled
+            showStatusMessages = preferences["showStatusMessages"]?.toBoolean() ?: showStatusMessages
+            smoothResizing = preferences["smoothResizing"]?.toBoolean() ?: smoothResizing
+        } catch (_: Exception) {
+            // Defaults remain active if a stored preference file cannot be read.
+        }
         try {
             palette = fileActions.loadPalette().mapNotNull { parseColorHex(it)?.let(::colorHex) }.distinct().take(32)
         } catch (error: Exception) { statusMessage = "Could not load local palette: ${error.message}" }
