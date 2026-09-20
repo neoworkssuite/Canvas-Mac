@@ -9,6 +9,11 @@ enum class RasterEffectType {
     ColourBalance,
     Curves,
     GradientMap,
+    Sharpen,
+    Noise,
+    Bloom,
+    Halftone,
+    ChromaticAberration,
     Grayscale,
     Invert,
 }
@@ -83,6 +88,37 @@ object RasterEffects {
                         intArrayOf((hr * luminance).roundToInt(), (hg * luminance).roundToInt(), (hb * luminance).roundToInt(), a)
                     }
                 }
+                RasterEffectType.Sharpen -> sharpenTile(
+                    snapshot = snapshot,
+                    key = key,
+                    width = canvasWidth,
+                    height = canvasHeight,
+                    amount = settings.amount.coerceIn(0f, 1f),
+                )
+                RasterEffectType.Noise -> noiseTile(
+                    source = source,
+                    key = key,
+                    amount = settings.amount.coerceIn(0f, 1f),
+                )
+                RasterEffectType.Bloom -> bloomTile(
+                    snapshot = snapshot,
+                    key = key,
+                    width = canvasWidth,
+                    height = canvasHeight,
+                    amount = settings.amount.coerceIn(0f, 1f),
+                )
+                RasterEffectType.Halftone -> halftoneTile(
+                    source = source,
+                    key = key,
+                    amount = settings.amount.coerceIn(0f, 1f),
+                )
+                RasterEffectType.ChromaticAberration -> chromaticAberrationTile(
+                    snapshot = snapshot,
+                    key = key,
+                    width = canvasWidth,
+                    height = canvasHeight,
+                    amount = settings.amount.coerceIn(0f, 1f),
+                )
                 RasterEffectType.Grayscale -> transform(source) { r, g, b, a ->
                     val y = (r * .2126f + g * .7152f + b * .0722f).roundToInt().coerceIn(0, 255)
                     intArrayOf(y, y, y, a)
@@ -93,6 +129,139 @@ object RasterEffects {
             }
         }
         return RasterPatch.of(replacements)
+    }
+
+    private fun sharpenTile(
+        snapshot: Map<TileKey, ByteArray>,
+        key: TileKey,
+        width: Int,
+        height: Int,
+        amount: Float,
+    ): ByteArray {
+        if (amount <= .001f) return snapshot[key]?.copyOf() ?: ByteArray(TileFormat.BYTES_PER_TILE)
+        return sampledTile(snapshot, key, width, height) { x, y ->
+            val center = pixel(snapshot, key.layerId, x, y, width, height) ?: intArrayOf(0, 0, 0, 0)
+            val left = pixel(snapshot, key.layerId, x - 1, y, width, height) ?: center
+            val right = pixel(snapshot, key.layerId, x + 1, y, width, height) ?: center
+            val up = pixel(snapshot, key.layerId, x, y - 1, width, height) ?: center
+            val down = pixel(snapshot, key.layerId, x, y + 1, width, height) ?: center
+            val output = IntArray(4)
+            for (channel in 0..2) {
+                val blurred = (left[channel] + right[channel] + up[channel] + down[channel]) / 4f
+                output[channel] = (center[channel] + (center[channel] - blurred) * amount * 2.4f)
+                    .roundToInt().coerceIn(0, 255)
+            }
+            output[3] = center[3]
+            output
+        }
+    }
+
+    private fun noiseTile(source: ByteArray, key: TileKey, amount: Float): ByteArray {
+        if (amount <= .001f) return source.copyOf()
+        val output = source.copyOf()
+        var pixelIndex = 0
+        var offset = 0
+        while (offset < output.size) {
+            val alpha = output[offset + 3].toInt() and 255
+            if (alpha != 0) {
+                val noise = (noise01(key.x * 977 + pixelIndex, key.y * 991, 211) - .5f) * 2f
+                val delta = noise * 72f * amount
+                for (channel in 0..2) {
+                    output[offset + channel] = ((source[offset + channel].toInt() and 255) + delta)
+                        .roundToInt().coerceIn(0, 255).toByte()
+                }
+            }
+            pixelIndex++
+            offset += 4
+        }
+        return output
+    }
+
+    private fun bloomTile(
+        snapshot: Map<TileKey, ByteArray>,
+        key: TileKey,
+        width: Int,
+        height: Int,
+        amount: Float,
+    ): ByteArray {
+        if (amount <= .001f) return snapshot[key]?.copyOf() ?: ByteArray(TileFormat.BYTES_PER_TILE)
+        val radius = (1 + amount * 7f).roundToInt()
+        return sampledTile(snapshot, key, width, height) { x, y ->
+            val center = pixel(snapshot, key.layerId, x, y, width, height) ?: intArrayOf(0, 0, 0, 0)
+            var sr = 0f
+            var sg = 0f
+            var sb = 0f
+            var weight = 0f
+            val offsets = intArrayOf(-radius, 0, radius)
+            for (dy in offsets) for (dx in offsets) {
+                val p = pixel(snapshot, key.layerId, x + dx, y + dy, width, height) ?: continue
+                val luminance = (p[0] * .2126f + p[1] * .7152f + p[2] * .0722f) / 255f
+                val glow = ((luminance - .52f) / .48f).coerceIn(0f, 1f)
+                if (glow <= 0f) continue
+                sr += p[0] * glow
+                sg += p[1] * glow
+                sb += p[2] * glow
+                weight += glow
+            }
+            if (weight <= 0f) return@sampledTile center
+            val mix = amount * .72f
+            intArrayOf(
+                (center[0] * (1f - mix) + (sr / weight).coerceAtMost(255f) * mix).roundToInt().coerceIn(0, 255),
+                (center[1] * (1f - mix) + (sg / weight).coerceAtMost(255f) * mix).roundToInt().coerceIn(0, 255),
+                (center[2] * (1f - mix) + (sb / weight).coerceAtMost(255f) * mix).roundToInt().coerceIn(0, 255),
+                center[3],
+            )
+        }
+    }
+
+    private fun halftoneTile(source: ByteArray, key: TileKey, amount: Float): ByteArray {
+        if (amount <= .001f) return source.copyOf()
+        val output = source.copyOf()
+        val cell = (12 - amount * 8f).roundToInt().coerceIn(4, 12)
+        var pixelIndex = 0
+        var offset = 0
+        while (offset < output.size) {
+            val alpha = source[offset + 3].toInt() and 255
+            if (alpha != 0) {
+                val localX = pixelIndex % TILE_SIZE_PIXELS
+                val localY = pixelIndex / TILE_SIZE_PIXELS
+                val globalX = key.x * TILE_SIZE_PIXELS + localX
+                val globalY = key.y * TILE_SIZE_PIXELS + localY
+                val r = source[offset].toInt() and 255
+                val g = source[offset + 1].toInt() and 255
+                val b = source[offset + 2].toInt() and 255
+                val luminance = (r * .2126f + g * .7152f + b * .0722f) / 255f
+                val cx = (globalX % cell) - cell / 2f
+                val cy = (globalY % cell) - cell / 2f
+                val distance = kotlin.math.sqrt(cx * cx + cy * cy)
+                val radius = (1f - luminance) * cell * .58f
+                val tone = if (distance <= radius) 0 else 255
+                val mix = amount.coerceIn(0f, 1f)
+                output[offset] = (r * (1f - mix) + tone * mix).roundToInt().coerceIn(0, 255).toByte()
+                output[offset + 1] = (g * (1f - mix) + tone * mix).roundToInt().coerceIn(0, 255).toByte()
+                output[offset + 2] = (b * (1f - mix) + tone * mix).roundToInt().coerceIn(0, 255).toByte()
+            }
+            pixelIndex++
+            offset += 4
+        }
+        return output
+    }
+
+    private fun chromaticAberrationTile(
+        snapshot: Map<TileKey, ByteArray>,
+        key: TileKey,
+        width: Int,
+        height: Int,
+        amount: Float,
+    ): ByteArray {
+        if (amount <= .001f) return snapshot[key]?.copyOf() ?: ByteArray(TileFormat.BYTES_PER_TILE)
+        val shift = (1 + amount * 11f).roundToInt()
+        return sampledTile(snapshot, key, width, height) { x, y ->
+            val center = pixel(snapshot, key.layerId, x, y, width, height) ?: intArrayOf(0, 0, 0, 0)
+            val red = pixel(snapshot, key.layerId, x + shift, y, width, height) ?: center
+            val blue = pixel(snapshot, key.layerId, x - shift, y, width, height) ?: center
+            intArrayOf(red[0], center[1], blue[2], center[3])
+        }
     }
 
     private fun transform(
@@ -207,6 +376,12 @@ object RasterEffects {
             bytes[i + 2].toInt() and 255,
             bytes[i + 3].toInt() and 255,
         )
+    }
+
+    private fun noise01(x: Int, y: Int, salt: Int): Float {
+        var value = x * 374761393 + y * 668265263 + salt * 1442695041
+        value = (value xor (value ushr 13)) * 1274126177
+        return ((value xor (value ushr 16)).ushr(8) and 0x00ffffff) / 16777215f
     }
 
     private fun curveChannel(value: Int, contrast: Float): Int {
