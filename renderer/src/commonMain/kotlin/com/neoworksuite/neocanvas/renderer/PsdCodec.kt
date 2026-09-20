@@ -256,7 +256,7 @@ object PsdCodec {
         val channelCount = reader.u16()
         require(channelCount in 0..56) { "PSD layer has an invalid channel count." }
         val channelRecords = List(channelCount) {
-            PsdChannelRecord(reader.i16(), reader.u32Int())
+            PsdChannelRecord(reader.i16().toInt(), reader.u32Int())
         }
         require(reader.ascii(4) == BLEND_SIGNATURE) { "PSD layer blend signature is invalid." }
         val blendKey = reader.ascii(4)
