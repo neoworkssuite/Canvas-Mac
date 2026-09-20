@@ -171,6 +171,7 @@ class EditorState(
     var selectionCombineMode: SelectionCombineMode by mutableStateOf(SelectionCombineMode.Replace)
     var transformSession: TransformSession? by mutableStateOf(null)
         private set
+    var transformSnapping: Boolean by mutableStateOf(false)
 
     var effectPreviewPatch: com.neoworksuite.neocanvas.renderer.RasterPatch? by mutableStateOf(null)
         private set
@@ -204,13 +205,32 @@ class EditorState(
         translationX: Float = transformSession?.translationX ?: 0f,
         translationY: Float = transformSession?.translationY ?: 0f,
         scale: Float = transformSession?.scale ?: 1f,
+        scaleX: Float = transformSession?.scaleX ?: 1f,
+        scaleY: Float = transformSession?.scaleY ?: 1f,
         rotationDegrees: Float = transformSession?.rotationDegrees ?: 0f,
     ) {
         val current = transformSession ?: return
         if (!translationX.isFinite() || !translationY.isFinite() || !scale.isFinite() ||
-            scale <= 0f || !rotationDegrees.isFinite()) return
-        transformSession = current.copy(translationX = translationX, translationY = translationY,
-            scale = scale.coerceIn(.02f, 50f), rotationDegrees = rotationDegrees)
+            !scaleX.isFinite() || !scaleY.isFinite() || scale <= 0f || scaleX <= 0f || scaleY <= 0f ||
+            !rotationDegrees.isFinite()) return
+        val tx = if (transformSnapping) kotlin.math.round(translationX / 8f) * 8f else translationX
+        val ty = if (transformSnapping) kotlin.math.round(translationY / 8f) * 8f else translationY
+        val rotation = if (transformSnapping) kotlin.math.round(rotationDegrees / 15f) * 15f else rotationDegrees
+        transformSession = current.copy(
+            translationX = tx,
+            translationY = ty,
+            scale = scale.coerceIn(.02f, 50f),
+            scaleX = scaleX.coerceIn(.05f, 20f),
+            scaleY = scaleY.coerceIn(.05f, 20f),
+            rotationDegrees = rotation,
+        )
+    }
+
+    fun scaleTransformAxis(horizontal: Boolean, factor: Float) {
+        require(factor.isFinite() && factor > 0f)
+        val current = transformSession ?: return
+        if (horizontal) updateTransform(scaleX = current.scaleX * factor)
+        else updateTransform(scaleY = current.scaleY * factor)
     }
     fun resetTransform() {
         val current = transformSession ?: return
@@ -218,6 +238,8 @@ class EditorState(
             translationX = 0f,
             translationY = 0f,
             scale = 1f,
+            scaleX = 1f,
+            scaleY = 1f,
             rotationDegrees = 0f,
         )
         statusMessage = "Transform reset"
@@ -242,6 +264,8 @@ class EditorState(
             translationX = document.width / 2f - sourceCenterX,
             translationY = document.height / 2f - sourceCenterY,
             scale = fitScale,
+            scaleX = 1f,
+            scaleY = 1f,
         )
         statusMessage = "Transform fitted to canvas"
     }
