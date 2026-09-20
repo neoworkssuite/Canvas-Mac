@@ -48,11 +48,11 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 private enum class ColourStudioMode(val label: String) {
-    Disc("Disc"),
-    Classic("Classic"),
-    Harmony("Harmony"),
-    Value("Value"),
-    Palettes("Palettes"),
+    Disc("DISC"),
+    Classic("CLASSIC"),
+    Harmony("HARMONY"),
+    Value("VALUE"),
+    Palettes("PALETTES"),
 }
 
 private enum class ValueMode { RGB, HSB, Hex }
@@ -98,17 +98,23 @@ fun ColorPanel(state: EditorState, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             ColourStudioMode.entries.forEach { option ->
-                Text(
-                    option.label,
-                    color = if (mode == option) NeoCanvasColors.ink else NeoCanvasColors.muted,
-                    fontSize = 9.sp,
-                    fontWeight = if (mode == option) FontWeight.Bold else FontWeight.Medium,
+                Box(
                     modifier = Modifier.weight(1f)
+                        .height(34.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (mode == option) NeoCanvasColors.accent else Color.Transparent)
-                        .clickable { mode = option }
-                        .padding(vertical = 7.dp),
-                )
+                        .clickable { mode = option },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        option.label,
+                        color = if (mode == option) NeoCanvasColors.ink else NeoCanvasColors.muted,
+                        fontSize = 8.sp,
+                        fontWeight = if (mode == option) FontWeight.Bold else FontWeight.Medium,
+                        letterSpacing = .35.sp,
+                        maxLines = 1,
+                    )
+                }
             }
         }
 
@@ -176,7 +182,10 @@ private fun DiscMode(hsv: Hsv, choose: (Hsv) -> Unit) {
 
 @Composable
 private fun ClassicMode(hsv: Hsv, choose: (Hsv) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         ClassicPad(hsv, Modifier.fillMaxWidth().height(180.dp), choose)
         ColourValueSlider(
             "Hue",
@@ -245,7 +254,10 @@ private fun ValueModePanel(state: EditorState, hsv: Hsv, choose: (Hsv) -> Unit) 
     var expanded by remember { mutableStateOf(false) }
     var hex by remember(state.color) { mutableStateOf(colorHex(state.color)) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Box {
             Text(
                 valueMode.name + "  ▾",
@@ -321,7 +333,10 @@ private fun ValueModePanel(state: EditorState, hsv: Hsv, choose: (Hsv) -> Unit) 
 
 @Composable
 private fun PalettesMode(state: EditorState) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("ACTIVE PALETTE", color = NeoCanvasColors.paper, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)

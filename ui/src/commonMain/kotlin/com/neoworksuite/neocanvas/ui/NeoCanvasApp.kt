@@ -44,9 +44,8 @@ import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
 
-internal enum class InspectorPresentation { Docked, Overlay }
-internal fun inspectorPresentation(panel: InspectorPanel): InspectorPresentation =
-    if (panel == InspectorPanel.Brushes) InspectorPresentation.Overlay else InspectorPresentation.Docked
+internal enum class InspectorPresentation { Overlay }
+internal fun inspectorPresentation(panel: InspectorPanel): InspectorPresentation = InspectorPresentation.Overlay
 
 @Composable
 fun rememberEditorState(fileActions: EditorFileActions = UnavailableEditorFileActions): EditorState = remember {
@@ -174,31 +173,14 @@ fun NeoCanvasApp(
             },
     ) {
         val compact = maxWidth < 860.dp
-        val inspectorHeight = (maxHeight * .42f).coerceAtMost(320.dp)
         Column(Modifier.fillMaxSize()) {
             StudioTopBar(state, compact, onGallery = { state.requestClose { destination = AppDestination.Gallery } })
             if (compact) {
-                Column(Modifier.weight(1f).fillMaxWidth()) {
-                    CanvasWorkspace(state, Modifier.weight(1f).fillMaxWidth())
-                    if (state.inspectorVisible && inspectorPresentation(state.inspectorPanel) == InspectorPresentation.Docked) {
-                        StudioInspector(
-                            state = state,
-                            compact = true,
-                            modifier = Modifier.fillMaxWidth().height(inspectorHeight),
-                        )
-                    }
-                }
+                CanvasWorkspace(state, Modifier.weight(1f).fillMaxWidth())
             } else {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
                     CanvasWorkspace(state, Modifier.fillMaxHeight().weight(1f))
-                    if (state.inspectorVisible && inspectorPresentation(state.inspectorPanel) == InspectorPresentation.Docked) {
-                        StudioInspector(
-                            state = state,
-                            compact = false,
-                            modifier = Modifier.fillMaxHeight().width(324.dp),
-                        )
-                    }
                 }
             }
         }
@@ -222,17 +204,73 @@ fun NeoCanvasApp(
                 )
             }
         }
-        if (state.inspectorVisible && inspectorPresentation(state.inspectorPanel) == InspectorPresentation.Overlay) {
+        if (state.inspectorVisible) {
+            val panel = state.inspectorPanel
+            val overlayAlignment = when {
+                panel == InspectorPanel.Brushes -> Alignment.Center
+                compact -> Alignment.BottomCenter
+                else -> Alignment.CenterEnd
+            }
+            val panelModifier = when (panel) {
+                InspectorPanel.Brushes ->
+                    Modifier.align(overlayAlignment)
+                        .fillMaxWidth(.90f)
+                        .fillMaxHeight(.86f)
+                        .widthIn(max = 840.dp)
+                        .heightIn(max = 720.dp)
+
+                InspectorPanel.Colors ->
+                    Modifier.align(overlayAlignment)
+                        .padding(
+                            end = if (compact) 10.dp else 16.dp,
+                            start = if (compact) 10.dp else 0.dp,
+                            bottom = 12.dp,
+                        )
+                        .fillMaxWidth(if (compact) .94f else .40f)
+                        .fillMaxHeight(if (compact) .70f else .82f)
+                        .widthIn(max = 420.dp)
+                        .heightIn(max = 680.dp)
+
+                InspectorPanel.Layers ->
+                    Modifier.align(overlayAlignment)
+                        .padding(
+                            end = if (compact) 10.dp else 16.dp,
+                            start = if (compact) 10.dp else 0.dp,
+                            bottom = 12.dp,
+                        )
+                        .fillMaxWidth(if (compact) .94f else .38f)
+                        .fillMaxHeight(if (compact) .68f else .82f)
+                        .widthIn(max = 390.dp)
+                        .heightIn(max = 680.dp)
+
+                InspectorPanel.Effects ->
+                    Modifier.align(overlayAlignment)
+                        .padding(
+                            end = if (compact) 10.dp else 16.dp,
+                            start = if (compact) 10.dp else 0.dp,
+                            bottom = 12.dp,
+                        )
+                        .fillMaxWidth(if (compact) .94f else .40f)
+                        .fillMaxHeight(if (compact) .66f else .78f)
+                        .widthIn(max = 420.dp)
+                        .heightIn(max = 640.dp)
+            }
+
             Box(
-                Modifier.align(Alignment.Center).fillMaxWidth(.9f).fillMaxHeight(.86f)
-                    .widthIn(max = 840.dp).heightIn(max = 720.dp)
-                    .clip(RoundedCornerShape(16.dp)).background(NeoCanvasColors.panel)
+                panelModifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(NeoCanvasColors.panel.copy(alpha = .98f))
                     .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(16.dp)),
             ) {
-                StudioInspector(state, compact = false, modifier = Modifier.fillMaxSize())
-                Text("×", color = NeoCanvasColors.paper, fontSize = 22.sp,
-                    modifier = Modifier.align(Alignment.TopEnd).clickable { state.hideInspector() }
-                        .padding(horizontal = 15.dp, vertical = 8.dp))
+                StudioInspector(state, compact = compact, modifier = Modifier.fillMaxSize())
+                Text(
+                    "×",
+                    color = NeoCanvasColors.paper,
+                    fontSize = 22.sp,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .clickable { state.hideInspector() }
+                        .padding(horizontal = 15.dp, vertical = 8.dp),
+                )
             }
         }
         if (state.settingsVisible) {
