@@ -214,7 +214,9 @@ internal class IosEditorFileActions(
 
     override fun savePreferences(values: Map<String, String>): SaveResult {
         ensureDirectory(libraryDirectory)
-        val text = values.toSortedMap().entries.joinToString("\n") { (key, value) -> "$key=$value" }
+        val text = values.entries.sortedBy { it.key }.joinToString("\n") { entry ->
+            "${entry.key}=${entry.value}"
+        }
         return if (writeBytes(preferencesPath, text.encodeToByteArray())) SaveResult.Success
             else SaveResult.Failure("Could not save NeoCanvas preferences on this iPad.")
     }
