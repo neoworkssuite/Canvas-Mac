@@ -218,12 +218,11 @@ private fun KickstarterGalleryBanner(onOpen: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(NeoCanvasColors.chrome),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("N", color = NeoCanvasColors.accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
+        Image(
+            painter = neoCanvasIcon(),
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
+        )
         Column(Modifier.weight(1f)) {
             Text(GalleryPromotion.title, color = NeoCanvasColors.paper, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Text(GalleryPromotion.message, color = NeoCanvasColors.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
