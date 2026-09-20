@@ -10,6 +10,33 @@ sealed interface DocumentCommand {
     fun rasterTileCopies(document: CanvasDocument): Set<RasterTileCopy> = emptySet()
 }
 
+class CropCanvas(
+    val width: Int,
+    val height: Int,
+    layerAddresses: Map<String, Set<TileAddress>>,
+) : DocumentCommand {
+    private val layerAddresses: Map<String, Set<TileAddress>> =
+        layerAddresses.mapValues { (_, addresses) -> immutableSetSnapshot(addresses) }.toMap()
+
+    init {
+        require(width > 0 && height > 0)
+        require(this.layerAddresses.all { (layerId, addresses) -> addresses.all { it.layerId == layerId } })
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.copy(
+            width = width,
+            height = height,
+            layers = document.layers.map { layer ->
+                when (layer.payload) {
+                    is LayerPayload.Raster -> layer.copy(
+                        payload = LayerPayload.Raster(layerAddresses[layer.id].orEmpty()),
+                    )
+                }
+            },
+        )
+}
+
 data class AddRasterLayer(
     val layerId: String,
     val name: String,
