@@ -210,7 +210,7 @@ fun NeoCanvasApp(
             ) {
                 StudioInspector(state, compact = false, modifier = Modifier.fillMaxSize())
                 Text("×", color = NeoCanvasColors.paper, fontSize = 22.sp,
-                    modifier = Modifier.align(Alignment.TopEnd).clickable { state.inspectorVisible = false }
+                    modifier = Modifier.align(Alignment.TopEnd).clickable { state.hideInspector() }
                         .padding(horizontal = 15.dp, vertical = 8.dp))
             }
         }
