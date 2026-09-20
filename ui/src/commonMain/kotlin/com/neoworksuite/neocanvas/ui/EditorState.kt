@@ -585,6 +585,16 @@ class EditorState(
         brushSize = selection.baseSize
         brushOpacity = selection.opacity
     }
+    fun activateTool(next: Tool) {
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
+        tool = next
+    }
+
+    fun openSettings() {
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
+        settingsVisible = true
+    }
+
     fun showInspector(panel: InspectorPanel) {
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects && panel != InspectorPanel.Effects) {
             commitEffectPreview()
