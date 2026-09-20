@@ -51,7 +51,6 @@ fun GalleryScreen(
     actions: EditorFileActions,
     onNew: () -> Unit,
     onImportDocument: () -> Unit,
-    onImportImage: (ImportedImage) -> Unit,
     onKids: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
@@ -89,18 +88,6 @@ fun GalleryScreen(
                 if (stackOpen) GalleryAction("Back") { stackOpen = false; selected = emptySet() }
                 GalleryAction(if (selecting) "Done" else "Select") { selecting = !selecting; if (!selecting) selected = emptySet() }
                 GalleryAction("Open file") { onImportDocument() }
-                GalleryAction("Import image") {
-                    actions.importImage { result ->
-                        result.fold(
-                            onSuccess = { image ->
-                                if (image != null) onImportImage(image)
-                            },
-                            onFailure = { error ->
-                                message = "Could not import image: ${error.message ?: "Unknown error"}"
-                            },
-                        )
-                    }
-                }
                 GalleryAction("Kids") { onKids() }
                 Button(onClick = onNew) { Text("+  New artwork") }
             }
@@ -134,7 +121,7 @@ fun GalleryScreen(
                 Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Image(neoCanvasIcon(), null, Modifier.size(112.dp))
                     Text("Your Gallery is ready", color = NeoCanvasColors.paper, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Create a canvas, import an image, or open Kids activities. Everything stays local.", color = NeoCanvasColors.muted, modifier = Modifier.padding(10.dp))
+                    Text("Create a canvas or open Kids activities. Everything stays local.", color = NeoCanvasColors.muted, modifier = Modifier.padding(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = onNew) { Text("Create artwork") }
                         Button(onClick = onKids) { Text("Kids activities") }
