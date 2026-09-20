@@ -5,10 +5,10 @@ import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import kotlin.test.*
 
 class CanvasSizeTest {
-    @Test fun brush_library_overlays_while_other_inspectors_remain_docked() {
-        assertEquals(InspectorPresentation.Overlay, inspectorPresentation(InspectorPanel.Brushes))
-        assertEquals(InspectorPresentation.Docked, inspectorPresentation(InspectorPanel.Layers))
-        assertEquals(InspectorPresentation.Docked, inspectorPresentation(InspectorPanel.Colors))
+    @Test fun all_inspector_panels_overlay_the_canvas_without_resizing_it() {
+        InspectorPanel.entries.forEach { panel ->
+            assertEquals(InspectorPresentation.Overlay, inspectorPresentation(panel))
+        }
     }
     @Test fun requested_dimensions_survive_unsaved_confirmation() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
