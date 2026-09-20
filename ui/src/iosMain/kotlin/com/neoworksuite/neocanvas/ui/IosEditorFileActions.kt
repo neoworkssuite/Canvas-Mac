@@ -58,6 +58,7 @@ internal class IosEditorFileActions(
     private val recoveryDirectory: String get() = join(libraryDirectory, "Recovery")
     private val exportDirectory: String get() = join(libraryDirectory, "Exports")
     private val palettePath: String get() = join(libraryDirectory, "palette.txt")
+    private val brushLibraryPath: String get() = join(libraryDirectory, "brush-library.txt")
     private val preferencesPath: String get() = join(libraryDirectory, "preferences.txt")
     private val recoveryPath: String get() = join(recoveryDirectory, "last-session.neocanvas")
 
@@ -200,6 +201,15 @@ internal class IosEditorFileActions(
         ensureDirectory(libraryDirectory)
         return if (writeBytes(palettePath, colors.joinToString("\n").encodeToByteArray())) SaveResult.Success
             else SaveResult.Failure("Could not save palette locally on this iPad.")
+    }
+
+    override fun loadBrushLibrary(): ByteArray? =
+        NSData.dataWithContentsOfFile(brushLibraryPath)?.toByteArray()
+
+    override fun saveBrushLibrary(bytes: ByteArray): SaveResult {
+        ensureDirectory(libraryDirectory)
+        return if (writeBytes(brushLibraryPath, bytes)) SaveResult.Success
+            else SaveResult.Failure("Could not save custom brushes locally on this iPad.")
     }
 
     override fun loadPreferences(): Map<String, String> {
