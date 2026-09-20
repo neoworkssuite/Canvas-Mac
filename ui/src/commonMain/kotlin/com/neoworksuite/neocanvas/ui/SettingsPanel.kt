@@ -46,33 +46,33 @@ fun SettingsPanel(
             "Draw with finger",
             "Allow a finger to paint and erase. Apple Pencil always remains available.",
             state.fingerPaintingEnabled,
-        ) { state.fingerPaintingEnabled = it }
+        ) { state.fingerPaintingEnabled = it; state.persistPreferences() }
         SettingsToggle(
             "Canvas rotation",
             "Allow two-finger twist to rotate the canvas.",
             state.canvasRotationEnabled,
-        ) { state.canvasRotationEnabled = it }
+        ) { state.canvasRotationEnabled = it; state.persistPreferences() }
 
         SettingsSection("CANVAS & EDITING")
         SettingsToggle(
             "Smooth selection resizing",
             "Use smooth interpolation when resizing selected artwork.",
             state.smoothResizing,
-        ) { state.smoothResizing = it }
+        ) { state.smoothResizing = it; state.persistPreferences() }
 
         SettingsSection("SAVING & RECOVERY")
         SettingsToggle(
             "Automatic recovery",
             "Keep a local recovery snapshot while artwork has unsaved changes.",
             state.autoRecoveryEnabled,
-        ) { state.autoRecoveryEnabled = it }
+        ) { state.autoRecoveryEnabled = it; state.persistPreferences() }
 
         SettingsSection("INTERFACE")
         SettingsToggle(
             "Status messages",
             "Show save, tool and editing messages along the bottom of the workspace.",
             state.showStatusMessages,
-        ) { state.showStatusMessages = it }
+        ) { state.showStatusMessages = it; state.persistPreferences() }
 
         TextButton(onClick = { state.resetPreferences() }) {
             Text("Reset preferences", color = NeoCanvasColors.accent)
