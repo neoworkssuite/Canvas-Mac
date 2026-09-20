@@ -40,6 +40,22 @@ class TransformSessionTest {
         assertTrue(state.tileStore.keys.isEmpty())
     }
 
+    @Test fun freeform_scaling_changes_axes_independently_and_snap_quantises_transform() {
+        val state = state()
+        state.beginTransform()
+        state.updateTransform(scaleX = 2f, scaleY = .5f)
+        val freeform = state.transformSession!!
+        assertEquals(2f, freeform.scaleX)
+        assertEquals(.5f, freeform.scaleY)
+
+        state.transformSnapping = true
+        state.updateTransform(translationX = 13f, translationY = 19f, rotationDegrees = 22f)
+        val snapped = state.transformSession!!
+        assertEquals(16f, snapped.translationX)
+        assertEquals(16f, snapped.translationY)
+        assertEquals(15f, snapped.rotationDegrees)
+    }
+
     @Test fun locked_and_oversized_transforms_are_rejected() {
         val state = state()
         val id = state.activeLayerId!!
