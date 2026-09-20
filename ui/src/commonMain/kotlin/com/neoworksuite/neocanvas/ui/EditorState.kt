@@ -34,7 +34,7 @@ import com.neoworksuite.neocanvas.renderer.Rasterizer
 import com.neoworksuite.neocanvas.renderer.TileKey
 import com.neoworksuite.neocanvas.renderer.TileStore
 
-enum class Tool { Brush, Eraser, Pan, Fill, Eyedropper, Select, MoveSelection }
+enum class Tool { Brush, Eraser, Smudge, Pan, Fill, Eyedropper, Select, MoveSelection }
 enum class InspectorPanel { Layers, Brushes, Colors, Effects }
 enum class PendingDocumentAction { New, Open, Close }
 data class DrawPoint(val x: Float, val y: Float, val pressure: Float = 1f)
@@ -161,6 +161,7 @@ class EditorState(
     var brushSize: Float by mutableFloatStateOf(BuiltInBrushes.pencil.baseSize)
     var fillTolerance: Int by mutableIntStateOf(0)
     var brushOpacity: Float by mutableFloatStateOf(1f)
+    var smudgeStrength: Float by mutableFloatStateOf(.65f)
     var stabilization: Float by mutableFloatStateOf(0f)
     var symmetry: com.neoworksuite.neocanvas.renderer.DrawingSymmetry by mutableStateOf(com.neoworksuite.neocanvas.renderer.DrawingSymmetry.None)
     var tool: Tool by mutableStateOf(Tool.Brush)
@@ -698,8 +699,9 @@ class EditorState(
     /** Rasterizes one completed gesture into sparse tiles and commits its address patch to history. */
     fun recordStroke(points: List<DrawPoint>, stabilize: Boolean = true) {
         val layerId = activeLayerId ?: return
-        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return
-        val patch = previewStroke(points, stabilize) ?: return
+        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge)) return
+        val patch = if (tool == Tool.Smudge) previewSmudge(points, stabilize) else previewStroke(points, stabilize)
+        if (patch == null) return
         val before = tileStore.snapshot()
         if (tileStore.applyPatch(patch).isEmpty()) return
         val currentKeys = tileStore.keys
@@ -730,6 +732,31 @@ class EditorState(
             brush = if (tool == Tool.Eraser && brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE) BuiltInBrushes.eraser else brush,
             symmetry = symmetry,
             alphaLocked = activeLayer.alphaLocked,
+        )
+    }
+
+    fun previewSmudge(
+        points: List<DrawPoint>,
+        stabilize: Boolean = true,
+    ): com.neoworksuite.neocanvas.renderer.RasterPatch? {
+        val layerId = activeLayerId ?: return null
+        if (points.size < 2 || tool != Tool.Smudge) return null
+        val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
+        if (activeLayer.payload !is LayerPayload.Raster) return null
+        val rasterPoints = points.map {
+            RasterPoint(it.x, it.y, normalizedPressure(it.pressure))
+        }.let {
+            if (stabilize) com.neoworksuite.neocanvas.renderer.smoothStroke(it, stabilization) else it
+        }
+        return com.neoworksuite.neocanvas.renderer.RasterSmudge.stroke(
+            existing = tileStore,
+            layerId = layerId,
+            points = rasterPoints,
+            size = brushSize,
+            strength = smudgeStrength.coerceIn(0f, 1f),
+            canvasWidth = document.width,
+            canvasHeight = document.height,
+            acceptsPixel = { x, y -> selection?.contains(x, y) ?: true },
         )
     }
 
