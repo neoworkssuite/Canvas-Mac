@@ -561,6 +561,16 @@ class EditorState(
             palette = fileActions.loadPalette().mapNotNull { parseColorHex(it)?.let(::colorHex) }.distinct().take(32)
         } catch (error: Exception) { statusMessage = "Could not load local palette: ${error.message}" }
     }
+    fun loadBrushLibrarySnapshot(): ByteArray? =
+        runCatching { fileActions.loadBrushLibrary() }.getOrNull()
+
+    fun persistBrushLibrarySnapshot(bytes: ByteArray) {
+        when (val result = fileActions.saveBrushLibrary(bytes)) {
+            SaveResult.Success -> statusMessage = "Brush library saved locally"
+            is SaveResult.Failure -> statusMessage = result.message
+        }
+    }
+
     fun addPaletteColor() {
         val hex = colorHex(color)
         if (hex in palette) { statusMessage = "Colour already in palette"; return }
