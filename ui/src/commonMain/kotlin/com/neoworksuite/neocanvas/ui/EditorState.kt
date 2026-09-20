@@ -556,6 +556,9 @@ class EditorState(
     var autoRecoveryEnabled: Boolean by mutableStateOf(true)
     var showStatusMessages: Boolean by mutableStateOf(true)
     var quickShapeEnabled: Boolean by mutableStateOf(true)
+    var gridGuideVisible: Boolean by mutableStateOf(false)
+    var perspectiveGuideVisible: Boolean by mutableStateOf(false)
+    var guideSpacing: Float by mutableFloatStateOf(128f)
 
     fun resetPreferences() {
         fingerPaintingEnabled = true
@@ -563,6 +566,9 @@ class EditorState(
         autoRecoveryEnabled = true
         showStatusMessages = true
         quickShapeEnabled = true
+        gridGuideVisible = false
+        perspectiveGuideVisible = false
+        guideSpacing = 128f
         smoothResizing = true
         inspectorVisible = false
         settingsVisible = false
@@ -579,6 +585,9 @@ class EditorState(
                     "autoRecoveryEnabled" to autoRecoveryEnabled.toString(),
                     "showStatusMessages" to showStatusMessages.toString(),
                     "quickShapeEnabled" to quickShapeEnabled.toString(),
+                    "gridGuideVisible" to gridGuideVisible.toString(),
+                    "perspectiveGuideVisible" to perspectiveGuideVisible.toString(),
+                    "guideSpacing" to guideSpacing.toString(),
                     "smoothResizing" to smoothResizing.toString(),
                 ),
             )
@@ -600,6 +609,9 @@ class EditorState(
             autoRecoveryEnabled = preferences["autoRecoveryEnabled"]?.toBoolean() ?: autoRecoveryEnabled
             showStatusMessages = preferences["showStatusMessages"]?.toBoolean() ?: showStatusMessages
             quickShapeEnabled = preferences["quickShapeEnabled"]?.toBoolean() ?: quickShapeEnabled
+            gridGuideVisible = preferences["gridGuideVisible"]?.toBoolean() ?: gridGuideVisible
+            perspectiveGuideVisible = preferences["perspectiveGuideVisible"]?.toBoolean() ?: perspectiveGuideVisible
+            guideSpacing = preferences["guideSpacing"]?.toFloatOrNull()?.coerceIn(32f, 512f) ?: guideSpacing
             smoothResizing = preferences["smoothResizing"]?.toBoolean() ?: smoothResizing
         } catch (_: Exception) {
             // Defaults remain active if a stored preference file cannot be read.
