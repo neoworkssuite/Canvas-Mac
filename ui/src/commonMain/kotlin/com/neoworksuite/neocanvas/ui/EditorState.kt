@@ -463,12 +463,14 @@ class EditorState(
     var canvasRotationEnabled: Boolean by mutableStateOf(true)
     var autoRecoveryEnabled: Boolean by mutableStateOf(true)
     var showStatusMessages: Boolean by mutableStateOf(true)
+    var quickShapeEnabled: Boolean by mutableStateOf(true)
 
     fun resetPreferences() {
         fingerPaintingEnabled = true
         canvasRotationEnabled = true
         autoRecoveryEnabled = true
         showStatusMessages = true
+        quickShapeEnabled = true
         smoothResizing = true
         inspectorVisible = false
         settingsVisible = false
@@ -484,6 +486,7 @@ class EditorState(
                     "canvasRotationEnabled" to canvasRotationEnabled.toString(),
                     "autoRecoveryEnabled" to autoRecoveryEnabled.toString(),
                     "showStatusMessages" to showStatusMessages.toString(),
+                    "quickShapeEnabled" to quickShapeEnabled.toString(),
                     "smoothResizing" to smoothResizing.toString(),
                 ),
             )
@@ -504,6 +507,7 @@ class EditorState(
             canvasRotationEnabled = preferences["canvasRotationEnabled"]?.toBoolean() ?: canvasRotationEnabled
             autoRecoveryEnabled = preferences["autoRecoveryEnabled"]?.toBoolean() ?: autoRecoveryEnabled
             showStatusMessages = preferences["showStatusMessages"]?.toBoolean() ?: showStatusMessages
+            quickShapeEnabled = preferences["quickShapeEnabled"]?.toBoolean() ?: quickShapeEnabled
             smoothResizing = preferences["smoothResizing"]?.toBoolean() ?: smoothResizing
         } catch (_: Exception) {
             // Defaults remain active if a stored preference file cannot be read.
@@ -610,25 +614,30 @@ class EditorState(
     }
 
     /** Rasterizes one completed gesture into sparse tiles and commits its address patch to history. */
-    fun recordStroke(points: List<DrawPoint>) {
+    fun recordStroke(points: List<DrawPoint>, stabilize: Boolean = true) {
         val layerId = activeLayerId ?: return
         if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return
-        val patch = previewStroke(points) ?: return
+        val patch = previewStroke(points, stabilize) ?: return
         val before = tileStore.snapshot()
         if (tileStore.applyPatch(patch).isEmpty()) return
         val currentKeys = tileStore.keys
         execute(ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys), before)
     }
 
-    fun previewStroke(points: List<DrawPoint>): com.neoworksuite.neocanvas.renderer.RasterPatch? {
+    fun previewStroke(
+        points: List<DrawPoint>,
+        stabilize: Boolean = true,
+    ): com.neoworksuite.neocanvas.renderer.RasterPatch? {
         val layerId = activeLayerId ?: return null
         if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return null
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
         return Rasterizer.stroke(
             existing = tileStore,
             layerId = layerId,
-            points = com.neoworksuite.neocanvas.renderer.smoothStroke(
-                points.map { RasterPoint(it.x, it.y, normalizedPressure(it.pressure)) }, stabilization),
+            points = points.map { RasterPoint(it.x, it.y, normalizedPressure(it.pressure)) }.let { rasterPoints ->
+                if (stabilize) com.neoworksuite.neocanvas.renderer.smoothStroke(rasterPoints, stabilization)
+                else rasterPoints
+            },
             color = RasterColor((color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()),
             size = brushSize,
             opacity = brushOpacity,
