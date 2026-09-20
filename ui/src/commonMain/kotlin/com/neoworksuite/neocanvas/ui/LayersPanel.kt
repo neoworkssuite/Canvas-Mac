@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -186,10 +188,11 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                 LayerTrayAction(if (layer.alphaLocked) "Alpha ✓" else "Alpha", Modifier.weight(1f)) {
                     state.toggleLayerAlphaLock(layer.id)
                 }
-                LayerTrayAction(layer.blendMode.name, Modifier.weight(1.4f)) {
-                    val modes = LayerBlendMode.entries
-                    state.setLayerBlendMode(layer.id, modes[(modes.indexOf(layer.blendMode) + 1) % modes.size])
-                }
+                BlendModePicker(
+                    layer = layer,
+                    modifier = Modifier.weight(1.4f),
+                    onSelect = { state.setLayerBlendMode(layer.id, it) },
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Opacity", color = NeoCanvasColors.faint, fontSize = 10.sp, modifier = Modifier.width(56.dp))
@@ -199,6 +202,69 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
         }
         }
     }
+}
+
+@Composable
+private fun BlendModePicker(
+    layer: Layer,
+    modifier: Modifier = Modifier,
+    onSelect: (LayerBlendMode) -> Unit,
+) {
+    var expanded by remember(layer.id) { mutableStateOf(false) }
+    Box(modifier) {
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+                .background(NeoCanvasColors.panelRaised)
+                .clickable { expanded = true }
+                .padding(horizontal = 5.dp, vertical = 7.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                layer.blendMode.displayName(),
+                color = NeoCanvasColors.muted,
+                fontSize = 9.sp,
+                maxLines = 1,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = NeoCanvasColors.panelRaised,
+        ) {
+            LayerBlendMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            mode.displayName(),
+                            color = if (mode == layer.blendMode) NeoCanvasColors.accent else NeoCanvasColors.paper,
+                            fontSize = 11.sp,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(mode)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun LayerBlendMode.displayName(): String = when (this) {
+    LayerBlendMode.Normal -> "Normal"
+    LayerBlendMode.Multiply -> "Multiply"
+    LayerBlendMode.Screen -> "Screen"
+    LayerBlendMode.Overlay -> "Overlay"
+    LayerBlendMode.Darken -> "Darken"
+    LayerBlendMode.Lighten -> "Lighten"
+    LayerBlendMode.ColorDodge -> "Colour Dodge"
+    LayerBlendMode.ColorBurn -> "Colour Burn"
+    LayerBlendMode.SoftLight -> "Soft Light"
+    LayerBlendMode.HardLight -> "Hard Light"
+    LayerBlendMode.Difference -> "Difference"
+    LayerBlendMode.Exclusion -> "Exclusion"
+    LayerBlendMode.Add -> "Add"
+    LayerBlendMode.Subtract -> "Subtract"
 }
 
 @Composable
