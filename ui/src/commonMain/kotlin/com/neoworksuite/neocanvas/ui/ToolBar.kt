@@ -310,7 +310,7 @@ private fun BrandMark() = androidx.compose.foundation.Image(
 )
 
 @Composable
-private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(26.dp)) {
+private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(28.dp)) {
     val w = size.width
     val h = size.height
     fun line(a: Offset, b: Offset, width: Float = 1.8f) = drawLine(color, a, b, width, StrokeCap.Round)
@@ -323,7 +323,17 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(26.dp
             line(Offset(w * .35f, h * .2f), Offset(w * .65f, h * .5f))
             line(Offset(w * .65f, h * .5f), Offset(w * .35f, h * .8f))
         }
-        Glyph.Select -> drawRect(color, Offset(w * .15f, h * .15f), Size(w * .7f, h * .7f), style = Stroke(1.5f))
+        Glyph.Select -> {
+            val s = 2.0f
+            line(Offset(w * .16f, h * .34f), Offset(w * .16f, h * .16f), s)
+            line(Offset(w * .16f, h * .16f), Offset(w * .34f, h * .16f), s)
+            line(Offset(w * .66f, h * .16f), Offset(w * .84f, h * .16f), s)
+            line(Offset(w * .84f, h * .16f), Offset(w * .84f, h * .34f), s)
+            line(Offset(w * .84f, h * .66f), Offset(w * .84f, h * .84f), s)
+            line(Offset(w * .84f, h * .84f), Offset(w * .66f, h * .84f), s)
+            line(Offset(w * .34f, h * .84f), Offset(w * .16f, h * .84f), s)
+            line(Offset(w * .16f, h * .84f), Offset(w * .16f, h * .66f), s)
+        }
         Glyph.ClearSelection -> {
             line(Offset(w * .2f, h * .2f), Offset(w * .8f, h * .8f))
             line(Offset(w * .8f, h * .2f), Offset(w * .2f, h * .8f))
@@ -345,30 +355,75 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(26.dp
         Glyph.Open -> { drawRect(color, Offset(w * .18f, h * .34f), Size(w * .64f, h * .42f), style = Stroke(1.8f)); line(Offset(w * .20f, h * .34f), Offset(w * .42f, h * .18f)); line(Offset(w * .42f, h * .18f), Offset(w * .62f, h * .34f)) }
         Glyph.Save -> { drawRoundRect(color, Offset(w * .20f, h * .16f), Size(w * .60f, h * .68f), androidx.compose.ui.geometry.CornerRadius(3f, 3f), style = Stroke(1.8f)); line(Offset(w * .35f, h * .20f), Offset(w * .35f, h * .44f)); line(Offset(w * .35f, h * .44f), Offset(w * .65f, h * .44f)); drawRect(color, Offset(w * .34f, h * .58f), Size(w * .32f, h * .18f), style = Stroke(1.5f)) }
         Glyph.Export -> { drawRect(color, Offset(w * .20f, h * .57f), Size(w * .60f, h * .22f), style = Stroke(1.8f)); line(Offset(w * .50f, h * .16f), Offset(w * .50f, h * .61f)); line(Offset(w * .50f, h * .16f), Offset(w * .34f, h * .32f)); line(Offset(w * .50f, h * .16f), Offset(w * .66f, h * .32f)) }
-        Glyph.Brush -> { line(Offset(w * .25f, h * .78f), Offset(w * .75f, h * .28f), 2.7f); drawCircle(color, w * .16f, Offset(w * .27f, h * .75f)) }
-        Glyph.Eraser -> { drawRoundRect(color, Offset(w * .27f, h * .36f), Size(w * .48f, h * .34f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f)); line(Offset(w * .22f, h * .76f), Offset(w * .78f, h * .76f)) }
-        Glyph.Transform -> { line(Offset(w * .15f, h / 2), Offset(w * .85f, h / 2)); line(Offset(w / 2, h * .15f), Offset(w / 2, h * .85f)); drawCircle(color, 2.4f, Offset(w / 2, h / 2)) }
+        Glyph.Brush -> {
+            line(Offset(w * .30f, h * .72f), Offset(w * .76f, h * .26f), 3.2f)
+            line(Offset(w * .23f, h * .80f), Offset(w * .39f, h * .64f), 5.0f)
+            line(Offset(w * .20f, h * .84f), Offset(w * .34f, h * .80f), 2.2f)
+        }
+        Glyph.Eraser -> {
+            line(Offset(w * .23f, h * .64f), Offset(w * .52f, h * .28f), 3.0f)
+            line(Offset(w * .52f, h * .28f), Offset(w * .79f, h * .50f), 3.0f)
+            line(Offset(w * .79f, h * .50f), Offset(w * .51f, h * .80f), 3.0f)
+            line(Offset(w * .51f, h * .80f), Offset(w * .23f, h * .64f), 3.0f)
+            line(Offset(w * .37f, h * .47f), Offset(w * .64f, h * .69f), 2.0f)
+        }
+        Glyph.Transform -> {
+            val s = 2.1f
+            line(Offset(w * .18f, h * .50f), Offset(w * .82f, h * .50f), s)
+            line(Offset(w * .18f, h * .50f), Offset(w * .30f, h * .39f), s)
+            line(Offset(w * .18f, h * .50f), Offset(w * .30f, h * .61f), s)
+            line(Offset(w * .82f, h * .50f), Offset(w * .70f, h * .39f), s)
+            line(Offset(w * .82f, h * .50f), Offset(w * .70f, h * .61f), s)
+            line(Offset(w * .50f, h * .18f), Offset(w * .50f, h * .82f), s)
+            line(Offset(w * .50f, h * .18f), Offset(w * .39f, h * .30f), s)
+            line(Offset(w * .50f, h * .18f), Offset(w * .61f, h * .30f), s)
+            line(Offset(w * .50f, h * .82f), Offset(w * .39f, h * .70f), s)
+            line(Offset(w * .50f, h * .82f), Offset(w * .61f, h * .70f), s)
+        }
         Glyph.Undo -> { line(Offset(w * .78f, h * .35f), Offset(w * .35f, h * .35f)); line(Offset(w * .35f, h * .35f), Offset(w * .50f, h * .20f)); line(Offset(w * .35f, h * .35f), Offset(w * .50f, h * .50f)); line(Offset(w * .78f, h * .35f), Offset(w * .78f, h * .73f)) }
         Glyph.Redo -> { line(Offset(w * .22f, h * .35f), Offset(w * .65f, h * .35f)); line(Offset(w * .65f, h * .35f), Offset(w * .50f, h * .20f)); line(Offset(w * .65f, h * .35f), Offset(w * .50f, h * .50f)); line(Offset(w * .22f, h * .35f), Offset(w * .22f, h * .73f)) }
-        Glyph.Fit -> { drawRect(color, Offset(w * .22f, h * .22f), Size(w * .56f, h * .56f), style = Stroke(1.8f)); line(Offset(w * .10f, h * .10f), Offset(w * .32f, h * .10f)); line(Offset(w * .10f, h * .10f), Offset(w * .10f, h * .32f)) }
+        Glyph.Fit -> {
+            val s = 2.0f
+            line(Offset(w * .14f, h * .36f), Offset(w * .14f, h * .14f), s)
+            line(Offset(w * .14f, h * .14f), Offset(w * .36f, h * .14f), s)
+            line(Offset(w * .64f, h * .14f), Offset(w * .86f, h * .14f), s)
+            line(Offset(w * .86f, h * .14f), Offset(w * .86f, h * .36f), s)
+            line(Offset(w * .86f, h * .64f), Offset(w * .86f, h * .86f), s)
+            line(Offset(w * .86f, h * .86f), Offset(w * .64f, h * .86f), s)
+            line(Offset(w * .36f, h * .86f), Offset(w * .14f, h * .86f), s)
+            line(Offset(w * .14f, h * .86f), Offset(w * .14f, h * .64f), s)
+            drawRect(color.copy(alpha = .55f), Offset(w * .31f, h * .31f), Size(w * .38f, h * .38f), style = Stroke(1.4f))
+        }
         Glyph.Palette -> { drawCircle(color, w * .35f, Offset(w * .50f, h * .50f), style = Stroke(1.9f)); drawCircle(color, 2f, Offset(w * .39f, h * .44f)); drawCircle(color, 2f, Offset(w * .57f, h * .40f)); drawCircle(color, 2f, Offset(w * .55f, h * .60f)) }
         Glyph.Library -> { drawRoundRect(color, Offset(w * .20f, h * .22f), Size(w * .60f, h * .56f), androidx.compose.ui.geometry.CornerRadius(4f, 4f), style = Stroke(1.8f)); line(Offset(w * .32f, h * .42f), Offset(w * .68f, h * .42f)); line(Offset(w * .32f, h * .58f), Offset(w * .57f, h * .58f)) }
-        Glyph.Layers -> { drawRoundRect(color, Offset(w * .24f, h * .22f), Size(w * .52f, h * .14f), androidx.compose.ui.geometry.CornerRadius(2f, 2f)); drawRoundRect(color, Offset(w * .24f, h * .44f), Size(w * .52f, h * .14f), androidx.compose.ui.geometry.CornerRadius(2f, 2f)); drawRoundRect(color, Offset(w * .24f, h * .66f), Size(w * .52f, h * .14f), androidx.compose.ui.geometry.CornerRadius(2f, 2f)) }
+        Glyph.Layers -> {
+            val cr = androidx.compose.ui.geometry.CornerRadius(3f, 3f)
+            drawRoundRect(color.copy(alpha = .45f), Offset(w * .28f, h * .18f), Size(w * .52f, h * .42f), cr, style = Stroke(1.8f))
+            drawRoundRect(color.copy(alpha = .72f), Offset(w * .20f, h * .30f), Size(w * .52f, h * .42f), cr, style = Stroke(1.8f))
+            drawRoundRect(color, Offset(w * .12f, h * .42f), Size(w * .52f, h * .42f), cr, style = Stroke(2.0f))
+        }
         Glyph.Fx -> {
-            line(Offset(w * .20f, h * .20f), Offset(w * .20f, h * .80f), 2.4f)
-            line(Offset(w * .20f, h * .34f), Offset(w * .45f, h * .34f), 2.4f)
-            line(Offset(w * .58f, h * .42f), Offset(w * .84f, h * .78f), 2.4f)
-            line(Offset(w * .84f, h * .42f), Offset(w * .58f, h * .78f), 2.4f)
+            fun sparkle(cx: Float, cy: Float, radius: Float, stroke: Float) {
+                line(Offset(cx - radius, cy), Offset(cx + radius, cy), stroke)
+                line(Offset(cx, cy - radius), Offset(cx, cy + radius), stroke)
+                line(Offset(cx - radius * .68f, cy - radius * .68f), Offset(cx + radius * .68f, cy + radius * .68f), stroke)
+                line(Offset(cx + radius * .68f, cy - radius * .68f), Offset(cx - radius * .68f, cy + radius * .68f), stroke)
+            }
+            sparkle(w * .43f, h * .45f, w * .22f, 1.9f)
+            sparkle(w * .73f, h * .25f, w * .10f, 1.5f)
+            sparkle(w * .72f, h * .72f, w * .13f, 1.5f)
         }
         Glyph.Settings -> {
-            drawCircle(color, w * .16f, Offset(w * .5f, h * .5f), style = Stroke(2.2f))
-            drawCircle(color, w * .05f, Offset(w * .5f, h * .5f))
-            repeat(8) { index ->
-                val angle = index * kotlin.math.PI.toFloat() / 4f
-                val from = Offset(w * .5f + kotlin.math.cos(angle) * w * .25f, h * .5f + kotlin.math.sin(angle) * h * .25f)
-                val to = Offset(w * .5f + kotlin.math.cos(angle) * w * .39f, h * .5f + kotlin.math.sin(angle) * h * .39f)
-                line(from, to, 2.2f)
-            }
+            val s = 2.0f
+            line(Offset(w * .16f, h * .28f), Offset(w * .84f, h * .28f), s)
+            line(Offset(w * .16f, h * .50f), Offset(w * .84f, h * .50f), s)
+            line(Offset(w * .16f, h * .72f), Offset(w * .84f, h * .72f), s)
+            drawCircle(NeoCanvasColors.chrome, w * .075f, Offset(w * .36f, h * .28f))
+            drawCircle(color, w * .075f, Offset(w * .36f, h * .28f), style = Stroke(2.1f))
+            drawCircle(NeoCanvasColors.chrome, w * .075f, Offset(w * .65f, h * .50f))
+            drawCircle(color, w * .075f, Offset(w * .65f, h * .50f), style = Stroke(2.1f))
+            drawCircle(NeoCanvasColors.chrome, w * .075f, Offset(w * .47f, h * .72f))
+            drawCircle(color, w * .075f, Offset(w * .47f, h * .72f), style = Stroke(2.1f))
         }
     }
 }
