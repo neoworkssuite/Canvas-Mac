@@ -8,11 +8,15 @@ data class TransformSession(
     val translationX: Float = 0f,
     val translationY: Float = 0f,
     val scale: Float = 1f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
     val rotationDegrees: Float = 0f,
 ) {
     init {
         require(translationX.isFinite() && translationY.isFinite())
         require(scale.isFinite() && scale > 0f)
+        require(scaleX.isFinite() && scaleX > 0f)
+        require(scaleY.isFinite() && scaleY > 0f)
         require(rotationDegrees.isFinite())
     }
 
@@ -20,8 +24,8 @@ data class TransformSession(
         val sourceWidth = sourceBounds.right - sourceBounds.left
         val sourceHeight = sourceBounds.bottom - sourceBounds.top
         val rotated = RasterMove.rotatedSize(sourceWidth, sourceHeight, rotationDegrees)
-        val width = (rotated.first * scale).roundToInt().coerceAtLeast(1)
-        val height = (rotated.second * scale).roundToInt().coerceAtLeast(1)
+        val width = (rotated.first * scale * scaleX).roundToInt().coerceAtLeast(1)
+        val height = (rotated.second * scale * scaleY).roundToInt().coerceAtLeast(1)
         if (width > canvasWidth || height > canvasHeight) return null
         val centerX = (sourceBounds.left + sourceBounds.right) / 2f + translationX
         val centerY = (sourceBounds.top + sourceBounds.bottom) / 2f + translationY
