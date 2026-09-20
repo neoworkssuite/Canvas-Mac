@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -453,6 +454,18 @@ fun CanvasWorkspace(
                 }
             }
         }
+        if (state.effectPreviewType != null) {
+            Box(
+                Modifier.fillMaxSize().pointerInput(state.effectPreviewType) {
+                    detectHorizontalDragGestures { change, dragAmount ->
+                        val width = size.width.toFloat().coerceAtLeast(1f)
+                        state.adjustEffectPreviewPrimary(dragAmount / width)
+                        change.consume()
+                    }
+                },
+            )
+        }
+
         state.effectPreviewType?.let { type ->
             LiveEffectCanvasReadout(
                 type = type,
@@ -507,6 +520,11 @@ private fun LiveEffectCanvasReadout(
                 fontWeight = FontWeight.Bold,
             )
         }
+        Text(
+            "Slide left/right to adjust",
+            color = NeoCanvasColors.faint,
+            fontSize = 9.sp,
+        )
         Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(NeoCanvasColors.track)) {
             if (strength > 0f) {
                 Box(
