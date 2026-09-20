@@ -32,6 +32,9 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>NeoCanvas uses your photo library only when you choose an image to import onto the canvas.</string>
+
     <!-- Required by Compose Multiplatform -->
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
