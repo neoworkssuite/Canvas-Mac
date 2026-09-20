@@ -693,7 +693,11 @@ class EditorState(
             canvasHeight = document.height,
             type = type,
             settings = settings,
-            gradientHighlight = color,
+            gradientHighlight = RasterColor(
+                (color.red * 255).toInt().coerceIn(0, 255),
+                (color.green * 255).toInt().coerceIn(0, 255),
+                (color.blue * 255).toInt().coerceIn(0, 255),
+            ),
         )
         val changed = tileStore.applyPatch(patch)
         if (changed.isEmpty()) {
