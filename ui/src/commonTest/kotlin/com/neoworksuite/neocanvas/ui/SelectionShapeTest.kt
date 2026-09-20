@@ -17,6 +17,23 @@ class SelectionShapeTest {
         assertFalse(selection.contains(2, 10))
         assertEquals(SelectionShape.Lasso, selection.shape)
     }
+    @Test fun selection_add_subtract_and_intersect_combine_membership() {
+        val a = CanvasSelection(0, 0, 8, 8)
+        val b = CanvasSelection(4, 4, 12, 12)
+
+        val added = a.combine(b, SelectionCombineMode.Add)!!
+        assertTrue(added.contains(2, 2))
+        assertTrue(added.contains(10, 10))
+
+        val subtracted = a.combine(b, SelectionCombineMode.Subtract)!!
+        assertTrue(subtracted.contains(2, 2))
+        assertFalse(subtracted.contains(6, 6))
+
+        val intersected = a.combine(b, SelectionCombineMode.Intersect)!!
+        assertFalse(intersected.contains(2, 2))
+        assertTrue(intersected.contains(6, 6))
+    }
+
     @Test fun inverted_selection_flips_membership_inside_canvas() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
         state.selectionMode = SelectionShape.Ellipse
