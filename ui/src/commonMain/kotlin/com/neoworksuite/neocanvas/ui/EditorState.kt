@@ -160,7 +160,22 @@ class EditorState(
 
     var activeLayerId: String? by mutableStateOf(history.current.layers.lastOrNull()?.id)
     var brush: BrushDefinition by mutableStateOf(BuiltInBrushes.pencil)
-    var color: Color by mutableStateOf(Color(0xFF1B1C20))
+    private var primaryColor: Color by mutableStateOf(Color(0xFF1B1C20))
+    var previousColor: Color by mutableStateOf(primaryColor)
+        private set
+    var secondaryColor: Color by mutableStateOf(Color.White)
+        private set
+    var recentColors: List<String> by mutableStateOf(emptyList())
+        private set
+    var color: Color
+        get() = primaryColor
+        set(value) {
+            if (value == primaryColor) return
+            previousColor = primaryColor
+            primaryColor = value
+            val hex = colorHex(value)
+            recentColors = (listOf(hex) + recentColors.filterNot { it == hex }).take(12)
+        }
     var brushSize: Float by mutableFloatStateOf(BuiltInBrushes.pencil.baseSize)
     var fillTolerance: Int by mutableIntStateOf(0)
     var automaticSelectionTolerancePercent: Int by mutableIntStateOf(12)
@@ -688,6 +703,8 @@ class EditorState(
                     "perspectiveGuideVisible" to perspectiveGuideVisible.toString(),
                     "guideSpacing" to guideSpacing.toString(),
                     "automaticSelectionTolerancePercent" to automaticSelectionTolerancePercent.coerceIn(0, 100).toString(),
+                    "secondaryColor" to colorHex(secondaryColor),
+                    "recentColors" to recentColors.joinToString(","),
                     "smoothResizing" to smoothResizing.toString(),
                 ),
             )
@@ -715,6 +732,13 @@ class EditorState(
             automaticSelectionTolerancePercent =
                 preferences["automaticSelectionTolerancePercent"]?.toIntOrNull()?.coerceIn(0, 100)
                     ?: automaticSelectionTolerancePercent
+            secondaryColor = preferences["secondaryColor"]?.let(::parseColorHex) ?: secondaryColor
+            recentColors = preferences["recentColors"]
+                ?.split(",")
+                ?.mapNotNull { parseColorHex(it)?.let(::colorHex) }
+                ?.distinct()
+                ?.take(12)
+                .orEmpty()
             smoothResizing = preferences["smoothResizing"]?.toBoolean() ?: smoothResizing
         } catch (_: Exception) {
             // Defaults remain active if a stored preference file cannot be read.
@@ -740,6 +764,34 @@ class EditorState(
         updatePalette(palette + hex)
     }
     fun removePaletteColor(hex: String) { updatePalette(palette - hex) }
+
+    fun usePreviousColor() {
+        val previous = previousColor
+        color = previous
+        statusMessage = "Restored previous colour"
+    }
+
+    fun setSecondaryFromPrimary() {
+        secondaryColor = color
+        persistPreferences()
+        statusMessage = "Secondary colour updated"
+    }
+
+    fun swapPrimarySecondaryColors() {
+        val current = color
+        val secondary = secondaryColor
+        color = secondary
+        secondaryColor = current
+        persistPreferences()
+        statusMessage = "Swapped primary and secondary colours"
+    }
+
+    fun clearRecentColors() {
+        recentColors = emptyList()
+        persistPreferences()
+        statusMessage = "Cleared recent colours"
+    }
+
     private fun updatePalette(next: List<String>) {
         when (val result = fileActions.savePalette(next)) {
             SaveResult.Success -> { palette = next; statusMessage = "Palette saved locally" }
@@ -779,6 +831,7 @@ class EditorState(
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) {
             if (commitEffects) commitEffectPreview() else cancelEffectPreview()
         }
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Colors) persistPreferences()
         inspectorVisible = false
     }
 

@@ -396,6 +396,29 @@ class EditorStateTest {
     }
 
     @Test
+    fun colour_history_tracks_recent_primary_and_secondary_colours() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(32, 32)))
+        val original = state.color
+
+        state.color = Color.Red
+        state.color = Color.Blue
+
+        assertEquals(Color.Red, state.previousColor)
+        assertEquals(listOf("#0000FF", "#FF0000"), state.recentColors)
+        state.setSecondaryFromPrimary()
+        assertEquals(Color.Blue, state.secondaryColor)
+
+        state.color = Color.Green
+        state.swapPrimarySecondaryColors()
+        assertEquals(Color.Blue, state.color)
+        assertEquals(Color.Green, state.secondaryColor)
+
+        state.usePreviousColor()
+        assertEquals(Color.Green, state.color)
+        assertTrue(original != state.color)
+    }
+
+    @Test
     fun eraser_keeps_selected_colour() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(100, 100)))
         state.color = Color.Red

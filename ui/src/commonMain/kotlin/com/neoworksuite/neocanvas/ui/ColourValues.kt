@@ -27,3 +27,23 @@ internal fun colorHsv(color: Color): Hsv {
     }
     return Hsv((hue + 360f) % 360f, if (hi == 0f) 0f else delta / hi, hi)
 }
+
+
+internal enum class ColourHarmony(val label: String) {
+    Complementary("Complementary"),
+    SplitComplementary("Split Complementary"),
+    Analogous("Analogous"),
+    Triadic("Triadic"),
+    Tetradic("Tetradic"),
+}
+
+internal fun harmonyHues(hue: Float, harmony: ColourHarmony): List<Float> {
+    val offsets = when (harmony) {
+        ColourHarmony.Complementary -> listOf(0f, 180f)
+        ColourHarmony.SplitComplementary -> listOf(0f, 150f, 210f)
+        ColourHarmony.Analogous -> listOf(-30f, 0f, 30f)
+        ColourHarmony.Triadic -> listOf(0f, 120f, 240f)
+        ColourHarmony.Tetradic -> listOf(0f, 90f, 180f, 270f)
+    }
+    return offsets.map { offset -> ((hue + offset) % 360f + 360f) % 360f }
+}

@@ -23,4 +23,10 @@ class ColourValuesTest {
             assertTrue(kotlin.math.abs(actual.blue - it.blue) < .001f)
         }
     }
+    @Test fun harmony_hues_wrap_and_match_expected_relationships() {
+        assertEquals(listOf(350f, 170f), harmonyHues(350f, ColourHarmony.Complementary))
+        assertEquals(listOf(10f, 130f, 250f), harmonyHues(10f, ColourHarmony.Triadic))
+        assertEquals(listOf(340f, 10f, 40f), harmonyHues(10f, ColourHarmony.Analogous))
+    }
 }
+
