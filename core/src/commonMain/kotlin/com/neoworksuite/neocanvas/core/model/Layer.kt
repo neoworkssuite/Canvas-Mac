@@ -34,7 +34,22 @@ data class RasterTileCopy(
     val destination: TileAddress,
 )
 
-enum class LayerBlendMode { Normal, Multiply, Screen, Overlay }
+enum class LayerBlendMode {
+    Normal,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    SoftLight,
+    HardLight,
+    Difference,
+    Exclusion,
+    Add,
+    Subtract,
+}
 
 data class Layer(
     val id: String,
