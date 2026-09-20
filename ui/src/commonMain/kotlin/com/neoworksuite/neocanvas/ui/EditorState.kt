@@ -459,6 +459,7 @@ class EditorState(
     var zoom: Float by mutableFloatStateOf(1f)
     var panX: Float by mutableFloatStateOf(0f)
     var panY: Float by mutableFloatStateOf(0f)
+    var viewRotationDegrees: Float by mutableFloatStateOf(0f)
     var statusMessage: String? by mutableStateOf(null)
     var palette: List<String> by mutableStateOf(emptyList())
         private set
@@ -618,6 +619,10 @@ class EditorState(
         return true
     }
     fun zoomBy(multiplier: Float) { zoom = (zoom * multiplier).coerceIn(.20f, 6f) }
+    fun rotateViewBy(degrees: Float) {
+        if (!degrees.isFinite()) return
+        viewRotationDegrees = normalizeViewRotation(viewRotationDegrees + degrees)
+    }
     fun zoomAt(multiplier: Float, pointerX: Float, pointerY: Float, centerX: Float, centerY: Float) {
         val previousZoom = zoom
         zoomBy(multiplier)
@@ -661,7 +666,12 @@ class EditorState(
             statusMessage = "Sampled visible colour"
         }
     }
-    fun resetView() { zoom = 1f; panX = 0f; panY = 0f }
+    fun resetView() {
+        zoom = 1f
+        panX = 0f
+        panY = 0f
+        viewRotationDegrees = 0f
+    }
 
     fun save(): Boolean {
         val result = fileActions.save(document, tilesForDocument())
@@ -799,3 +809,12 @@ class EditorState(
 }
 
 fun normalizedPressure(reported: Float?): Float = reported?.takeIf { it in 0f..1f } ?: 1f
+
+
+internal fun normalizeViewRotation(degrees: Float): Float {
+    if (!degrees.isFinite()) return 0f
+    var normalized = degrees % 360f
+    if (normalized > 180f) normalized -= 360f
+    if (normalized <= -180f) normalized += 360f
+    return normalized
+}
