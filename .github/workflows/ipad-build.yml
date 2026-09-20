@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ipad-gestures-phase1
   workflow_dispatch:
 
 jobs:
