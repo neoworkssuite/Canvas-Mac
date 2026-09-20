@@ -771,6 +771,27 @@ class EditorState(
         return true
     }
 
+    fun adjustEffectPreviewPrimary(deltaFraction: Float) {
+        val type = effectPreviewType ?: return
+        if (!deltaFraction.isFinite() || deltaFraction == 0f) return
+        val current = effectPreviewSettings
+        val nextAmount = when (type) {
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Blur,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.MotionBlur ->
+                (current.amount + deltaFraction).coerceIn(0f, 1f)
+
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.HueSaturation,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.ColourBalance,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Curves ->
+                (current.amount + deltaFraction * 2f).coerceIn(-1f, 1f)
+
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert -> return
+        }
+        previewEffect(type, current.copy(amount = nextAmount))
+    }
+
     fun commitEffectPreview(): Boolean {
         val patch = effectPreviewPatch ?: return false
         val type = effectPreviewType ?: return false
