@@ -169,6 +169,17 @@ class EditorState(
     var selectionMode: SelectionShape by mutableStateOf(SelectionShape.Rectangle)
     var transformSession: TransformSession? by mutableStateOf(null)
         private set
+
+    var effectPreviewPatch: com.neoworksuite.neocanvas.renderer.RasterPatch? by mutableStateOf(null)
+        private set
+    var effectPreviewType: com.neoworksuite.neocanvas.renderer.RasterEffectType? by mutableStateOf(null)
+        private set
+    var effectPreviewSettings: com.neoworksuite.neocanvas.renderer.RasterEffectSettings by mutableStateOf(
+        com.neoworksuite.neocanvas.renderer.RasterEffectSettings(amount = 0f),
+    )
+        private set
+    private var effectPreviewLayerId: String? = null
+
     fun clearSelection() { transformSession = null; selection = null }
     fun beginTransform(): Boolean {
         val bounds = selection ?: return false
@@ -315,7 +326,8 @@ class EditorState(
         selection = CanvasSelection(left, top, left + width, top + height)
         tool = Tool.MoveSelection
         resetView()
-        statusMessage = "Image imported. Drag to move; use selection controls to rotate or resize."
+        beginTransform()
+        statusMessage = "Image imported — transform active. Drag the image or its handles, then leave Transform when finished."
     }
     fun clearSelectedPixels() {
         val bounds = selection ?: return
@@ -540,8 +552,25 @@ class EditorState(
         brushSize = selection.baseSize
         brushOpacity = selection.opacity
     }
-    fun showInspector(panel: InspectorPanel) { inspectorPanel = panel; inspectorVisible = true }
-    fun toggleInspector(panel: InspectorPanel) { if (inspectorVisible && inspectorPanel == panel) inspectorVisible = false else showInspector(panel) }
+    fun showInspector(panel: InspectorPanel) {
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Effects && panel != InspectorPanel.Effects) {
+            commitEffectPreview()
+        }
+        inspectorPanel = panel
+        inspectorVisible = true
+    }
+
+    fun hideInspector(commitEffects: Boolean = true) {
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) {
+            if (commitEffects) commitEffectPreview() else cancelEffectPreview()
+        }
+        inspectorVisible = false
+    }
+
+    fun toggleInspector(panel: InspectorPanel) {
+        if (inspectorVisible && inspectorPanel == panel) hideInspector()
+        else showInspector(panel)
+    }
 
     fun addLayer() {
         val id = nextLayerId()
@@ -671,22 +700,29 @@ class EditorState(
         afterHistoryMove()
         return true
     }
-    fun applyEffect(
+    fun previewEffect(
         type: com.neoworksuite.neocanvas.renderer.RasterEffectType,
         settings: com.neoworksuite.neocanvas.renderer.RasterEffectSettings,
     ): Boolean {
         val layerId = activeLayerId ?: run {
-            statusMessage = "Select a layer before applying an effect"
+            statusMessage = "Select a layer before adjusting an effect"
+            cancelEffectPreview(silent = true)
             return false
         }
         val layer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: run {
-            statusMessage = "Select an unlocked visible layer before applying an effect"
+            statusMessage = "Select an unlocked visible layer before adjusting an effect"
+            cancelEffectPreview(silent = true)
             return false
         }
-        if (layer.payload !is LayerPayload.Raster) return false
+        if (layer.payload !is LayerPayload.Raster) {
+            cancelEffectPreview(silent = true)
+            return false
+        }
 
-        val before = tileStore.snapshot()
-        val patch = com.neoworksuite.neocanvas.renderer.RasterEffects.apply(
+        effectPreviewLayerId = layerId
+        effectPreviewType = type
+        effectPreviewSettings = settings
+        effectPreviewPatch = com.neoworksuite.neocanvas.renderer.RasterEffects.apply(
             store = tileStore,
             layerId = layerId,
             canvasWidth = document.width,
@@ -699,27 +735,61 @@ class EditorState(
                 (color.blue * 255).toInt().coerceIn(0, 255),
             ),
         )
-        val changed = tileStore.applyPatch(patch)
-        if (changed.isEmpty()) {
-            statusMessage = "No pixels changed"
+        return true
+    }
+
+    fun commitEffectPreview(): Boolean {
+        val patch = effectPreviewPatch ?: return false
+        val type = effectPreviewType ?: return false
+        val layerId = effectPreviewLayerId ?: return false
+        if (activeLayerId != layerId) {
+            cancelEffectPreview(silent = true)
             return false
         }
+
+        val before = tileStore.snapshot()
+        val changed = tileStore.applyPatch(patch)
+        clearEffectPreviewState()
+        if (changed.isEmpty()) return false
 
         execute(
             ApplyRasterPatch(layerId, tileStore.keys - before.keys, before.keys - tileStore.keys),
             before,
         )
-        statusMessage = when (type) {
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.Blur -> "Blur applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.MotionBlur -> "Motion blur applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.HueSaturation -> "Hue / Saturation applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.ColourBalance -> "Colour balance applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.Curves -> "Curves applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap -> "Gradient map applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale -> "Grayscale applied"
-            com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert -> "Invert applied"
-        }
+        statusMessage = effectAppliedMessage(type)
         return true
+    }
+
+    fun cancelEffectPreview(silent: Boolean = false) {
+        val hadPreview = effectPreviewPatch != null
+        clearEffectPreviewState()
+        if (hadPreview && !silent) statusMessage = "Adjustment cancelled"
+    }
+
+    private fun clearEffectPreviewState() {
+        effectPreviewPatch = null
+        effectPreviewType = null
+        effectPreviewLayerId = null
+    }
+
+    fun applyEffect(
+        type: com.neoworksuite.neocanvas.renderer.RasterEffectType,
+        settings: com.neoworksuite.neocanvas.renderer.RasterEffectSettings,
+    ): Boolean {
+        cancelEffectPreview(silent = true)
+        if (!previewEffect(type, settings)) return false
+        return commitEffectPreview()
+    }
+
+    private fun effectAppliedMessage(type: com.neoworksuite.neocanvas.renderer.RasterEffectType): String = when (type) {
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Blur -> "Blur applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.MotionBlur -> "Motion blur applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.HueSaturation -> "Hue / Saturation applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.ColourBalance -> "Colour balance applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Curves -> "Curves applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap -> "Gradient map applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale -> "Grayscale applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert -> "Invert applied"
     }
 
     fun zoomBy(multiplier: Float) { zoom = (zoom * multiplier).coerceIn(.20f, 6f) }
