@@ -13,7 +13,9 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.allocArrayOf
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.usePinned
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.jetbrains.skia.Image
+import platform.Foundation.NSURL
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
@@ -22,6 +24,7 @@ import platform.Foundation.NSUserDomainMask
 import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfFile
 import platform.Foundation.writeToFile
+import platform.UIKit.UIApplication
 import platform.UIKit.UIImage
 import platform.UIKit.UIImagePickerController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
@@ -208,6 +211,17 @@ internal class IosEditorFileActions(
         return PngExporter.export(document, tiles) { bytes ->
             check(writeBytes(target, bytes)) { "Could not write PNG to iPad Documents." }
         }
+    }
+
+    override fun openExternalUrl(url: String): Boolean {
+        val target = NSURL.URLWithString(url) ?: return false
+        if (!UIApplication.sharedApplication.canOpenURL(target)) return false
+        UIApplication.sharedApplication.openURL(
+            url = target,
+            options = emptyMap<Any?, Any>(),
+            completionHandler = null,
+        )
+        return true
     }
 
     override fun importImage(onResult: (Result<ImportedImage?>) -> Unit) {
