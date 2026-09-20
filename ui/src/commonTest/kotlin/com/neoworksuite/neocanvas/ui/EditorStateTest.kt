@@ -145,6 +145,24 @@ class EditorStateTest {
         state.zoomAt(2f, 150f, 200f, 300f, 250f)
         assertEquals(20f, state.panX, .001f)
     }
+    @Test fun view_rotation_normalizes_and_reset_restores_fit_view() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(64, 64)))
+        state.zoom = 2.5f
+        state.panX = 120f
+        state.panY = -48f
+        state.rotateViewBy(190f)
+        assertEquals(-170f, state.viewRotationDegrees, .001f)
+        state.rotateViewBy(-30f)
+        assertEquals(160f, state.viewRotationDegrees, .001f)
+
+        state.resetView()
+
+        assertEquals(1f, state.zoom, .001f)
+        assertEquals(0f, state.panX, .001f)
+        assertEquals(0f, state.panY, .001f)
+        assertEquals(0f, state.viewRotationDegrees, .001f)
+    }
+
     @Test fun live_brush_preview_matches_commit_without_mutating_document() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(64, 64)))
         state.addLayer()
