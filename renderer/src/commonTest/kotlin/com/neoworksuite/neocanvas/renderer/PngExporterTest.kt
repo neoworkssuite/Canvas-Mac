@@ -26,7 +26,7 @@ class PngExporterTest {
     }
 
     @Test fun clipping_mask_uses_alpha_of_layer_below() {
-        val base = tile(10, 20, 30, 0)
+        val base = tile(10.toByte(), 20.toByte(), 30.toByte(), 0)
         val baseOpaque = base.copyOf().also {
             it[3] = 255.toByte()
         }
@@ -50,8 +50,8 @@ class PngExporterTest {
     }
 
     @Test fun extended_blend_modes_render_without_falling_back_to_normal() {
-        val base = tile(80, 120, 180, 255.toByte())
-        val top = tile(180.toByte(), 80, 40, 255.toByte())
+        val base = tile(80.toByte(), 120.toByte(), 180.toByte(), 255.toByte())
+        val top = tile(180.toByte(), 80.toByte(), 40.toByte(), 255.toByte())
         val document = CanvasDocument("blend-more", 1, 1, listOf(
             Layer("base", "Base", payload = LayerPayload.Raster(setOf(TileAddress("base", 0, 0)))),
             Layer("top", "Top", payload = LayerPayload.Raster(setOf(TileAddress("top", 0, 0))), blendMode = LayerBlendMode.Difference),
