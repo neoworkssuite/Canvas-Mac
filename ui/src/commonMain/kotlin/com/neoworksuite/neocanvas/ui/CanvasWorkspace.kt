@@ -579,9 +579,11 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
             }
         } else {
             val scalePercent = (transform.scale * 100f).toInt()
+            val widthPercent = (transform.scaleX * 100f).toInt()
+            val heightPercent = (transform.scaleY * 100f).toInt()
             val rotation = transform.rotationDegrees.toInt()
             Text(
-                "UNIFORM  •  " + scalePercent + "%  •  " + rotation + "°",
+                "SCALE " + scalePercent + "%  •  W " + widthPercent + "%  •  H " + heightPercent + "%  •  " + rotation + "°",
                 color = NeoCanvasColors.muted,
                 fontSize = 10.sp,
                 letterSpacing = .7.sp,
@@ -592,6 +594,15 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
                 TransformDockButton("Reset") { state.resetTransform() }
                 TransformDockButton("Fit") { state.fitTransformToCanvas() }
                 TransformDockButton("Done", emphasized = true) { state.applyTransform() }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TransformDockButton("W−") { state.scaleTransformAxis(horizontal = true, factor = .9f) }
+                TransformDockButton("W+") { state.scaleTransformAxis(horizontal = true, factor = 1.1f) }
+                TransformDockButton("H−") { state.scaleTransformAxis(horizontal = false, factor = .9f) }
+                TransformDockButton("H+") { state.scaleTransformAxis(horizontal = false, factor = 1.1f) }
+                TransformDockButton(if (state.transformSnapping) "Snap ✓" else "Snap") {
+                    state.transformSnapping = !state.transformSnapping
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                 TransformDockButton("Flip H") {
