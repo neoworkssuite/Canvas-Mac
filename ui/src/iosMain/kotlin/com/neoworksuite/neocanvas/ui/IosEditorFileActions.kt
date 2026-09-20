@@ -9,7 +9,7 @@ import platform.UIKit.UIImage
 import platform.UIKit.UIImagePickerController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
-import platform.UIKit.UIImagePickerControllerSourceTypePhotoLibrary
+import platform.UIKit.UIImagePickerControllerSourceType
 import platform.UIKit.UIImagePNGRepresentation
 import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UINavigationControllerDelegateProtocol
@@ -36,13 +36,13 @@ internal class IosEditorFileActions(
             return
         }
 
-        if (!UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceTypePhotoLibrary)) {
+        if (!UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypePhotoLibrary)) {
             onResult(Result.failure(IllegalStateException("The iPad photo library is unavailable.")))
             return
         }
 
         val picker = UIImagePickerController().apply {
-            sourceType = UIImagePickerControllerSourceTypePhotoLibrary
+            sourceType = UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypePhotoLibrary
             allowsEditing = false
             modalPresentationStyle = UIModalPresentationFullScreen
         }
