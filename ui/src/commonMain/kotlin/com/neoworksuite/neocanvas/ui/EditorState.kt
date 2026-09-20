@@ -798,6 +798,13 @@ class EditorState(
             com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap,
             com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale,
             com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert -> return
+
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Sharpen,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Noise,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Bloom,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Halftone,
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.ChromaticAberration ->
+                (current.amount + deltaFraction).coerceIn(0f, 1f)
         }
         previewEffect(type, current.copy(amount = nextAmount))
     }
@@ -852,6 +859,11 @@ class EditorState(
         com.neoworksuite.neocanvas.renderer.RasterEffectType.ColourBalance -> "Colour balance applied"
         com.neoworksuite.neocanvas.renderer.RasterEffectType.Curves -> "Curves applied"
         com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap -> "Gradient map applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Sharpen -> "Sharpen applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Noise -> "Noise applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Bloom -> "Bloom applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.Halftone -> "Halftone applied"
+        com.neoworksuite.neocanvas.renderer.RasterEffectType.ChromaticAberration -> "Chromatic aberration applied"
         com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale -> "Grayscale applied"
         com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert -> "Invert applied"
     }
