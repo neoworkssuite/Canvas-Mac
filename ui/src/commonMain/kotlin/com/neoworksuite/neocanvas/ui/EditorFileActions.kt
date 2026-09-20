@@ -30,6 +30,9 @@ interface EditorFileActions {
     fun loadPalette(): List<String> = emptyList()
     fun savePalette(colors: List<String>): SaveResult = SaveResult.Failure("Palette storage is unavailable in this host.")
     fun openExternalUrl(url: String): Boolean = false
+    fun loadPreferences(): Map<String, String> = emptyMap()
+    fun savePreferences(values: Map<String, String>): SaveResult =
+        SaveResult.Failure("Preference storage is unavailable in this host.")
     fun save(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult
     fun open(): LoadResult
     fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult
