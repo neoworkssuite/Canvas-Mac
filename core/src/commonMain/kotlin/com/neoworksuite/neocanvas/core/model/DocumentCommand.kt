@@ -59,6 +59,11 @@ data class SetLayerAlphaLocked(val layerId: String, val alphaLocked: Boolean) : 
     override fun apply(document: CanvasDocument): CanvasDocument = document.replaceLayer(layerId) { it.copy(alphaLocked = alphaLocked) }
 }
 
+data class SetLayerClipping(val layerId: String, val clipping: Boolean) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceLayer(layerId) { it.copy(clipping = clipping) }
+}
+
 data class SetLayerBlendMode(val layerId: String, val blendMode: LayerBlendMode) : DocumentCommand {
     override fun apply(document: CanvasDocument): CanvasDocument = document.replaceLayer(layerId) { it.copy(blendMode = blendMode) }
 }
