@@ -19,6 +19,26 @@ object LayerCompositor {
                 LayerBlendMode.Screen -> 1f - (1f - sourceColor) * (1f - destinationColor)
                 LayerBlendMode.Overlay -> if (destinationColor <= .5f) 2f * sourceColor * destinationColor
                     else 1f - 2f * (1f - sourceColor) * (1f - destinationColor)
+                LayerBlendMode.Darken -> minOf(sourceColor, destinationColor)
+                LayerBlendMode.Lighten -> maxOf(sourceColor, destinationColor)
+                LayerBlendMode.ColorDodge -> if (sourceColor >= .999f) 1f
+                    else (destinationColor / (1f - sourceColor)).coerceIn(0f, 1f)
+                LayerBlendMode.ColorBurn -> if (sourceColor <= .001f) 0f
+                    else (1f - (1f - destinationColor) / sourceColor).coerceIn(0f, 1f)
+                LayerBlendMode.SoftLight -> if (sourceColor <= .5f) {
+                    destinationColor - (1f - 2f * sourceColor) * destinationColor * (1f - destinationColor)
+                } else {
+                    val d = if (destinationColor <= .25f)
+                        ((16f * destinationColor - 12f) * destinationColor + 4f) * destinationColor
+                    else kotlin.math.sqrt(destinationColor)
+                    destinationColor + (2f * sourceColor - 1f) * (d - destinationColor)
+                }
+                LayerBlendMode.HardLight -> if (sourceColor <= .5f) 2f * sourceColor * destinationColor
+                    else 1f - 2f * (1f - sourceColor) * (1f - destinationColor)
+                LayerBlendMode.Difference -> kotlin.math.abs(destinationColor - sourceColor)
+                LayerBlendMode.Exclusion -> destinationColor + sourceColor - 2f * destinationColor * sourceColor
+                LayerBlendMode.Add -> (destinationColor + sourceColor).coerceAtMost(1f)
+                LayerBlendMode.Subtract -> (destinationColor - sourceColor).coerceAtLeast(0f)
             }
             val premultiplied = (1f - sourceAlpha) * destinationAlpha * destinationColor +
                 (1f - destinationAlpha) * sourceAlpha * sourceColor +
