@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +45,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
 
@@ -59,7 +62,24 @@ fun CanvasWorkspace(
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     var moveDelta by remember { mutableStateOf(Offset.Zero) }
     var movingSelection by remember { mutableStateOf(false) }
+    var quickShapePointerDown by remember { mutableStateOf(false) }
+    var quickShapeRevision by remember { mutableIntStateOf(0) }
+    var quickShapeRawPoints by remember { mutableStateOf<List<DrawPoint>>(emptyList()) }
+    var quickShapeSnapped by remember { mutableStateOf(false) }
     val density = LocalDensity.current
+
+    LaunchedEffect(quickShapePointerDown, quickShapeRevision, state.quickShapeEnabled, state.tool) {
+        if (!quickShapePointerDown || !state.quickShapeEnabled || state.tool != Tool.Brush) return@LaunchedEffect
+        val revision = quickShapeRevision
+        delay(450)
+        if (!quickShapePointerDown || quickShapeRevision != revision || quickShapeSnapped) return@LaunchedEffect
+        val shape = detectQuickShape(quickShapeRawPoints) ?: return@LaunchedEffect
+        quickShapeSnapped = true
+        inProgress.clear()
+        inProgress.addAll(shape.points)
+        state.statusMessage = "QuickShape: ${shape.type.label} — lift to place"
+    }
+
     Box(
         modifier = modifier.background(NeoCanvasColors.canvasBed).clipToBounds().semantics { contentDescription = "Drawing canvas" },
         contentAlignment = Alignment.Center,
@@ -87,8 +107,9 @@ fun CanvasWorkspace(
         val currentRotation by rememberUpdatedState(state.viewRotationDegrees)
         val previewPoints = inProgress.toList()
         val strokePreview = remember(previewPoints, document, state.tool, state.activeLayerId,
-            state.brush, state.brushSize, state.brushOpacity, state.color, state.selection, state.stabilization, state.symmetry) {
-            state.previewStroke(previewPoints)
+            state.brush, state.brushSize, state.brushOpacity, state.color, state.selection, state.stabilization,
+            state.symmetry, quickShapeSnapped) {
+            state.previewStroke(previewPoints, stabilize = !quickShapeSnapped)
         }
         val movePreview = remember(moveDelta, movingSelection, state.selection, state.activeLayerId, document) {
             if (movingSelection) state.previewSelectionMove(moveDelta.x.toInt(), moveDelta.y.toInt()) else null
@@ -209,6 +230,7 @@ fun CanvasWorkspace(
                     state.brushSize,
                     state.brushOpacity,
                     state.fingerPaintingEnabled,
+                    state.quickShapeEnabled,
                     document.id,
                     viewport,
                 ) {
@@ -272,6 +294,11 @@ fun CanvasWorkspace(
                         movingSelection = startingTransform == null && state.tool == Tool.MoveSelection &&
                             (state.selection?.contains(initial.x.toInt(), initial.y.toInt()) == true)
                         inProgress += initial
+                        quickShapeSnapped = false
+                        quickShapePointerDown =
+                            state.quickShapeEnabled && state.tool == Tool.Brush && startingTransform == null
+                        quickShapeRawPoints = if (quickShapePointerDown) listOf(initial) else emptyList()
+                        quickShapeRevision++
                         var previous = down.position
                         var cancelled = false
                         while (true) {
@@ -305,8 +332,23 @@ fun CanvasWorkspace(
                                 if (movingSelection) moveDelta += amount / gestureScale
                             } else if (change.position != previous) {
                                 val pressure = if (change.type == PointerType.Stylus && change.pressed) change.pressure
-                                    else inProgress.last().pressure
-                                inProgress += point(change.position, pressure)
+                                    else (quickShapeRawPoints.lastOrNull()?.pressure ?: inProgress.last().pressure)
+                                val drawnPoint = point(change.position, pressure)
+                                if (quickShapePointerDown && state.tool == Tool.Brush) {
+                                    val movement = (change.position - previous).getDistance()
+                                    if (quickShapeSnapped && movement > viewConfiguration.touchSlop * .25f) {
+                                        quickShapeSnapped = false
+                                        inProgress.clear()
+                                        inProgress.addAll(quickShapeRawPoints)
+                                    }
+                                    quickShapeRawPoints = quickShapeRawPoints + drawnPoint
+                                    if (!quickShapeSnapped) inProgress += drawnPoint
+                                    if (movement > maxOf(1.5f, viewConfiguration.touchSlop * .10f)) {
+                                        quickShapeRevision++
+                                    }
+                                } else {
+                                    inProgress += drawnPoint
+                                }
                             }
                             previous = change.position
                             change.consume()
@@ -322,8 +364,12 @@ fun CanvasWorkspace(
                             state.moveSelection(moveDelta.x.toInt(), moveDelta.y.toInt())
                         } else if (state.tool == Tool.Select && inProgress.isNotEmpty()) {
                             state.selectArea(inProgress.toList())
-                        } else state.recordStroke(inProgress.toList())
+                        } else state.recordStroke(inProgress.toList(), stabilize = !quickShapeSnapped)
                     } finally {
+                        quickShapePointerDown = false
+                        quickShapeRawPoints = emptyList()
+                        quickShapeSnapped = false
+                        quickShapeRevision++
                         inProgress.clear()
                         moveDelta = Offset.Zero
                         movingSelection = false
