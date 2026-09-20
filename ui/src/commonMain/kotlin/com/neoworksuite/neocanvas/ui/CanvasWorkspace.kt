@@ -602,6 +602,7 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                 TransformDockButton("Transform", emphasized = true) { state.beginTransform() }
                 TransformDockButton("Move") { state.tool = Tool.MoveSelection }
+                TransformDockButton("Crop Canvas") { state.cropCanvasToSelection() }
                 TransformDockButton("Deselect", muted = true) { state.clearSelection() }
                 TransformDockButton("Clear pixels", muted = true) { state.clearSelectedPixels() }
             }
