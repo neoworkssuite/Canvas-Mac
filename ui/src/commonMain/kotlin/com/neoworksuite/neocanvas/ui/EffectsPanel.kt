@@ -217,56 +217,6 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
                     colors = listOf(Color.Cyan, Color.Magenta, Color.Yellow),
                 ) { state.previewEffect(selected, settings.copy(amount = it)) }
 
-            RasterEffectType.Sharpen -> {
-                line(.20f, .50f, .80f, .50f)
-                line(.50f, .20f, .50f, .80f)
-                line(.28f, .28f, .72f, .72f)
-                line(.72f, .28f, .28f, .72f)
-                drawCircle(mono, w * .07f, Offset(w * .50f, h * .50f))
-            }
-
-            RasterEffectType.Noise -> {
-                val dots = listOf(
-                    .22f to .24f, .50f to .18f, .76f to .28f,
-                    .30f to .52f, .62f to .48f, .82f to .60f,
-                    .18f to .76f, .48f to .78f, .70f to .80f,
-                )
-                dots.forEachIndexed { index, point ->
-                    drawCircle(
-                        mono.copy(alpha = .45f + (index % 3) * .22f),
-                        w * (.035f + (index % 2) * .015f),
-                        Offset(w * point.first, h * point.second),
-                    )
-                }
-            }
-
-            RasterEffectType.Bloom -> {
-                drawCircle(Color(0xFFFFD66B).copy(alpha = .30f), w * .30f, Offset(w * .50f, h * .50f))
-                drawCircle(Color(0xFFFFE99A).copy(alpha = .65f), w * .17f, Offset(w * .50f, h * .50f))
-                drawCircle(Color.White, w * .07f, Offset(w * .50f, h * .50f))
-                line(.50f, .08f, .50f, .24f, s * .85f, mono)
-                line(.50f, .76f, .50f, .92f, s * .85f, mono)
-                line(.08f, .50f, .24f, .50f, s * .85f, mono)
-                line(.76f, .50f, .92f, .50f, s * .85f, mono)
-            }
-
-            RasterEffectType.Halftone -> {
-                val dots = listOf(
-                    .25f to .25f, .50f to .25f, .75f to .25f,
-                    .25f to .50f, .50f to .50f, .75f to .50f,
-                    .25f to .75f, .50f to .75f, .75f to .75f,
-                )
-                dots.forEachIndexed { index, point ->
-                    drawCircle(mono, w * if (index == 4) .085f else .055f, Offset(w * point.first, h * point.second))
-                }
-            }
-
-            RasterEffectType.ChromaticAberration -> {
-                drawCircle(Color.Red.copy(alpha = .75f), w * .22f, Offset(w * .42f, h * .50f), style = Stroke(s))
-                drawCircle(Color.Green.copy(alpha = .75f), w * .22f, Offset(w * .50f, h * .50f), style = Stroke(s))
-                drawCircle(Color.Blue.copy(alpha = .75f), w * .22f, Offset(w * .58f, h * .50f), style = Stroke(s))
-            }
-
             RasterEffectType.Grayscale -> {
                 Text(
                     "Converts the active layer to luminance while preserving transparency.",
@@ -488,6 +438,56 @@ private fun EffectIcon(
                     cornerRadius = CornerRadius(w * .08f, w * .08f),
                     style = Stroke(s),
                 )
+            }
+
+            RasterEffectType.Sharpen -> {
+                line(.20f, .50f, .80f, .50f)
+                line(.50f, .20f, .50f, .80f)
+                line(.28f, .28f, .72f, .72f)
+                line(.72f, .28f, .28f, .72f)
+                drawCircle(mono, w * .07f, Offset(w * .50f, h * .50f))
+            }
+
+            RasterEffectType.Noise -> {
+                val dots = listOf(
+                    .22f to .24f, .50f to .18f, .76f to .28f,
+                    .30f to .52f, .62f to .48f, .82f to .60f,
+                    .18f to .76f, .48f to .78f, .70f to .80f,
+                )
+                dots.forEachIndexed { index, point ->
+                    drawCircle(
+                        mono.copy(alpha = .45f + (index % 3) * .22f),
+                        w * (.035f + (index % 2) * .015f),
+                        Offset(w * point.first, h * point.second),
+                    )
+                }
+            }
+
+            RasterEffectType.Bloom -> {
+                drawCircle(Color(0xFFFFD66B).copy(alpha = .30f), w * .30f, Offset(w * .50f, h * .50f))
+                drawCircle(Color(0xFFFFE99A).copy(alpha = .65f), w * .17f, Offset(w * .50f, h * .50f))
+                drawCircle(Color.White, w * .07f, Offset(w * .50f, h * .50f))
+                line(.50f, .08f, .50f, .24f, s * .85f, mono)
+                line(.50f, .76f, .50f, .92f, s * .85f, mono)
+                line(.08f, .50f, .24f, .50f, s * .85f, mono)
+                line(.76f, .50f, .92f, .50f, s * .85f, mono)
+            }
+
+            RasterEffectType.Halftone -> {
+                val dots = listOf(
+                    .25f to .25f, .50f to .25f, .75f to .25f,
+                    .25f to .50f, .50f to .50f, .75f to .50f,
+                    .25f to .75f, .50f to .75f, .75f to .75f,
+                )
+                dots.forEachIndexed { index, point ->
+                    drawCircle(mono, w * if (index == 4) .085f else .055f, Offset(w * point.first, h * point.second))
+                }
+            }
+
+            RasterEffectType.ChromaticAberration -> {
+                drawCircle(Color.Red.copy(alpha = .75f), w * .22f, Offset(w * .42f, h * .50f), style = Stroke(s))
+                drawCircle(Color.Green.copy(alpha = .75f), w * .22f, Offset(w * .50f, h * .50f), style = Stroke(s))
+                drawCircle(Color.Blue.copy(alpha = .75f), w * .22f, Offset(w * .58f, h * .50f), style = Stroke(s))
             }
 
             RasterEffectType.Grayscale -> {
