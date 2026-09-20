@@ -387,7 +387,9 @@ private class PsdPickerDelegate(
             return
         }
         finish(runCatching {
-            val data = NSData.dataWithContentsOfURL(url)
+            val selectedPath = url.path
+                ?: error("iPadOS could not resolve the selected PSD path.")
+            val data = NSData.dataWithContentsOfFile(selectedPath)
                 ?: error("iPadOS could not read the selected PSD.")
             PsdCodec.decode(data.toByteArray())
         })
