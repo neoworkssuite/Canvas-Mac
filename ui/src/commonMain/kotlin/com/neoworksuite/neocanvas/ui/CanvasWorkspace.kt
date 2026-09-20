@@ -558,6 +558,20 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
                 TransformDockButton("Invert") { state.invertSelection() }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TransformDockButton("Replace", emphasized = state.selectionCombineMode == SelectionCombineMode.Replace) {
+                    state.selectionCombineMode = SelectionCombineMode.Replace
+                }
+                TransformDockButton("Add", emphasized = state.selectionCombineMode == SelectionCombineMode.Add) {
+                    state.selectionCombineMode = SelectionCombineMode.Add
+                }
+                TransformDockButton("Subtract", emphasized = state.selectionCombineMode == SelectionCombineMode.Subtract) {
+                    state.selectionCombineMode = SelectionCombineMode.Subtract
+                }
+                TransformDockButton("Intersect", emphasized = state.selectionCombineMode == SelectionCombineMode.Intersect) {
+                    state.selectionCombineMode = SelectionCombineMode.Intersect
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                 TransformDockButton("Transform", emphasized = true) { state.beginTransform() }
                 TransformDockButton("Move") { state.tool = Tool.MoveSelection }
                 TransformDockButton("Deselect", muted = true) { state.clearSelection() }
@@ -628,6 +642,11 @@ private fun TransformDockButton(
 }
 
 private fun DrawScope.drawSelectionOutline(selection: CanvasSelection, color: Color, width: Float) {
+    if (selection.baseRegion != null && selection.combinedRegion != null) {
+        drawSelectionOutline(selection.baseRegion, color, width)
+        drawSelectionOutline(selection.combinedRegion, color.copy(alpha = .72f), width)
+        return
+    }
     selection.invertedRegion?.let { inverted ->
         drawRect(color, Offset(selection.left.toFloat(), selection.top.toFloat()),
             Size((selection.right - selection.left).toFloat(), (selection.bottom - selection.top).toFloat()), style = Stroke(width))
