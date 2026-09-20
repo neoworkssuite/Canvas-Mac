@@ -3,10 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SOURCE="${1:-}"
+SOURCE="${1:-/Volumes/media/projects/apple apps/NeoCanavs.png}"
 
 if [ -z "$SOURCE" ] || [ ! -f "$SOURCE" ]; then
-    echo "Usage: ./scripts/install-app-icon.sh /path/to/NeoCanvas-icon.png"
+    echo "Usage: ./scripts/install-app-icon.sh /path/to/NeoCanvas-icon.png"\n    echo "Default: /Volumes/media/projects/apple apps/NeoCanavs.png"
     exit 1
 fi
 
