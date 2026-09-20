@@ -53,6 +53,12 @@ fun SettingsPanel(
             state.canvasRotationEnabled,
         ) { state.canvasRotationEnabled = it; state.persistPreferences() }
 
+        SettingsToggle(
+            "QuickShape hold-to-snap",
+            "Hold at the end of a rough line, circle, triangle or square to snap it cleanly.",
+            state.quickShapeEnabled,
+        ) { state.quickShapeEnabled = it; state.persistPreferences() }
+
         SettingsSection("CANVAS & EDITING")
         SettingsToggle(
             "Smooth selection resizing",
