@@ -84,7 +84,7 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
             "Export visible PNG…" to { state.exportPng() },
             ))
         })
-        StudioButton(Glyph.Settings, "Settings") { state.settingsVisible = true }
+        StudioButton(Glyph.Settings, "Settings") { state.openSettings() }
         if (toolScroll.maxValue > 0) {
             StudioButton(Glyph.Previous, "Show previous tools", enabled = toolScroll.canScrollBackward) {
                 scope.launch { toolScroll.animateScrollBy(-scrollStep) }
@@ -92,16 +92,16 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
         }
         Row(Modifier.weight(1f).horizontalScroll(toolScroll),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StudioButton(Glyph.Brush, "Paint brush", state.tool == Tool.Brush) { state.tool = Tool.Brush }
-        StudioButton(Glyph.Eraser, "Eraser", state.tool == Tool.Eraser) { state.tool = Tool.Eraser }
-        StudioButton(Glyph.Transform, "Move canvas", state.tool == Tool.Pan) { state.tool = Tool.Pan }
-        StudioButton(Glyph.Fill, "Fill connected area on active layer", state.tool == Tool.Fill) { state.tool = Tool.Fill }
-        StudioButton(Glyph.Eyedropper, "Sample visible colour", state.tool == Tool.Eyedropper) { state.tool = Tool.Eyedropper }
-        StudioButton(Glyph.Select, "Rectangle selection", state.tool == Tool.Select) { state.tool = Tool.Select }
+        StudioButton(Glyph.Brush, "Paint brush", state.tool == Tool.Brush) { state.activateTool(Tool.Brush) }
+        StudioButton(Glyph.Eraser, "Eraser", state.tool == Tool.Eraser) { state.activateTool(Tool.Eraser) }
+        StudioButton(Glyph.Transform, "Move canvas", state.tool == Tool.Pan) { state.activateTool(Tool.Pan) }
+        StudioButton(Glyph.Fill, "Fill connected area on active layer", state.tool == Tool.Fill) { state.activateTool(Tool.Fill) }
+        StudioButton(Glyph.Eyedropper, "Sample visible colour", state.tool == Tool.Eyedropper) { state.activateTool(Tool.Eyedropper) }
+        StudioButton(Glyph.Select, "Rectangle selection", state.tool == Tool.Select) { state.activateTool(Tool.Select) }
         DividerTick()
         SymmetryMenu(state)
         if (state.selection != null) {
-            StudioButton(Glyph.Transform, "Move selected artwork", state.tool == Tool.MoveSelection) { state.tool = Tool.MoveSelection }
+            StudioButton(Glyph.Transform, "Move selected artwork", state.tool == Tool.MoveSelection) { state.activateTool(Tool.MoveSelection) }
             StudioButton(Glyph.ClearSelection, "Deselect") { state.clearSelection() }
         }
         }
