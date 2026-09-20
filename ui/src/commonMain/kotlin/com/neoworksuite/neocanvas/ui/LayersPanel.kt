@@ -53,8 +53,7 @@ internal fun allowsLayerReorder(region: LayerDragRegion): Boolean = region == La
 
 @Composable
 fun StudioInspector(state: EditorState, compact: Boolean, modifier: Modifier = Modifier) {
-    Column(modifier.background(NeoCanvasColors.panel).padding(top = 10.dp)) {
-        InspectorTabs(state)
+    Column(modifier.background(NeoCanvasColors.panel).padding(top = 6.dp)) {
         when (state.inspectorPanel) {
             InspectorPanel.Layers -> LayersPanel(state, Modifier.fillMaxSize())
             InspectorPanel.Brushes -> BrushPanel(state, Modifier.fillMaxSize())
@@ -62,28 +61,6 @@ fun StudioInspector(state: EditorState, compact: Boolean, modifier: Modifier = M
             InspectorPanel.Effects -> EffectsPanel(state, Modifier.fillMaxSize())
         }
     }
-}
-
-@Composable
-private fun InspectorTabs(state: EditorState) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        InspectorTab("LAYERS", state.inspectorPanel == InspectorPanel.Layers) { state.showInspector(InspectorPanel.Layers) }
-        InspectorTab("BRUSHES", state.inspectorPanel == InspectorPanel.Brushes) { state.showInspector(InspectorPanel.Brushes) }
-        InspectorTab("COLOUR", state.inspectorPanel == InspectorPanel.Colors) { state.showInspector(InspectorPanel.Colors) }
-        InspectorTab("FX", state.inspectorPanel == InspectorPanel.Effects) { state.showInspector(InspectorPanel.Effects) }
-    }
-}
-
-@Composable
-private fun InspectorTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        color = if (selected) NeoCanvasColors.accent else NeoCanvasColors.faint,
-        fontSize = 9.sp,
-        letterSpacing = .8.sp,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) NeoCanvasColors.panelRaised else Color.Transparent)
-            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 7.dp),
-    )
 }
 
 @Composable

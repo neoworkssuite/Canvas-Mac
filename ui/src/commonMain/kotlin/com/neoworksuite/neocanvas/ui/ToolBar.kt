@@ -59,74 +59,206 @@ import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modifier, onGallery: () -> Unit = {}) {
-    val toolScroll = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    val scrollStep = with(LocalDensity.current) { 240.dp.toPx() }
     Row(
-        modifier = modifier.fillMaxWidth().height(64.dp).background(NeoCanvasColors.chrome).padding(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp).background(NeoCanvasColors.chrome).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (!compact) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
-            BrandMark()
-            Text("NEOCANVAS", color = NeoCanvasColors.paper, fontSize = 13.sp, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 8.dp))
+        if (!compact) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
+                BrandMark()
+                Text(
+                    "NEOCANVAS",
+                    color = NeoCanvasColors.paper,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.35.sp,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
         }
+
         StudioButton(Glyph.Gallery, "Gallery") { onGallery() }
-        StudioMenu(if (state.hasUnsavedChanges) "File •" else "File", buildList {
-            add("New canvas…" to { state.newCanvasDialogVisible = true })
-            add("Open…" to { state.open() })
-            add("Save" to { state.save() })
-            if (state.supportsSaveAs) add("Save As…" to { state.saveAs() })
-            add("Export PNG…" to { state.exportPng() })
-        })
-        StudioButton(Glyph.ImportImage, "Import image") { state.importImage() }
+        StudioActionsMenu(state)
+        StudioButton(
+            Glyph.Fx,
+            "FX and adjustments",
+            state.inspectorVisible && state.inspectorPanel == InspectorPanel.Effects,
+        ) { state.toggleInspector(InspectorPanel.Effects) }
+        StudioButton(Glyph.Select, "Selection tools", state.tool == Tool.Select) {
+            state.activateTool(Tool.Select)
+        }
+        StudioButton(
+            Glyph.Transform,
+            "Transform artwork",
+            state.transformSession != null || state.tool == Tool.MoveSelection,
+        ) { state.activateTransformTool() }
         StudioButton(Glyph.Settings, "Settings") { state.openSettings() }
-        DividerTick()
-        if (toolScroll.maxValue > 0) {
-            StudioButton(Glyph.Previous, "Show previous tools", enabled = toolScroll.canScrollBackward) {
-                scope.launch { toolScroll.animateScrollBy(-scrollStep) }
+
+        Spacer(Modifier.weight(1f))
+
+        StudioButton(
+            Glyph.Brush,
+            "Brush library",
+            state.tool == Tool.Brush &&
+                state.inspectorVisible &&
+                state.inspectorPanel == InspectorPanel.Brushes,
+        ) {
+            state.activateTool(Tool.Brush)
+            state.toggleInspector(InspectorPanel.Brushes)
+        }
+        StudioButton(Glyph.Smudge, "Smudge", state.tool == Tool.Smudge) {
+            state.activateTool(Tool.Smudge)
+        }
+        StudioButton(Glyph.Eraser, "Eraser", state.tool == Tool.Eraser) {
+            state.activateTool(Tool.Eraser)
+        }
+        StudioColourButton(state)
+        StudioButton(
+            Glyph.Layers,
+            "Layers",
+            state.inspectorVisible && state.inspectorPanel == InspectorPanel.Layers,
+        ) { state.toggleInspector(InspectorPanel.Layers) }
+    }
+}
+
+private enum class ActionMenuPage { Root, Add, Canvas, Assist, Tools, File }
+
+@Composable
+private fun StudioActionsMenu(state: EditorState) {
+    var expanded by remember { mutableStateOf(false) }
+    var page by remember { mutableStateOf(ActionMenuPage.Root) }
+
+    fun closeMenu() {
+        expanded = false
+        page = ActionMenuPage.Root
+    }
+
+    Box {
+        Box(
+            Modifier.height(52.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (expanded) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
+                .clickable {
+                    if (expanded) closeMenu() else expanded = true
+                }
+                .semantics { contentDescription = "Actions menu" }
+                .padding(horizontal = 11.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (state.hasUnsavedChanges) "Actions •" else "Actions",
+                color = if (expanded) NeoCanvasColors.ink else NeoCanvasColors.paper,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { closeMenu() },
+            containerColor = NeoCanvasColors.panelRaised,
+        ) {
+            when (page) {
+                ActionMenuPage.Root -> {
+                    ActionSubmenuItem("Add / Import") { page = ActionMenuPage.Add }
+                    ActionSubmenuItem("Canvas") { page = ActionMenuPage.Canvas }
+                    ActionSubmenuItem("Drawing Assist") { page = ActionMenuPage.Assist }
+                    ActionSubmenuItem("Utility Tools") { page = ActionMenuPage.Tools }
+                    ActionSubmenuItem("File / Export") { page = ActionMenuPage.File }
+                }
+                ActionMenuPage.Add -> {
+                    ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem("Import Image…") { closeMenu(); state.importImage() }
+                }
+                ActionMenuPage.Canvas -> {
+                    ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem("New Canvas…") { closeMenu(); state.newCanvasDialogVisible = true }
+                    ActionItem("Fit Canvas") { closeMenu(); state.resetView() }
+                }
+                ActionMenuPage.Assist -> {
+                    ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem(if (state.gridGuideVisible) "Grid Guide ✓" else "Grid Guide") {
+                        closeMenu()
+                        state.gridGuideVisible = !state.gridGuideVisible
+                        state.persistPreferences()
+                    }
+                    ActionItem(if (state.perspectiveGuideVisible) "Perspective Guide ✓" else "Perspective Guide") {
+                        closeMenu()
+                        state.perspectiveGuideVisible = !state.perspectiveGuideVisible
+                        state.persistPreferences()
+                    }
+                    ActionItem("Symmetry Off") { closeMenu(); state.symmetry = DrawingSymmetry.None }
+                    ActionItem("Vertical Symmetry") { closeMenu(); state.symmetry = DrawingSymmetry.Vertical }
+                    ActionItem("Horizontal Symmetry") { closeMenu(); state.symmetry = DrawingSymmetry.Horizontal }
+                    ActionItem("Four-way Symmetry") { closeMenu(); state.symmetry = DrawingSymmetry.Both }
+                }
+                ActionMenuPage.Tools -> {
+                    ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem("Fill") { closeMenu(); state.activateTool(Tool.Fill) }
+                    ActionItem("Eyedropper") { closeMenu(); state.activateTool(Tool.Eyedropper) }
+                    ActionItem("Pan / Move Canvas") { closeMenu(); state.activateTool(Tool.Pan) }
+                }
+                ActionMenuPage.File -> {
+                    ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem("Open…") { closeMenu(); state.open() }
+                    ActionItem("Save") { closeMenu(); state.save() }
+                    if (state.supportsSaveAs) {
+                        ActionItem("Save As…") { closeMenu(); state.saveAs() }
+                    }
+                    ActionItem("Export PNG…") { closeMenu(); state.exportPng() }
+                }
             }
         }
-        Row(Modifier.weight(1f).horizontalScroll(toolScroll),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StudioButton(Glyph.Brush, "Paint brush", state.tool == Tool.Brush) { state.activateTool(Tool.Brush) }
-        StudioButton(Glyph.Eraser, "Eraser", state.tool == Tool.Eraser) { state.activateTool(Tool.Eraser) }
-        StudioButton(Glyph.Smudge, "Smudge pigment", state.tool == Tool.Smudge) { state.activateTool(Tool.Smudge) }
-        StudioButton(Glyph.Transform, "Move canvas", state.tool == Tool.Pan) { state.activateTool(Tool.Pan) }
-        StudioButton(Glyph.Fill, "Fill connected area on active layer", state.tool == Tool.Fill) { state.activateTool(Tool.Fill) }
-        StudioButton(Glyph.Eyedropper, "Sample visible colour", state.tool == Tool.Eyedropper) { state.activateTool(Tool.Eyedropper) }
-        StudioButton(Glyph.Select, "Selection tools", state.tool == Tool.Select) { state.activateTool(Tool.Select) }
-        DividerTick()
-        SymmetryMenu(state)
-        if (state.selection != null) {
-            StudioButton(Glyph.Transform, "Move selected artwork", state.tool == Tool.MoveSelection) { state.activateTool(Tool.MoveSelection) }
-            StudioButton(Glyph.ClearSelection, "Deselect") { state.clearSelection() }
-        }
-        }
-        if (toolScroll.maxValue > 0) {
-            StudioButton(Glyph.Next, "Show more tools", enabled = toolScroll.canScrollForward) {
-                scope.launch { toolScroll.animateScrollBy(scrollStep) }
-            }
-        }
-        if (!compact) Text("${(state.zoom * 100).toInt()}%", color = NeoCanvasColors.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
-        StudioButton(Glyph.Fit, "Fit canvas") { state.resetView() }
-        if (compact) {
-            StudioMenu("Studio", listOf(
-                "Brushes" to { state.showInspector(InspectorPanel.Brushes) },
-                "Colour and palette" to { state.showInspector(InspectorPanel.Colors) },
-                "FX / Adjustments" to { state.showInspector(InspectorPanel.Effects) },
-                "Hide panel" to { state.hideInspector() },
-            ), active = state.inspectorVisible && state.inspectorPanel != InspectorPanel.Layers)
-            StudioButton(
-                Glyph.Layers,
-                "Layers",
-                state.inspectorVisible && state.inspectorPanel == InspectorPanel.Layers,
-            ) { state.toggleInspector(InspectorPanel.Layers) }
-        } else {
-        StudioButton(Glyph.Fx, "FX and adjustments", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Effects) { state.toggleInspector(InspectorPanel.Effects) }
-        StudioButton(Glyph.Palette, "Colour studio", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Colors) { state.toggleInspector(InspectorPanel.Colors) }
-        StudioButton(Glyph.Library, "Brush library", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Brushes) { state.toggleInspector(InspectorPanel.Brushes) }
-        StudioButton(Glyph.Layers, "Layers", state.inspectorVisible && state.inspectorPanel == InspectorPanel.Layers) { state.toggleInspector(InspectorPanel.Layers) }
+    }
+}
+
+@Composable
+private fun ActionItem(label: String, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, color = NeoCanvasColors.paper, fontSize = 14.sp) },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun ActionSubmenuItem(label: String, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label + "  ›", color = NeoCanvasColors.paper, fontSize = 14.sp) },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun ActionBackItem(onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text("‹  Actions", color = NeoCanvasColors.accent, fontSize = 14.sp) },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun StudioColourButton(state: EditorState) {
+    val active = state.inspectorVisible && state.inspectorPanel == InspectorPanel.Colors
+    StudioTooltip("Colour " + colorHex(state.color)) {
+        Box(
+            modifier = Modifier.size(54.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (active) NeoCanvasColors.panelRaised else Color.Transparent)
+                .clickable { state.toggleInspector(InspectorPanel.Colors) }
+                .semantics { contentDescription = "Open Colour Studio" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier.size(32.dp)
+                    .border(
+                        if (active) 3.dp else 2.dp,
+                        if (active) NeoCanvasColors.accent else NeoCanvasColors.paper,
+                        CircleShape,
+                    )
+                    .padding(3.dp)
+                    .clip(CircleShape)
+                    .background(state.color),
+            )
         }
     }
 }
@@ -215,22 +347,32 @@ fun StudioRail(state: EditorState, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.tool == Tool.Fill)
-            VerticalRailControl("TOL", state.fillTolerance.toFloat(), 0f..255f, { "${it.toInt()}" }) { state.fillTolerance = it.toInt() }
-        else VerticalRailControl("SIZE", state.brushSize, 1f..192f, { "${it.toInt()}" }) { state.brushSize = it }
+        if (state.tool == Tool.Fill) {
+            VerticalRailControl("TOL", state.fillTolerance.toFloat(), 0f..255f, { it.toInt().toString() }) {
+                state.fillTolerance = it.toInt()
+            }
+        } else {
+            VerticalRailControl("SIZE", state.brushSize, 1f..192f, { it.toInt().toString() }) {
+                state.brushSize = it
+            }
+        }
+
+        if (state.tool == Tool.Smudge) {
+            VerticalRailControl("POWER", state.smudgeStrength, 0.01f..1f, { ((it * 100).toInt()).toString() }) {
+                state.smudgeStrength = it
+            }
+        } else {
+            VerticalRailControl("OPACITY", state.brushOpacity, 0.05f..1f, { ((it * 100).toInt()).toString() }) {
+                state.brushOpacity = it
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+        StudioButton(Glyph.Eyedropper, "Eyedropper", state.tool == Tool.Eyedropper) {
+            state.activateTool(Tool.Eyedropper)
+        }
         StudioButton(Glyph.Undo, "Undo", enabled = state.canUndo) { state.undo() }
         StudioButton(Glyph.Redo, "Redo", enabled = state.canRedo) { state.redo() }
-        if (state.tool == Tool.Smudge)
-            VerticalRailControl("POWER", state.smudgeStrength, 0.01f..1f, { "${(it * 100).toInt()}" }) { state.smudgeStrength = it }
-        else
-            VerticalRailControl("FLOW", state.brushOpacity, 0.05f..1f, { "${(it * 100).toInt()}" }) { state.brushOpacity = it }
-        Spacer(Modifier.weight(1f))
-        Box(Modifier.size(38.dp).border(2.dp, Color.White, CircleShape).padding(3.dp).clip(CircleShape).background(state.color)
-            .clickable { state.showInspector(InspectorPanel.Colors) }
-            .semantics { contentDescription = "Current colour ${colorHex(state.color)}; open palette" })
-        Text(colorHex(state.color), color = NeoCanvasColors.paper, fontSize = 8.sp,
-            modifier = Modifier.clickable { state.showInspector(InspectorPanel.Colors) })
-        StudioButton(Glyph.Palette, "Colour studio") { state.showInspector(InspectorPanel.Colors) }
     }
 }
 

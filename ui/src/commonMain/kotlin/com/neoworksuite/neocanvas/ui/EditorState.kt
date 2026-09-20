@@ -188,6 +188,16 @@ class EditorState(
     private var effectPreviewLayerId: String? = null
 
     fun clearSelection() { transformSession = null; selection = null }
+
+    fun activateTransformTool() {
+        if (transformSession != null) {
+            tool = Tool.MoveSelection
+            return
+        }
+        if (selection == null) selectLayerArtwork()
+        if (selection != null) beginTransform()
+    }
+
     fun beginTransform(): Boolean {
         val bounds = selection ?: return false
         if (bounds.invertedRegion != null) {

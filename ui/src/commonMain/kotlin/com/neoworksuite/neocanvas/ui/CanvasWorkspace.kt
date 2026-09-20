@@ -19,6 +19,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -589,27 +591,27 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
     ) {
         if (transform == null) {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransformDockButton("Rectangle", emphasized = state.selectionMode == SelectionShape.Rectangle) {
-                    state.selectionMode = SelectionShape.Rectangle; state.tool = Tool.Select
-                }
-                TransformDockButton("Ellipse", emphasized = state.selectionMode == SelectionShape.Ellipse) {
-                    state.selectionMode = SelectionShape.Ellipse; state.tool = Tool.Select
-                }
-                TransformDockButton("Lasso", emphasized = state.selectionMode == SelectionShape.Lasso) {
-                    state.selectionMode = SelectionShape.Lasso; state.tool = Tool.Select
-                }
                 TransformDockButton("Automatic", emphasized = state.selectionMode == SelectionShape.Automatic) {
                     state.selectionMode = SelectionShape.Automatic
                     state.tool = Tool.Select
                     state.statusMessage = "Automatic selection — tap a colour area"
                 }
-                if (state.selection != null) TransformDockButton("Invert") { state.invertSelection() }
+                TransformDockButton("Freehand", emphasized = state.selectionMode == SelectionShape.Lasso) {
+                    state.selectionMode = SelectionShape.Lasso
+                    state.tool = Tool.Select
+                }
+                TransformDockButton("Rectangle", emphasized = state.selectionMode == SelectionShape.Rectangle) {
+                    state.selectionMode = SelectionShape.Rectangle
+                    state.tool = Tool.Select
+                }
+                TransformDockButton("Ellipse", emphasized = state.selectionMode == SelectionShape.Ellipse) {
+                    state.selectionMode = SelectionShape.Ellipse
+                    state.tool = Tool.Select
+                }
             }
+
             if (state.selectionMode == SelectionShape.Automatic) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Tolerance", color = NeoCanvasColors.muted, fontSize = 10.sp)
                     Slider(
                         value = state.automaticSelectionTolerancePercent.toFloat(),
@@ -631,29 +633,27 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
                     )
                 }
             }
+
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransformDockButton("Replace", emphasized = state.selectionCombineMode == SelectionCombineMode.Replace) {
+                TransformDockButton("New", emphasized = state.selectionCombineMode == SelectionCombineMode.Replace) {
                     state.selectionCombineMode = SelectionCombineMode.Replace
                 }
                 TransformDockButton("Add", emphasized = state.selectionCombineMode == SelectionCombineMode.Add) {
                     state.selectionCombineMode = SelectionCombineMode.Add
                 }
-                TransformDockButton("Subtract", emphasized = state.selectionCombineMode == SelectionCombineMode.Subtract) {
+                TransformDockButton("Remove", emphasized = state.selectionCombineMode == SelectionCombineMode.Subtract) {
                     state.selectionCombineMode = SelectionCombineMode.Subtract
                 }
                 TransformDockButton("Intersect", emphasized = state.selectionCombineMode == SelectionCombineMode.Intersect) {
                     state.selectionCombineMode = SelectionCombineMode.Intersect
                 }
-            }
-            if (state.selection != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (state.selection != null) {
                     TransformDockButton("Transform", emphasized = true) { state.beginTransform() }
-                    TransformDockButton("Move") { state.tool = Tool.MoveSelection }
-                    TransformDockButton("Crop Canvas") { state.cropCanvasToSelection() }
-                    TransformDockButton("Deselect", muted = true) { state.clearSelection() }
-                    TransformDockButton("Clear pixels", muted = true) { state.clearSelectedPixels() }
+                    SelectionMoreMenu(state)
                 }
-            } else {
+            }
+
+            if (state.selection == null) {
                 Text(
                     if (state.selectionMode == SelectionShape.Automatic)
                         "Tap a colour area on the active layer"
@@ -679,42 +679,74 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
                 TransformDockButton("Cancel", muted = true) { state.cancelTransform() }
                 TransformDockButton("Reset") { state.resetTransform() }
                 TransformDockButton("Fit") { state.fitTransformToCanvas() }
-                TransformDockButton("Done", emphasized = true) { state.applyTransform() }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransformDockButton("W−") { state.scaleTransformAxis(horizontal = true, factor = .9f) }
-                TransformDockButton("W+") { state.scaleTransformAxis(horizontal = true, factor = 1.1f) }
-                TransformDockButton("H−") { state.scaleTransformAxis(horizontal = false, factor = .9f) }
-                TransformDockButton("H+") { state.scaleTransformAxis(horizontal = false, factor = 1.1f) }
                 TransformDockButton(if (state.transformSnapping) "Snap ✓" else "Snap") {
                     state.transformSnapping = !state.transformSnapping
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransformDockButton("Flip H") {
-                    if (state.applyTransform()) {
-                        state.flipSelection(horizontal = true)
-                        state.beginTransform()
-                    }
-                }
-                TransformDockButton("Flip V") {
-                    if (state.applyTransform()) {
-                        state.flipSelection(horizontal = false)
-                        state.beginTransform()
-                    }
-                }
-                TransformDockButton("−15°") {
-                    state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) - 15f)
-                }
-                TransformDockButton("+15°") {
-                    state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) + 15f)
-                }
-                TransformDockButton(if (state.smoothResizing) "Smooth" else "Pixel") {
-                    state.smoothResizing = !state.smoothResizing
-                }
+                TransformMoreMenu(state)
+                TransformDockButton("Done", emphasized = true) { state.applyTransform() }
             }
         }
     }
+}
+
+@Composable
+private fun SelectionMoreMenu(state: EditorState) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TransformDockButton("More ···") { expanded = true }
+        DropdownMenu(expanded, { expanded = false }, containerColor = NeoCanvasColors.panelRaised) {
+            SelectionMenuItem("Invert") { expanded = false; state.invertSelection() }
+            SelectionMenuItem("Move") { expanded = false; state.tool = Tool.MoveSelection }
+            SelectionMenuItem("Crop Canvas") { expanded = false; state.cropCanvasToSelection() }
+            SelectionMenuItem("Clear Pixels") { expanded = false; state.clearSelectedPixels() }
+            SelectionMenuItem("Deselect") { expanded = false; state.clearSelection() }
+        }
+    }
+}
+
+@Composable
+private fun TransformMoreMenu(state: EditorState) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TransformDockButton("More ···") { expanded = true }
+        DropdownMenu(expanded, { expanded = false }, containerColor = NeoCanvasColors.panelRaised) {
+            SelectionMenuItem("Width −10%") { state.scaleTransformAxis(horizontal = true, factor = .9f) }
+            SelectionMenuItem("Width +10%") { state.scaleTransformAxis(horizontal = true, factor = 1.1f) }
+            SelectionMenuItem("Height −10%") { state.scaleTransformAxis(horizontal = false, factor = .9f) }
+            SelectionMenuItem("Height +10%") { state.scaleTransformAxis(horizontal = false, factor = 1.1f) }
+            SelectionMenuItem("Flip Horizontal") {
+                expanded = false
+                if (state.applyTransform()) {
+                    state.flipSelection(horizontal = true)
+                    state.beginTransform()
+                }
+            }
+            SelectionMenuItem("Flip Vertical") {
+                expanded = false
+                if (state.applyTransform()) {
+                    state.flipSelection(horizontal = false)
+                    state.beginTransform()
+                }
+            }
+            SelectionMenuItem("Rotate −15°") {
+                state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) - 15f)
+            }
+            SelectionMenuItem("Rotate +15°") {
+                state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) + 15f)
+            }
+            SelectionMenuItem(if (state.smoothResizing) "Interpolation: Smooth" else "Interpolation: Pixel") {
+                state.smoothResizing = !state.smoothResizing
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionMenuItem(label: String, action: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, color = NeoCanvasColors.paper) },
+        onClick = action,
+    )
 }
 
 @Composable

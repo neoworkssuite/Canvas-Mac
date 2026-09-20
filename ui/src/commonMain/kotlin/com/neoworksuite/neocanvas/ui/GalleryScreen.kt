@@ -92,16 +92,6 @@ fun GalleryScreen(
                 Button(onClick = onNew) { Text("+  New artwork") }
             }
 
-            if (GalleryPromotion.enabled && !stackOpen) {
-                KickstarterGalleryBanner(
-                    onOpen = {
-                        if (!actions.openExternalUrl(GalleryPromotion.url)) {
-                            message = GalleryPromotion.url
-                        }
-                    },
-                )
-            }
-
             if (selecting && selected.isNotEmpty()) {
                 Row(
                     Modifier.fillMaxWidth().background(NeoCanvasColors.panel).padding(horizontal = 20.dp, vertical = 9.dp),
@@ -128,7 +118,11 @@ fun GalleryScreen(
             }
 
             if (documents.isEmpty()) {
-                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Column(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     Image(neoCanvasIcon(), null, Modifier.size(112.dp))
                     Text("Your Gallery is ready", color = NeoCanvasColors.paper, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                     Text("Create a canvas or open Kids activities. Everything stays local.", color = NeoCanvasColors.muted, modifier = Modifier.padding(10.dp))
@@ -140,7 +134,7 @@ fun GalleryScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(230.dp),
-                    modifier = Modifier.fillMaxSize().padding(18.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(18.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
@@ -165,6 +159,16 @@ fun GalleryScreen(
                         )
                     }
                 }
+            }
+
+            if (GalleryPromotion.enabled && !stackOpen) {
+                KickstarterGalleryBanner(
+                    onOpen = {
+                        if (!actions.openExternalUrl(GalleryPromotion.url)) {
+                            message = GalleryPromotion.url
+                        }
+                    },
+                )
             }
         }
 
