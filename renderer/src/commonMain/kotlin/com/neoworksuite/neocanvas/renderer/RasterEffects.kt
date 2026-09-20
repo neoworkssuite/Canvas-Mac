@@ -125,7 +125,8 @@ object RasterEffects {
         var sb = 0
         var sa = 0
         var count = 0
-        for (dy in -radius..radius) for (dx in -radius..radius) {
+        val offsets = intArrayOf(-radius, 0, radius)
+        for (dy in offsets) for (dx in offsets) {
             val p = pixel(snapshot, key.layerId, x + dx, y + dy, width, height) ?: continue
             sr += p[0]; sg += p[1]; sb += p[2]; sa += p[3]; count++
         }
@@ -145,7 +146,8 @@ object RasterEffects {
         var sb = 0
         var sa = 0
         var count = 0
-        for (offset in -distance..distance) {
+        for (step in -4..4) {
+            val offset = (distance * step) / 4
             val p = pixel(snapshot, key.layerId, x + offset, y, width, height) ?: continue
             sr += p[0]; sg += p[1]; sb += p[2]; sa += p[3]; count++
         }
