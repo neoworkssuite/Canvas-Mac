@@ -71,20 +71,17 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
             BrandMark()
             Text("NEOCANVAS", color = NeoCanvasColors.paper, fontSize = 13.sp, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 8.dp))
         }
+        StudioButton(Glyph.Gallery, "Gallery") { onGallery() }
         StudioMenu(if (state.hasUnsavedChanges) "File •" else "File", buildList {
-            addAll(listOf(
-            "Gallery" to onGallery,
-            "New canvas…" to { state.newCanvasDialogVisible = true },
-            "Open local document…" to { state.open() },
-            "Import image…" to { state.importImage() },
-            "Save local document" to { state.save() },
-            ))
+            add("New canvas…" to { state.newCanvasDialogVisible = true })
+            add("Open…" to { state.open() })
+            add("Save" to { state.save() })
             if (state.supportsSaveAs) add("Save As…" to { state.saveAs() })
-            addAll(listOf(
-            "Export visible PNG…" to { state.exportPng() },
-            ))
+            add("Export PNG…" to { state.exportPng() })
         })
+        StudioButton(Glyph.ImportImage, "Import image") { state.importImage() }
         StudioButton(Glyph.Settings, "Settings") { state.openSettings() }
+        DividerTick()
         if (toolScroll.maxValue > 0) {
             StudioButton(Glyph.Previous, "Show previous tools", enabled = toolScroll.canScrollBackward) {
                 scope.launch { toolScroll.animateScrollBy(-scrollStep) }
@@ -270,7 +267,7 @@ fun studioSliderColors() = SliderDefaults.colors(
     inactiveTrackColor = NeoCanvasColors.track,
 )
 
-private enum class Glyph { Previous, Next, New, Open, Save, Export, Brush, Eraser, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }
+private enum class Glyph { Previous, Next, Gallery, ImportImage, New, Open, Save, Export, Brush, Eraser, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -323,6 +320,42 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(28.dp
             line(Offset(w * .35f, h * .2f), Offset(w * .65f, h * .5f))
             line(Offset(w * .65f, h * .5f), Offset(w * .35f, h * .8f))
         }
+        Glyph.Gallery -> {
+            val s = 2.0f
+            line(Offset(w * .18f, h * .46f), Offset(w * .50f, h * .20f), s)
+            line(Offset(w * .50f, h * .20f), Offset(w * .82f, h * .46f), s)
+            line(Offset(w * .26f, h * .42f), Offset(w * .26f, h * .80f), s)
+            line(Offset(w * .74f, h * .42f), Offset(w * .74f, h * .80f), s)
+            line(Offset(w * .26f, h * .80f), Offset(w * .74f, h * .80f), s)
+            drawRoundRect(
+                color,
+                Offset(w * .43f, h * .56f),
+                Size(w * .14f, h * .24f),
+                androidx.compose.ui.geometry.CornerRadius(2f, 2f),
+                style = Stroke(1.8f),
+            )
+        }
+        Glyph.ImportImage -> {
+            val s = 1.9f
+            drawRoundRect(
+                color,
+                Offset(w * .14f, h * .20f),
+                Size(w * .58f, h * .56f),
+                androidx.compose.ui.geometry.CornerRadius(3f, 3f),
+                style = Stroke(s),
+            )
+            drawCircle(color, w * .055f, Offset(w * .31f, h * .36f))
+            val mountain = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .20f, h * .68f)
+                lineTo(w * .38f, h * .49f)
+                lineTo(w * .50f, h * .60f)
+                lineTo(w * .60f, h * .48f)
+                lineTo(w * .70f, h * .68f)
+            }
+            drawPath(mountain, color, style = Stroke(s, cap = StrokeCap.Round))
+            line(Offset(w * .72f, h * .30f), Offset(w * .90f, h * .30f), 2.2f)
+            line(Offset(w * .81f, h * .21f), Offset(w * .81f, h * .39f), 2.2f)
+        }
         Glyph.Select -> {
             val s = 2.0f
             line(Offset(w * .16f, h * .34f), Offset(w * .16f, h * .16f), s)
@@ -339,17 +372,22 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(28.dp
             line(Offset(w * .8f, h * .2f), Offset(w * .2f, h * .8f))
         }
         Glyph.Fill -> {
-            line(Offset(w * .2f, h * .45f), Offset(w * .5f, h * .15f))
-            line(Offset(w * .5f, h * .15f), Offset(w * .8f, h * .45f))
-            line(Offset(w * .8f, h * .45f), Offset(w * .5f, h * .75f))
-            line(Offset(w * .5f, h * .75f), Offset(w * .2f, h * .45f))
-            line(Offset(w * .25f, h * .45f), Offset(w * .75f, h * .45f))
-            drawCircle(color, w * .09f, Offset(w * .85f, h * .8f))
+            val s = 2.2f
+            line(Offset(w * .28f, h * .30f), Offset(w * .58f, h * .22f), s)
+            line(Offset(w * .58f, h * .22f), Offset(w * .76f, h * .50f), s)
+            line(Offset(w * .76f, h * .50f), Offset(w * .46f, h * .66f), s)
+            line(Offset(w * .46f, h * .66f), Offset(w * .24f, h * .42f), s)
+            line(Offset(w * .24f, h * .42f), Offset(w * .28f, h * .30f), s)
+            line(Offset(w * .30f, h * .46f), Offset(w * .70f, h * .46f), 1.7f)
+            drawCircle(color, w * .085f, Offset(w * .79f, h * .76f))
         }
         Glyph.Eyedropper -> {
-            line(Offset(w * .2f, h * .8f), Offset(w * .75f, h * .25f), 3f)
-            line(Offset(w * .5f, h * .2f), Offset(w * .8f, h * .5f), 3f)
-            drawCircle(color, w * .07f, Offset(w * .15f, h * .85f))
+            val s = 2.3f
+            line(Offset(w * .24f, h * .76f), Offset(w * .70f, h * .30f), 4.2f)
+            line(Offset(w * .56f, h * .20f), Offset(w * .80f, h * .44f), s)
+            line(Offset(w * .48f, h * .28f), Offset(w * .72f, h * .52f), s)
+            line(Offset(w * .18f, h * .82f), Offset(w * .30f, h * .82f), s)
+            drawCircle(color, w * .055f, Offset(w * .15f, h * .85f))
         }
         Glyph.New -> { line(Offset(w * .50f, h * .16f), Offset(w * .50f, h * .84f)); line(Offset(w * .16f, h * .50f), Offset(w * .84f, h * .50f)) }
         Glyph.Open -> { drawRect(color, Offset(w * .18f, h * .34f), Size(w * .64f, h * .42f), style = Stroke(1.8f)); line(Offset(w * .20f, h * .34f), Offset(w * .42f, h * .18f)); line(Offset(w * .42f, h * .18f), Offset(w * .62f, h * .34f)) }
