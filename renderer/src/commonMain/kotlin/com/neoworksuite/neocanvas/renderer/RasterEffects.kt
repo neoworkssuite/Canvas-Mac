@@ -38,10 +38,18 @@ object RasterEffects {
         keys.forEach { key ->
             val source = snapshot[key] ?: return@forEach
             replacements[key] = when (type) {
-                RasterEffectType.Blur -> blurTile(snapshot, key, canvasWidth, canvasHeight,
-                    radius = (1 + settings.amount.coerceIn(0f, 1f) * 9f).roundToInt())
-                RasterEffectType.MotionBlur -> motionBlurTile(snapshot, key, canvasWidth, canvasHeight,
-                    distance = (2 + settings.amount.coerceIn(0f, 1f) * 22f).roundToInt())
+                RasterEffectType.Blur -> {
+                    val strength = settings.amount.coerceIn(0f, 1f)
+                    if (strength <= .001f) source.copyOf()
+                    else blurTile(snapshot, key, canvasWidth, canvasHeight,
+                        radius = (strength * 10f).roundToInt().coerceAtLeast(1))
+                }
+                RasterEffectType.MotionBlur -> {
+                    val strength = settings.amount.coerceIn(0f, 1f)
+                    if (strength <= .001f) source.copyOf()
+                    else motionBlurTile(snapshot, key, canvasWidth, canvasHeight,
+                        distance = (strength * 24f).roundToInt().coerceAtLeast(1))
+                }
                 RasterEffectType.HueSaturation -> transform(source) { r, g, b, a ->
                     val hsv = rgbToHsv(r, g, b)
                     val hueShift = settings.secondary.coerceIn(-1f, 1f) * 180f
@@ -63,7 +71,7 @@ object RasterEffects {
                     )
                 }
                 RasterEffectType.Curves -> transform(source) { r, g, b, a ->
-                    val contrast = .25f + settings.amount.coerceIn(0f, 1f) * 2.75f
+                    val contrast = (1f + settings.amount.coerceIn(-1f, 1f) * 1.75f).coerceAtLeast(.10f)
                     intArrayOf(curveChannel(r, contrast), curveChannel(g, contrast), curveChannel(b, contrast), a)
                 }
                 RasterEffectType.GradientMap -> {
