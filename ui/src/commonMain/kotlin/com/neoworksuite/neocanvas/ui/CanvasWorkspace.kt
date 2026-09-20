@@ -4,10 +4,15 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
@@ -23,17 +28,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
@@ -396,7 +405,7 @@ fun CanvasWorkspace(
                 rotate(state.viewRotationDegrees, pivot = Offset(document.width / 2f, document.height / 2f))
             }) {
                 drawRect(NeoCanvasColors.paper, size = Size(document.width.toFloat(), document.height.toFloat()))
-                drawStoredTiles(state, transformPreview ?: movePreview ?: strokePreview, tileImages)
+                drawStoredTiles(state, transformPreview ?: movePreview ?: state.effectPreviewPatch ?: strokePreview, tileImages)
                 val symmetry = state.symmetry
                 val guideColor = NeoCanvasColors.accent.copy(alpha = .65f)
                 if (symmetry == com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Vertical ||
@@ -444,38 +453,157 @@ fun CanvasWorkspace(
                 }
             }
         }
+        state.effectPreviewType?.let { type ->
+            LiveEffectCanvasReadout(
+                type = type,
+                amount = state.effectPreviewSettings.amount,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp),
+            )
+        }
+
         if (state.selection != null) {
-            Row(Modifier.align(Alignment.BottomCenter).padding(12.dp)
-                .background(NeoCanvasColors.chrome).horizontalScroll(rememberScrollState())) {
-                if (state.transformSession == null) {
-                    TextButton(onClick = { state.selectionMode = SelectionShape.Rectangle; state.tool = Tool.Select }) { Text("Rectangle", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.selectionMode = SelectionShape.Ellipse; state.tool = Tool.Select }) { Text("Ellipse", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.selectionMode = SelectionShape.Lasso; state.tool = Tool.Select }) { Text("Lasso", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.invertSelection() }) { Text("Invert", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.beginTransform() }) { Text("Transform", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.tool = Tool.MoveSelection }) { Text("Move", color = NeoCanvasColors.accent) }
-                } else {
-                    TextButton(onClick = { state.applyTransform() }) { Text("Apply", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.cancelTransform() }) { Text("Cancel", color = NeoCanvasColors.muted) }
-                    TextButton(onClick = { state.updateTransform(scale = (state.transformSession?.scale ?: 1f) / 1.1f) }) { Text("Scale −", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.updateTransform(scale = (state.transformSession?.scale ?: 1f) * 1.1f) }) { Text("Scale +", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) - 15f) }) { Text("Rotate −15°", color = NeoCanvasColors.accent) }
-                    TextButton(onClick = { state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) + 15f) }) { Text("Rotate +15°", color = NeoCanvasColors.accent) }
-                }
-                TextButton(onClick = { state.flipSelection(horizontal = true) }) { Text("Flip horizontal", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.rotateSelection() }) { Text("Rotate 90°", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.rotateSelection(-15f) }) { Text("−15°", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.rotateSelection(15f) }) { Text("+15°", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.resizeSelection(.5f) }) { Text("Half size", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.smoothResizing = !state.smoothResizing }) {
-                    Text(if (state.smoothResizing) "Resize: smooth" else "Resize: pixel", color = NeoCanvasColors.accent)
-                }
-                TextButton(onClick = { state.resizeSelection(2f) }) { Text("Double size", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.flipSelection(horizontal = false) }) { Text("Flip vertical", color = NeoCanvasColors.accent) }
-                TextButton(onClick = { state.clearSelection() }) { Text("Deselect", color = NeoCanvasColors.muted) }
-                TextButton(onClick = { state.clearSelectedPixels() }) { Text("Clear pixels", color = NeoCanvasColors.muted) }
+            SelectionControlDock(
+                state = state,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiveEffectCanvasReadout(
+    type: com.neoworksuite.neocanvas.renderer.RasterEffectType,
+    amount: Float,
+    modifier: Modifier = Modifier,
+) {
+    val signed = type == com.neoworksuite.neocanvas.renderer.RasterEffectType.HueSaturation ||
+        type == com.neoworksuite.neocanvas.renderer.RasterEffectType.ColourBalance ||
+        type == com.neoworksuite.neocanvas.renderer.RasterEffectType.Curves
+    val binary = type == com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap ||
+        type == com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale ||
+        type == com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert
+    val percent = if (binary) 100 else (amount * 100f).toInt()
+    val strength = if (binary) 1f else abs(amount).coerceIn(0f, 1f)
+
+    Column(
+        modifier.widthIn(min = 210.dp, max = 320.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(NeoCanvasColors.chrome.copy(alpha = .94f))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                effectName(type),
+                color = NeoCanvasColors.paper,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                if (signed && percent > 0) "+$percent%" else "$percent%",
+                color = NeoCanvasColors.accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(NeoCanvasColors.track)) {
+            if (strength > 0f) {
+                Box(
+                    Modifier.fillMaxWidth(strength)
+                        .height(3.dp)
+                        .background(NeoCanvasColors.accent),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifier) {
+    val transform = state.transformSession
+    Column(
+        modifier.widthIn(max = 760.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(NeoCanvasColors.chrome.copy(alpha = .96f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (transform == null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TransformDockButton("Rectangle") { state.selectionMode = SelectionShape.Rectangle; state.tool = Tool.Select }
+                TransformDockButton("Ellipse") { state.selectionMode = SelectionShape.Ellipse; state.tool = Tool.Select }
+                TransformDockButton("Lasso") { state.selectionMode = SelectionShape.Lasso; state.tool = Tool.Select }
+                TransformDockButton("Invert") { state.invertSelection() }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TransformDockButton("Transform", emphasized = true) { state.beginTransform() }
+                TransformDockButton("Move") { state.tool = Tool.MoveSelection }
+                TransformDockButton("Deselect", muted = true) { state.clearSelection() }
+                TransformDockButton("Clear pixels", muted = true) { state.clearSelectedPixels() }
+            }
+        } else {
+            val scalePercent = (transform.scale * 100f).toInt()
+            val rotation = transform.rotationDegrees.toInt()
+            Text(
+                "UNIFORM  •  " + scalePercent + "%  •  " + rotation + "°",
+                color = NeoCanvasColors.muted,
+                fontSize = 10.sp,
+                letterSpacing = .7.sp,
+                modifier = Modifier.padding(top = 2.dp, bottom = 1.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TransformDockButton("Cancel", muted = true) { state.cancelTransform() }
+                TransformDockButton("Reset") { state.resetTransform() }
+                TransformDockButton("Fit") { state.fitTransformToCanvas() }
+                TransformDockButton("Done", emphasized = true) { state.applyTransform() }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TransformDockButton("Flip H") {
+                    if (state.applyTransform()) {
+                        state.flipSelection(horizontal = true)
+                        state.beginTransform()
+                    }
+                }
+                TransformDockButton("Flip V") {
+                    if (state.applyTransform()) {
+                        state.flipSelection(horizontal = false)
+                        state.beginTransform()
+                    }
+                }
+                TransformDockButton("−15°") {
+                    state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) - 15f)
+                }
+                TransformDockButton("+15°") {
+                    state.updateTransform(rotationDegrees = (state.transformSession?.rotationDegrees ?: 0f) + 15f)
+                }
+                TransformDockButton(if (state.smoothResizing) "Smooth" else "Pixel") {
+                    state.smoothResizing = !state.smoothResizing
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransformDockButton(
+    label: String,
+    emphasized: Boolean = false,
+    muted: Boolean = false,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick) {
+        Text(
+            label,
+            color = when {
+                emphasized -> NeoCanvasColors.accent
+                muted -> NeoCanvasColors.muted
+                else -> NeoCanvasColors.paper
+            },
+            fontSize = 12.sp,
+            fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
+        )
     }
 }
 
