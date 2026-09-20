@@ -121,18 +121,34 @@ object Rasterizer {
         val right = min(canvasWidth - 1, ceil(point.x + radius).toInt())
         val bottom = min(canvasHeight - 1, ceil(point.y + radius).toInt())
         if (left > right || top > bottom) return
+
+        // Brush dynamics are constant for this stamp. Keep them out of the hot per-pixel loop.
+        val dynamics = brush?.dynamics
+        val tip = brush?.tip ?: BrushTip.Round
+        val shapeRatio = dynamics?.shapeRatio ?: 1f
+        val inverseShapeRatio = 1f / shapeRatio
+        val hardness = dynamics?.hardness ?: 1f
+        val grain = dynamics?.grain ?: 0f
+        val wetMix = dynamics?.wetMix ?: 0f
+        val rotation = dynamics?.rotation ?: 0f
+        val angle = if (rotation == 0f) 0f
+        else rotation * noise01(point.x.toInt(), point.y.toInt(), 73) * 6.2831855f
+        val angleCos = if (angle == 0f) 1f else cos(angle)
+        val angleSin = if (angle == 0f) 0f else sin(angle)
+        val outerDistance = 1f + .5f / radius
+        val flatHalfHeight = radius * shapeRatio * .42f
+        val chalkThreshold = .16f + grain * .28f
+        val wetRetain = 1f - wetMix * .28f
+        val wetBlend = wetMix * .28f
+
         for (y in top..bottom) for (x in left..right) {
             if (!acceptsPixel(x, y)) continue
             val dx = x + .5f - point.x
             val dy = y + .5f - point.y
-            val dynamics = brush?.dynamics
-            val angle = (dynamics?.rotation ?: 0f) * noise01(point.x.toInt(), point.y.toInt(), 73) * 6.2831855f
-            val rotatedX = dx * cos(angle) - dy * sin(angle)
-            val rotatedY = dx * sin(angle) + dy * cos(angle)
-            val shapeRatio = dynamics?.shapeRatio ?: 1f
-            val distance = sqrt(rotatedX * rotatedX + (rotatedY / shapeRatio) * (rotatedY / shapeRatio)) / radius
-            val hardness = dynamics?.hardness ?: 1f
-            val outerDistance = 1f + .5f / radius
+            val rotatedX = dx * angleCos - dy * angleSin
+            val rotatedY = dx * angleSin + dy * angleCos
+            val scaledY = rotatedY * inverseShapeRatio
+            val distance = sqrt(rotatedX * rotatedX + scaledY * scaledY) / radius
             val edge = when {
                 distance > outerDistance -> 0f
                 hardness >= .999f -> (radius + .5f - distance * radius).coerceIn(0f, 1f)
@@ -140,10 +156,10 @@ object Rasterizer {
                 else -> ((outerDistance - distance) / (outerDistance - hardness)).coerceIn(0f, 1f)
             }
             val pixelNoise = noise01(x, y, 101)
-            var coverage = when (brush?.tip ?: BrushTip.Round) {
+            var coverage = when (tip) {
                 BrushTip.Round -> if (brush == null) { if (distance <= 1f) 1f else 0f } else edge
                 BrushTip.SoftRound -> (1f - distance * distance).coerceIn(0f, 1f).let { it * it * it }
-                BrushTip.Flat -> if (abs(rotatedX) <= radius && abs(rotatedY) <= radius * shapeRatio * .42f) edge else 0f
+                BrushTip.Flat -> if (abs(rotatedX) <= radius && abs(rotatedY) <= flatHalfHeight) edge else 0f
                 BrushTip.Pencil -> if (edge > 0f) {
                     edge * (.20f + .65f * pixelNoise)
                 } else 0f
@@ -152,7 +168,7 @@ object Rasterizer {
                     edge * bristle * (.25f + .75f * pixelNoise)
                 }
                 BrushTip.Bristle -> edge * (.18f + .82f * abs(sin(rotatedY * .72f))) * (.45f + .55f * pixelNoise)
-                BrushTip.Chalk -> if (pixelNoise > .16f + (dynamics?.grain ?: 0f) * .28f) edge * (.38f + .62f * pixelNoise) else 0f
+                BrushTip.Chalk -> if (pixelNoise > chalkThreshold) edge * (.38f + .62f * pixelNoise) else 0f
                 BrushTip.Water -> {
                     val soft = (1f - distance).coerceIn(0f, 1f)
                     val pooledEdge = (1f - abs(distance - .78f) * 5f).coerceIn(0f, 1f)
@@ -161,12 +177,10 @@ object Rasterizer {
                 BrushTip.Spray -> if (distance <= 1f && pixelNoise > .58f) edge * pixelNoise else 0f
                 BrushTip.Pixel -> if (abs(rotatedX) <= radius && abs(rotatedY) <= radius * shapeRatio) 1f else 0f
             }
-            val grain = dynamics?.grain ?: 0f
             coverage *= 1f - grain * (1f - pixelNoise) * .78f
-            val wetMix = dynamics?.wetMix ?: 0f
             if (wetMix > 0f && distance <= 1f) {
                 val bloom = (1f - distance * distance).coerceIn(0f, 1f) * (.32f + .68f * pixelNoise)
-                coverage = coverage * (1f - wetMix * .28f) + bloom * wetMix * .28f
+                coverage = coverage * wetRetain + bloom * wetBlend
             }
             val strength = opacity * opacityPressure * coverage
             if (strength <= 0f) continue
