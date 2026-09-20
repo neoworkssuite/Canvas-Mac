@@ -1,4 +1,4 @@
-name: NeoCanvas iPad Build
+name: NeoCanvas CI
 
 on:
   push:
@@ -8,9 +8,52 @@ on:
   workflow_dispatch:
 
 jobs:
+  fast-validation:
+    name: Fast validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: neocanvas-fast-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout NeoCanvas
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Prepare Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Verify Gradle project
+        run: ./gradlew projects
+
+      - name: Run NeoCanvas shared tests
+        run: |
+          ./gradlew \
+            :core:desktopTest \
+            :brushes:desktopTest \
+            :renderer:desktopTest \
+            :ui:desktopTest
+
   ipad-build:
-    name: Build NeoCanvas for iPad
+    name: Full iPad validation
+    needs: fast-validation
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      contains(github.event.head_commit.message, '[ipad]') ||
+      contains(github.event.head_commit.message, '[full-ci]')
     runs-on: macos-26
+    timeout-minutes: 45
+    concurrency:
+      group: neocanvas-ipad-${{ github.ref }}
+      cancel-in-progress: false
 
     steps:
       - name: Checkout NeoCanvas
