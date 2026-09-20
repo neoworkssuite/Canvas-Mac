@@ -35,7 +35,7 @@ import com.neoworksuite.neocanvas.renderer.TileKey
 import com.neoworksuite.neocanvas.renderer.TileStore
 
 enum class Tool { Brush, Eraser, Pan, Fill, Eyedropper, Select, MoveSelection }
-enum class InspectorPanel { Layers, Brushes, Colors }
+enum class InspectorPanel { Layers, Brushes, Colors, Effects }
 enum class PendingDocumentAction { New, Open, Close }
 data class DrawPoint(val x: Float, val y: Float, val pressure: Float = 1f)
 
@@ -455,7 +455,26 @@ class EditorState(
         statusMessage = "Selection inverted"
     }
     var inspectorPanel: InspectorPanel by mutableStateOf(InspectorPanel.Layers)
-    var inspectorVisible: Boolean by mutableStateOf(true)
+    var inspectorVisible: Boolean by mutableStateOf(false)
+    var settingsVisible: Boolean by mutableStateOf(false)
+
+    // Workspace preferences. Settings UI owns these rather than scattering toggles across tool panels.
+    var fingerPaintingEnabled: Boolean by mutableStateOf(true)
+    var canvasRotationEnabled: Boolean by mutableStateOf(true)
+    var autoRecoveryEnabled: Boolean by mutableStateOf(true)
+    var showStatusMessages: Boolean by mutableStateOf(true)
+
+    fun resetPreferences() {
+        fingerPaintingEnabled = true
+        canvasRotationEnabled = true
+        autoRecoveryEnabled = true
+        showStatusMessages = true
+        smoothResizing = true
+        inspectorVisible = false
+        settingsVisible = false
+        statusMessage = "NeoCanvas preferences reset"
+    }
+
     var zoom: Float by mutableFloatStateOf(1f)
     var panX: Float by mutableFloatStateOf(0f)
     var panY: Float by mutableFloatStateOf(0f)
@@ -618,6 +637,53 @@ class EditorState(
         afterHistoryMove()
         return true
     }
+    fun applyEffect(
+        type: com.neoworksuite.neocanvas.renderer.RasterEffectType,
+        settings: com.neoworksuite.neocanvas.renderer.RasterEffectSettings,
+    ): Boolean {
+        val layerId = activeLayerId ?: run {
+            statusMessage = "Select a layer before applying an effect"
+            return false
+        }
+        val layer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: run {
+            statusMessage = "Select an unlocked visible layer before applying an effect"
+            return false
+        }
+        if (layer.payload !is LayerPayload.Raster) return false
+
+        val before = tileStore.snapshot()
+        val patch = com.neoworksuite.neocanvas.renderer.RasterEffects.apply(
+            store = tileStore,
+            layerId = layerId,
+            canvasWidth = document.width,
+            canvasHeight = document.height,
+            type = type,
+            settings = settings,
+            gradientHighlight = color,
+        )
+        val changed = tileStore.applyPatch(patch)
+        if (changed.isEmpty()) {
+            statusMessage = "No pixels changed"
+            return false
+        }
+
+        execute(
+            ApplyRasterPatch(layerId, tileStore.keys - before.keys, before.keys - tileStore.keys),
+            before,
+        )
+        statusMessage = when (type) {
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Blur -> "Blur applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.MotionBlur -> "Motion blur applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.HueSaturation -> "Hue / Saturation applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.ColourBalance -> "Colour balance applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Curves -> "Curves applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.GradientMap -> "Gradient map applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Grayscale -> "Grayscale applied"
+            com.neoworksuite.neocanvas.renderer.RasterEffectType.Invert -> "Invert applied"
+        }
+        return true
+    }
+
     fun zoomBy(multiplier: Float) { zoom = (zoom * multiplier).coerceIn(.20f, 6f) }
     fun rotateViewBy(degrees: Float) {
         if (!degrees.isFinite()) return
