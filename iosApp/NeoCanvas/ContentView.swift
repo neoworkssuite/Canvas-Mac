@@ -18,6 +18,6 @@ struct NeoCanvasComposeView: UIViewControllerRepresentable {
 struct ContentView: View {
     var body: some View {
         NeoCanvasComposeView()
-            .ignoresSafeArea()
+            .statusBarHidden(true)
     }
 }
