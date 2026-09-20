@@ -79,18 +79,26 @@ fun SettingsPanel(
             state.perspectiveGuideVisible,
         ) { state.perspectiveGuideVisible = it; state.persistPreferences() }
 
-        Column(Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Grid spacing", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                Text("${state.guideSpacing.toInt()} px", color = NeoCanvasColors.muted, fontSize = 11.sp)
+        if (state.gridGuideVisible) {
+            Column(Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Grid spacing",
+                        color = NeoCanvasColors.paper,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("${state.guideSpacing.toInt()} px", color = NeoCanvasColors.muted, fontSize = 11.sp)
+                }
+                Slider(
+                    value = state.guideSpacing,
+                    onValueChange = { state.guideSpacing = it },
+                    onValueChangeFinished = state::persistPreferences,
+                    valueRange = 32f..512f,
+                    colors = studioSliderColors(),
+                )
             }
-            Slider(
-                value = state.guideSpacing,
-                onValueChange = { state.guideSpacing = it },
-                onValueChangeFinished = state::persistPreferences,
-                valueRange = 32f..512f,
-                colors = studioSliderColors(),
-            )
         }
 
         SettingsSection("SAVING & RECOVERY")
@@ -103,7 +111,7 @@ fun SettingsPanel(
         SettingsSection("INTERFACE")
         SettingsToggle(
             "Status messages",
-            "Show save, tool and editing messages along the bottom of the workspace.",
+            "Show temporary save, tool and editing notifications over the workspace.",
             state.showStatusMessages,
         ) { state.showStatusMessages = it; state.persistPreferences() }
 
