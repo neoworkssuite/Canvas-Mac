@@ -35,4 +35,9 @@ class LayerPanelInteractionTest {
         assertEquals(false, allowsLayerReorder(LayerDragRegion.Body))
         assertEquals(false, allowsLayerReorder(LayerDragRegion.Controls))
     }
+    @Test fun selected_layer_controls_remain_actions_not_reorder_regions() {
+        assertEquals(false, allowsLayerReorder(LayerDragRegion.Controls))
+        assertTrue(allowsLayerReorder(LayerDragRegion.Handle))
+    }
 }
+

@@ -53,6 +53,17 @@ import com.neoworksuite.neocanvas.renderer.TileStore
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+private enum class BrushPanelPage { Library, Studio }
+
+private enum class BrushStudioSection(val label: String) {
+    Stroke("Stroke"),
+    Shape("Shape"),
+    Dynamics("Dynamics"),
+    WetMix("Wet Mix"),
+    ApplePencil("Apple Pencil"),
+    Properties("Properties"),
+}
+
 @Composable
 fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
     val library = remember(state) {
@@ -62,8 +73,21 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
         )
     }
     val pad = remember { BrushTestPadState() }
+    var page by remember { mutableStateOf(BrushPanelPage.Library) }
+
+    if (page == BrushPanelPage.Studio) {
+        BrushStudio(
+            state = state,
+            library = library,
+            pad = pad,
+            modifier = modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            onBack = { page = BrushPanelPage.Library },
+        )
+        return
+    }
+
     Column(modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        InspectorHeading("BRUSH LIBRARY", "${BuiltInBrushes.paintBrushes.size} brushes")
+        InspectorHeading("BRUSHES", BuiltInBrushes.paintBrushes.size.toString() + " brushes")
         OutlinedTextField(
             value = library.query,
             onValueChange = { library.query = it },
@@ -73,17 +97,25 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
         )
         BrushShelfRow(library)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            if (maxWidth >= 470.dp) {
+            if (maxWidth >= 420.dp) {
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CategoryRail(library, Modifier.width(112.dp).fillMaxHeight())
-                    BrushList(state, library, Modifier.width(190.dp).fillMaxHeight())
-                    BrushWorkbench(state, library, pad, Modifier.weight(1f).fillMaxHeight())
+                    CategoryRail(library, Modifier.width(118.dp).fillMaxHeight())
+                    BrushList(
+                        state = state,
+                        library = library,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        onOpenStudio = { page = BrushPanelPage.Studio },
+                    )
                 }
             } else {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     CategoryStrip(library)
-                    BrushList(state, library, Modifier.weight(1f).fillMaxWidth())
-                    BrushWorkbench(state, library, pad, Modifier.fillMaxWidth())
+                    BrushList(
+                        state = state,
+                        library = library,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        onOpenStudio = { page = BrushPanelPage.Studio },
+                    )
                 }
             }
         }
@@ -134,45 +166,84 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun BrushList(state: EditorState, library: BrushLibraryState, modifier: Modifier) {
+private fun BrushList(
+    state: EditorState,
+    library: BrushLibraryState,
+    modifier: Modifier,
+    onOpenStudio: () -> Unit,
+) {
     val brushes = library.visibleBrushes
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (brushes.isEmpty()) item { Text("No matching brushes", color = NeoCanvasColors.muted, fontSize = 11.sp) }
+        if (brushes.isEmpty()) {
+            item { Text("No matching brushes", color = NeoCanvasColors.muted, fontSize = 11.sp) }
+        }
         items(brushes, key = { it.id }) { brush ->
+            val selected = brush.id == state.brush.id
             BrushPreset(
                 brush = brush,
-                selected = brush.id == state.brush.id,
+                selected = selected,
                 favourite = library.isFavourite(brush.id),
                 onFavourite = { library.toggleFavourite(brush.id) },
-                onClick = { library.choose(brush); state.selectBrush(brush) },
+                onClick = {
+                    if (selected) {
+                        onOpenStudio()
+                    } else {
+                        library.choose(brush)
+                        state.selectBrush(brush)
+                    }
+                },
             )
         }
     }
 }
 
 @Composable
-private fun BrushPreset(brush: BrushDefinition, selected: Boolean, favourite: Boolean,
-    onFavourite: () -> Unit, onClick: () -> Unit) {
+private fun BrushPreset(
+    brush: BrushDefinition,
+    selected: Boolean,
+    favourite: Boolean,
+    onFavourite: () -> Unit,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
             .background(if (selected) NeoCanvasColors.panelRaised else NeoCanvasColors.chrome)
-            .clickable(onClick = onClick).padding(horizontal = 7.dp, vertical = 6.dp),
+            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StrokePreview(brush, Modifier.width(58.dp).height(25.dp))
-        Column(Modifier.weight(1f).padding(start = 7.dp)) {
-            Text(brush.name, color = NeoCanvasColors.paper, fontSize = 11.sp, maxLines = 1)
-            Text(brush.tip.name, color = NeoCanvasColors.faint, fontSize = 8.sp)
+        StrokePreview(brush, Modifier.width(72.dp).height(29.dp))
+        Column(Modifier.weight(1f).padding(start = 9.dp)) {
+            Text(brush.name, color = NeoCanvasColors.paper, fontSize = 12.sp, maxLines = 1)
+            Text(
+                if (selected) "Selected · tap again for Brush Studio" else brush.tip.name,
+                color = if (selected) NeoCanvasColors.accent else NeoCanvasColors.faint,
+                fontSize = 8.sp,
+                maxLines = 1,
+            )
         }
-        Text(if (favourite) "★" else "☆", color = if (favourite) NeoCanvasColors.accent else NeoCanvasColors.faint,
-            fontSize = 15.sp, modifier = Modifier.clickable(onClick = onFavourite).padding(3.dp)
-                .semantics { contentDescription = if (favourite) "Remove favourite" else "Add favourite" })
+        if (selected) {
+            Text("EDIT ›", color = NeoCanvasColors.accent, fontSize = 8.sp, modifier = Modifier.padding(end = 5.dp))
+        }
+        Text(
+            if (favourite) "★" else "☆",
+            color = if (favourite) NeoCanvasColors.accent else NeoCanvasColors.faint,
+            fontSize = 15.sp,
+            modifier = Modifier.clickable(onClick = onFavourite).padding(3.dp)
+                .semantics { contentDescription = if (favourite) "Remove favourite" else "Add favourite" },
+        )
     }
 }
 
 @Composable
-private fun BrushWorkbench(state: EditorState, library: BrushLibraryState, pad: BrushTestPadState, modifier: Modifier) {
-    var customName by remember(state.brush.id) { mutableStateOf("${state.brush.name} Custom") }
+private fun BrushStudio(
+    state: EditorState,
+    library: BrushLibraryState,
+    pad: BrushTestPadState,
+    modifier: Modifier,
+    onBack: () -> Unit,
+) {
+    var section by remember { mutableStateOf(BrushStudioSection.Stroke) }
+    var customName by remember(state.brush.id) { mutableStateOf(state.brush.name + " Custom") }
 
     fun updateBrush(update: (BrushDefinition) -> BrushDefinition) {
         state.brush = update(state.brush)
@@ -182,78 +253,140 @@ private fun BrushWorkbench(state: EditorState, library: BrushLibraryState, pad: 
         state.brush = state.brush.copy(dynamics = update(state.brush.dynamics))
     }
 
-    Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(state.brush.name, color = NeoCanvasColors.paper, fontSize = 12.sp, maxLines = 1)
-                Text("TEST PAD · draw here", color = NeoCanvasColors.faint, fontSize = 8.sp, letterSpacing = .7.sp)
+            TextButton(onClick = onBack) {
+                Text("‹ Brushes", color = NeoCanvasColors.accent, fontSize = 11.sp)
             }
-            TextButton(onClick = pad::clear) { Text("Clear", color = NeoCanvasColors.accent, fontSize = 10.sp) }
-        }
-        BrushTestPadCanvas(state, pad, Modifier.fillMaxWidth().height(118.dp))
-        Text("BRUSH STUDIO", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .9.sp)
-
-        CompactSetting("SIZE", "${state.brushSize.toInt()} px", state.brushSize, 1f..192f) { state.brushSize = it }
-        CompactSetting("FLOW", "${(state.brushOpacity * 100).toInt()}%", state.brushOpacity, .01f..1f) { state.brushOpacity = it }
-        CompactSetting("SPACE", "${state.brush.spacing.toInt()}", state.brush.spacing, .5f..96f) {
-            updateBrush { brush -> brush.copy(spacing = it.coerceAtLeast(.5f)) }
-        }
-        CompactSetting("P SIZE", "${(state.brush.pressureSize * 100).toInt()}%", state.brush.pressureSize, 0f..1f) {
-            updateBrush { brush -> brush.copy(pressureSize = it) }
-        }
-        CompactSetting("P FLOW", "${(state.brush.pressureOpacity * 100).toInt()}%", state.brush.pressureOpacity, 0f..1f) {
-            updateBrush { brush -> brush.copy(pressureOpacity = it) }
-        }
-        CompactSetting("GRAIN", "${(state.brush.dynamics.grain * 100).toInt()}%", state.brush.dynamics.grain, 0f..1f) {
-            updateDynamics { dynamics -> dynamics.copy(grain = it) }
-        }
-        CompactSetting("SCAT", "${(state.brush.dynamics.scatter * 100).toInt()}%", state.brush.dynamics.scatter, 0f..1f) {
-            updateDynamics { dynamics -> dynamics.copy(scatter = it) }
-        }
-        CompactSetting("HARD", "${(state.brush.dynamics.hardness * 100).toInt()}%", state.brush.dynamics.hardness, 0f..1f) {
-            updateDynamics { dynamics -> dynamics.copy(hardness = it) }
-        }
-        CompactSetting("WET", "${(state.brush.dynamics.wetMix * 100).toInt()}%", state.brush.dynamics.wetMix, 0f..1f) {
-            updateDynamics { dynamics -> dynamics.copy(wetMix = it) }
-        }
-        CompactSetting("JITTER", "${(state.brush.dynamics.jitter * 100).toInt()}%", state.brush.dynamics.jitter, 0f..1f) {
-            updateDynamics { dynamics -> dynamics.copy(jitter = it) }
-        }
-        CompactSetting("SHAPE", "${(state.brush.dynamics.shapeRatio * 100).toInt()}%", state.brush.dynamics.shapeRatio, .1f..1f) {
-            updateDynamics { dynamics -> dynamics.copy(shapeRatio = it) }
+            Column(Modifier.weight(1f).padding(start = 5.dp)) {
+                Text("BRUSH STUDIO", color = NeoCanvasColors.faint, fontSize = 8.sp, letterSpacing = .9.sp)
+                Text(state.brush.name, color = NeoCanvasColors.paper, fontSize = 14.sp, maxLines = 1)
+            }
+            TextButton(onClick = pad::clear) {
+                Text("Clear Pad", color = NeoCanvasColors.muted, fontSize = 10.sp)
+            }
         }
 
-        OutlinedTextField(
-            value = customName,
-            onValueChange = { customName = it.take(80) },
-            singleLine = true,
-            label = { Text("Custom brush name") },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        BrushTestPadCanvas(state, pad, Modifier.fillMaxWidth().height(150.dp))
+
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = {
-                BuiltInBrushes.find(state.brush.id)?.let(state::selectBrush)
-            }) {
-                Text("Reset preset", color = NeoCanvasColors.muted, fontSize = 9.sp)
+            BrushStudioSection.entries.forEach { option ->
+                ShelfChip(option.label, section == option) { section = option }
             }
-            Spacer(Modifier.weight(1f))
-            TextButton(
-                enabled = customName.trim().isNotEmpty(),
-                onClick = {
-                    val saved = runCatching { library.saveCustom(customName, state.brush) }.getOrNull()
-                    if (saved != null) {
-                        library.choose(saved)
-                        state.selectBrush(saved)
-                        customName = "${saved.name} Copy"
-                        state.statusMessage = "Saved custom brush: ${saved.name}"
+        }
+
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                .clip(RoundedCornerShape(10.dp)).background(NeoCanvasColors.chrome)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(section.label.uppercase(), color = NeoCanvasColors.faint, fontSize = 8.sp, letterSpacing = .8.sp)
+
+            when (section) {
+                BrushStudioSection.Stroke -> {
+                    CompactSetting("SIZE", state.brushSize.toInt().toString() + " px", state.brushSize, 1f..192f) {
+                        state.brushSize = it
                     }
-                },
-            ) {
-                Text("Save Custom", color = NeoCanvasColors.accent, fontSize = 10.sp)
+                    CompactSetting("FLOW", (state.brushOpacity * 100).toInt().toString() + "%", state.brushOpacity, .01f..1f) {
+                        state.brushOpacity = it
+                    }
+                    CompactSetting("SPACE", state.brush.spacing.toInt().toString(), state.brush.spacing, .5f..96f) {
+                        updateBrush { brush -> brush.copy(spacing = it.coerceAtLeast(.5f)) }
+                    }
+                }
+                BrushStudioSection.Shape -> {
+                    CompactSetting("HARD", (state.brush.dynamics.hardness * 100).toInt().toString() + "%", state.brush.dynamics.hardness, 0f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(hardness = value) }
+                    }
+                    CompactSetting("SHAPE", (state.brush.dynamics.shapeRatio * 100).toInt().toString() + "%", state.brush.dynamics.shapeRatio, .1f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(shapeRatio = value) }
+                    }
+                    CompactSetting("ROTATE", (state.brush.dynamics.rotation * 100).toInt().toString() + "%", state.brush.dynamics.rotation, 0f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(rotation = value) }
+                    }
+                }
+                BrushStudioSection.Dynamics -> {
+                    CompactSetting("GRAIN", (state.brush.dynamics.grain * 100).toInt().toString() + "%", state.brush.dynamics.grain, 0f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(grain = value) }
+                    }
+                    CompactSetting("SCAT", (state.brush.dynamics.scatter * 100).toInt().toString() + "%", state.brush.dynamics.scatter, 0f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(scatter = value) }
+                    }
+                    CompactSetting("JITTER", (state.brush.dynamics.jitter * 100).toInt().toString() + "%", state.brush.dynamics.jitter, 0f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(jitter = value) }
+                    }
+                }
+                BrushStudioSection.WetMix -> {
+                    Text(
+                        "Pigment mixing and edge bloom for wet brushes.",
+                        color = NeoCanvasColors.muted,
+                        fontSize = 10.sp,
+                    )
+                    CompactSetting("WET", (state.brush.dynamics.wetMix * 100).toInt().toString() + "%", state.brush.dynamics.wetMix, 0f..1f) { value ->
+                        updateDynamics { dynamics -> dynamics.copy(wetMix = value) }
+                    }
+                }
+                BrushStudioSection.ApplePencil -> {
+                    Text(
+                        "Pressure response used by Apple Pencil and other pressure-aware styluses.",
+                        color = NeoCanvasColors.muted,
+                        fontSize = 10.sp,
+                    )
+                    CompactSetting("P SIZE", (state.brush.pressureSize * 100).toInt().toString() + "%", state.brush.pressureSize, 0f..1f) { value ->
+                        updateBrush { brush -> brush.copy(pressureSize = value) }
+                    }
+                    CompactSetting("P FLOW", (state.brush.pressureOpacity * 100).toInt().toString() + "%", state.brush.pressureOpacity, 0f..1f) { value ->
+                        updateBrush { brush -> brush.copy(pressureOpacity = value) }
+                    }
+                }
+                BrushStudioSection.Properties -> {
+                    Text(
+                        "Save these settings as a local custom brush without changing the built-in preset.",
+                        color = NeoCanvasColors.muted,
+                        fontSize = 10.sp,
+                    )
+                    OutlinedTextField(
+                        value = customName,
+                        onValueChange = { customName = it.take(80) },
+                        singleLine = true,
+                        label = { Text("Custom brush name") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = {
+                            BuiltInBrushes.find(state.brush.id)?.let(state::selectBrush)
+                        }) {
+                            Text("Reset preset", color = NeoCanvasColors.muted, fontSize = 9.sp)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(
+                            enabled = customName.trim().isNotEmpty(),
+                            onClick = {
+                                val source = state.brush.copy(
+                                    baseSize = state.brushSize,
+                                    opacity = state.brushOpacity,
+                                )
+                                val saved = runCatching { library.saveCustom(customName, source) }.getOrNull()
+                                if (saved != null) {
+                                    library.choose(saved)
+                                    state.selectBrush(saved)
+                                    customName = saved.name + " Copy"
+                                    state.statusMessage = "Saved custom brush: " + saved.name
+                                }
+                            },
+                        ) {
+                            Text("Save Custom", color = NeoCanvasColors.accent, fontSize = 10.sp)
+                        }
+                    }
+                }
             }
         }
     }
