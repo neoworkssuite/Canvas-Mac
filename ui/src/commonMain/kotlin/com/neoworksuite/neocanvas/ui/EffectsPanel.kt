@@ -177,6 +177,96 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
                 GradientPreview(listOf(Color.Black, state.color))
             }
 
+            RasterEffectType.Sharpen ->
+                EffectSlider(
+                    label = "Sharpen",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(Color(0xFF4C4F56), Color(0xFFAEB3BC), Color.White),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+            RasterEffectType.Noise ->
+                EffectSlider(
+                    label = "Noise",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(Color(0xFF25272C), Color(0xFF777B84), Color(0xFFE5E7EB)),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+            RasterEffectType.Bloom ->
+                EffectSlider(
+                    label = "Bloom",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(Color(0xFF24262D), Color(0xFFFFD66B), Color.White),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+            RasterEffectType.Halftone ->
+                EffectSlider(
+                    label = "Halftone",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(Color.White, Color(0xFF8B8B8B), Color.Black),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+            RasterEffectType.ChromaticAberration ->
+                EffectSlider(
+                    label = "Chromatic Aberration",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(Color.Cyan, Color.Magenta, Color.Yellow),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+            RasterEffectType.Sharpen -> {
+                line(.20f, .50f, .80f, .50f)
+                line(.50f, .20f, .50f, .80f)
+                line(.28f, .28f, .72f, .72f)
+                line(.72f, .28f, .28f, .72f)
+                drawCircle(mono, w * .07f, Offset(w * .50f, h * .50f))
+            }
+
+            RasterEffectType.Noise -> {
+                val dots = listOf(
+                    .22f to .24f, .50f to .18f, .76f to .28f,
+                    .30f to .52f, .62f to .48f, .82f to .60f,
+                    .18f to .76f, .48f to .78f, .70f to .80f,
+                )
+                dots.forEachIndexed { index, point ->
+                    drawCircle(
+                        mono.copy(alpha = .45f + (index % 3) * .22f),
+                        w * (.035f + (index % 2) * .015f),
+                        Offset(w * point.first, h * point.second),
+                    )
+                }
+            }
+
+            RasterEffectType.Bloom -> {
+                drawCircle(Color(0xFFFFD66B).copy(alpha = .30f), w * .30f, Offset(w * .50f, h * .50f))
+                drawCircle(Color(0xFFFFE99A).copy(alpha = .65f), w * .17f, Offset(w * .50f, h * .50f))
+                drawCircle(Color.White, w * .07f, Offset(w * .50f, h * .50f))
+                line(.50f, .08f, .50f, .24f, s * .85f, mono)
+                line(.50f, .76f, .50f, .92f, s * .85f, mono)
+                line(.08f, .50f, .24f, .50f, s * .85f, mono)
+                line(.76f, .50f, .92f, .50f, s * .85f, mono)
+            }
+
+            RasterEffectType.Halftone -> {
+                val dots = listOf(
+                    .25f to .25f, .50f to .25f, .75f to .25f,
+                    .25f to .50f, .50f to .50f, .75f to .50f,
+                    .25f to .75f, .50f to .75f, .75f to .75f,
+                )
+                dots.forEachIndexed { index, point ->
+                    drawCircle(mono, w * if (index == 4) .085f else .055f, Offset(w * point.first, h * point.second))
+                }
+            }
+
+            RasterEffectType.ChromaticAberration -> {
+                drawCircle(Color.Red.copy(alpha = .75f), w * .22f, Offset(w * .42f, h * .50f), style = Stroke(s))
+                drawCircle(Color.Green.copy(alpha = .75f), w * .22f, Offset(w * .50f, h * .50f), style = Stroke(s))
+                drawCircle(Color.Blue.copy(alpha = .75f), w * .22f, Offset(w * .58f, h * .50f), style = Stroke(s))
+            }
+
             RasterEffectType.Grayscale -> {
                 Text(
                     "Converts the active layer to luminance while preserving transparency.",
@@ -236,6 +326,11 @@ private fun neutralEffectSettings(type: RasterEffectType): RasterEffectSettings 
         RasterEffectType.GradientMap,
         RasterEffectType.Grayscale,
         RasterEffectType.Invert -> RasterEffectSettings(amount = 1f)
+        RasterEffectType.Sharpen,
+        RasterEffectType.Noise,
+        RasterEffectType.Bloom,
+        RasterEffectType.Halftone,
+        RasterEffectType.ChromaticAberration -> RasterEffectSettings(amount = 0f)
         else -> RasterEffectSettings(amount = 0f, secondary = 0f, tertiary = 0f)
     }
 
@@ -283,6 +378,11 @@ private fun EffectGrid(
         RasterEffectType.ColourBalance,
         RasterEffectType.Curves,
         RasterEffectType.GradientMap,
+        RasterEffectType.Sharpen,
+        RasterEffectType.Noise,
+        RasterEffectType.Bloom,
+        RasterEffectType.Halftone,
+        RasterEffectType.ChromaticAberration,
         RasterEffectType.Grayscale,
         RasterEffectType.Invert,
     )
@@ -291,10 +391,10 @@ private fun EffectGrid(
             row.forEach { effect ->
                 val chosen = selected == effect
                 Row(
-                    Modifier.weight(1f).clip(RoundedCornerShape(11.dp))
+                    Modifier.weight(1f).height(62.dp).clip(RoundedCornerShape(11.dp))
                         .background(if (chosen) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
                         .clickable { onSelect(effect) }
-                        .padding(horizontal = 10.dp, vertical = 11.dp),
+                        .padding(horizontal = 10.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     EffectIcon(
@@ -502,6 +602,11 @@ internal fun effectName(type: RasterEffectType): String = when (type) {
     RasterEffectType.ColourBalance -> "Colour Balance"
     RasterEffectType.Curves -> "Curves"
     RasterEffectType.GradientMap -> "Gradient Map"
+    RasterEffectType.Sharpen -> "Sharpen"
+    RasterEffectType.Noise -> "Noise"
+    RasterEffectType.Bloom -> "Bloom"
+    RasterEffectType.Halftone -> "Halftone"
+    RasterEffectType.ChromaticAberration -> "Chromatic"
     RasterEffectType.Grayscale -> "Grayscale"
     RasterEffectType.Invert -> "Invert"
 }
