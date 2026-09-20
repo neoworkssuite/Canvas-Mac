@@ -78,6 +78,15 @@ fun NeoCanvasApp(
             if (state.autoRecoveryEnabled) state.autosaveRecovery()
         }
     }
+    LaunchedEffect(state.statusMessage, state.showStatusMessages) {
+        val message = state.statusMessage ?: return@LaunchedEffect
+        if (!state.showStatusMessages) return@LaunchedEffect
+        val important = message.contains("fail", ignoreCase = true) ||
+            message.contains("error", ignoreCase = true) ||
+            message.contains("could not", ignoreCase = true)
+        delay(if (important) 6_000 else 2_800)
+        if (state.statusMessage == message) state.statusMessage = null
+    }
     if (state.recoveryChecking || state.recoveryCandidate != null) {
         val available = state.recoveryCandidate is LoadResult.Success
         AlertDialog(
@@ -192,12 +201,24 @@ fun NeoCanvasApp(
                     }
                 }
             }
-            if (state.showStatusMessages) state.statusMessage?.let { message ->
+        }
+        if (state.showStatusMessages) state.statusMessage?.let { message ->
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .padding(horizontal = 18.dp, vertical = 18.dp)
+                    .fillMaxWidth(.72f)
+                    .widthIn(max = 560.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(NeoCanvasColors.chrome.copy(alpha = .96f))
+                    .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
                     message,
                     color = NeoCanvasColors.muted,
                     fontSize = 11.sp,
-                    modifier = Modifier.background(NeoCanvasColors.chrome).fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                    maxLines = 2,
                 )
             }
         }
