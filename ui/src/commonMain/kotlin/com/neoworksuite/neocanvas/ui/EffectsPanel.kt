@@ -1,18 +1,23 @@
 package com.neoworksuite.neocanvas.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,6 +25,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +63,7 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
         InspectorHeading("FX", "Live adjustment")
 
         Text(
-            "Slide left or right on the canvas, or use the controls below. Changes preview instantly. Tap FX again or open another studio panel to commit.",
+            "Slide left or right on the canvas, or use the coloured controls below. Changes preview instantly.",
             color = NeoCanvasColors.muted,
             fontSize = 11.sp,
         )
@@ -58,6 +72,7 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
 
         EffectGrid(
             selected = selected,
+            currentColour = state.color,
             onSelect = { next ->
                 if (next != selected) {
                     state.commitEffectPreview()
@@ -68,56 +83,117 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
 
         when (selected) {
             RasterEffectType.Blur ->
-                EffectSlider("Gaussian blur", settings.amount, 0f..1f) {
-                    state.previewEffect(selected, settings.copy(amount = it))
-                }
+                EffectSlider(
+                    label = "Gaussian blur",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(
+                        Color(0xFF24262D),
+                        Color(0xFF777C88),
+                        Color(0xFFE9EBF0),
+                    ),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
 
             RasterEffectType.MotionBlur ->
-                EffectSlider("Motion blur", settings.amount, 0f..1f) {
-                    state.previewEffect(selected, settings.copy(amount = it))
-                }
+                EffectSlider(
+                    label = "Motion blur",
+                    value = settings.amount,
+                    range = 0f..1f,
+                    colors = listOf(
+                        Color(0xFF252832),
+                        NeoCanvasColors.accent.copy(alpha = .55f),
+                        NeoCanvasColors.paper,
+                    ),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
 
             RasterEffectType.Curves ->
-                EffectSlider("Contrast curve", settings.amount, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(amount = it))
-                }
+                EffectSlider(
+                    label = "Contrast curve",
+                    value = settings.amount,
+                    range = -1f..1f,
+                    colors = listOf(
+                        Color(0xFF555861),
+                        Color(0xFFB8BBC2),
+                        Color.White,
+                    ),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
 
             RasterEffectType.HueSaturation -> {
-                EffectSlider("Saturation", settings.amount, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(amount = it))
-                }
-                EffectSlider("Hue shift", settings.secondary, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(secondary = it))
-                }
-                EffectSlider("Brightness", settings.tertiary, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(tertiary = it))
-                }
+                EffectSlider(
+                    label = "Saturation",
+                    value = settings.amount,
+                    range = -1f..1f,
+                    colors = listOf(
+                        Color(0xFF777777),
+                        state.color.copy(alpha = .65f),
+                        state.color,
+                    ),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+                EffectSlider(
+                    label = "Hue shift",
+                    value = settings.secondary,
+                    range = -1f..1f,
+                    colors = hueSpectrum,
+                ) { state.previewEffect(selected, settings.copy(secondary = it)) }
+
+                EffectSlider(
+                    label = "Brightness",
+                    value = settings.tertiary,
+                    range = -1f..1f,
+                    colors = listOf(Color.Black, Color(0xFF777777), Color.White),
+                ) { state.previewEffect(selected, settings.copy(tertiary = it)) }
             }
 
             RasterEffectType.ColourBalance -> {
-                EffectSlider("Red / Cyan", settings.amount, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(amount = it))
-                }
-                EffectSlider("Green / Magenta", settings.secondary, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(secondary = it))
-                }
-                EffectSlider("Blue / Yellow", settings.tertiary, -1f..1f) {
-                    state.previewEffect(selected, settings.copy(tertiary = it))
-                }
+                EffectSlider(
+                    label = "Red / Cyan",
+                    value = settings.amount,
+                    range = -1f..1f,
+                    colors = listOf(Color.Cyan, Color(0xFF777777), Color.Red),
+                ) { state.previewEffect(selected, settings.copy(amount = it)) }
+
+                EffectSlider(
+                    label = "Green / Magenta",
+                    value = settings.secondary,
+                    range = -1f..1f,
+                    colors = listOf(Color.Magenta, Color(0xFF777777), Color.Green),
+                ) { state.previewEffect(selected, settings.copy(secondary = it)) }
+
+                EffectSlider(
+                    label = "Blue / Yellow",
+                    value = settings.tertiary,
+                    range = -1f..1f,
+                    colors = listOf(Color.Yellow, Color(0xFF777777), Color.Blue),
+                ) { state.previewEffect(selected, settings.copy(tertiary = it)) }
             }
 
-            RasterEffectType.GradientMap -> Text(
-                "Maps shadows to black and highlights to the current NeoCanvas colour. The canvas preview is live.",
-                color = NeoCanvasColors.muted,
-                fontSize = 11.sp,
-            )
+            RasterEffectType.GradientMap -> {
+                Text(
+                    "Shadows map to black and highlights map to the current NeoCanvas colour.",
+                    color = NeoCanvasColors.muted,
+                    fontSize = 11.sp,
+                )
+                GradientPreview(listOf(Color.Black, state.color))
+            }
 
-            RasterEffectType.Grayscale,
-            RasterEffectType.Invert -> Text(
-                "This adjustment previews immediately at full strength.",
-                color = NeoCanvasColors.muted,
-                fontSize = 11.sp,
-            )
+            RasterEffectType.Grayscale -> {
+                Text(
+                    "Converts the active layer to luminance while preserving transparency.",
+                    color = NeoCanvasColors.muted,
+                    fontSize = 11.sp,
+                )
+                GradientPreview(listOf(Color.Black, Color(0xFF777777), Color.White))
+            }
+
+            RasterEffectType.Invert -> {
+                Text(
+                    "Inverts the RGB channels of the active layer.",
+                    color = NeoCanvasColors.muted,
+                    fontSize = 11.sp,
+                )
+                GradientPreview(listOf(Color.White, Color.Black))
+            }
         }
 
         Row(
@@ -126,9 +202,7 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(
-                onClick = {
-                    state.previewEffect(selected, neutralEffectSettings(selected))
-                },
+                onClick = { state.previewEffect(selected, neutralEffectSettings(selected)) },
             ) {
                 Text("Reset", color = NeoCanvasColors.accent)
             }
@@ -139,12 +213,23 @@ fun EffectsPanel(state: EditorState, modifier: Modifier = Modifier) {
         }
 
         Text(
-            "There is no Apply button. Leaving FX commits the current preview as one undoable edit.",
+            "No Apply button — leaving FX commits the current preview as one undoable edit.",
             color = NeoCanvasColors.faint,
             fontSize = 10.sp,
         )
     }
 }
+
+private val hueSpectrum = listOf(
+    Color.Red,
+    Color(0xFFFFA000),
+    Color.Yellow,
+    Color.Green,
+    Color.Cyan,
+    Color.Blue,
+    Color.Magenta,
+    Color.Red,
+)
 
 private fun neutralEffectSettings(type: RasterEffectType): RasterEffectSettings =
     when (type) {
@@ -168,12 +253,13 @@ private fun LiveAdjustmentReadout(type: RasterEffectType, amount: Float) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        EffectIcon(type, selected = true, currentColour = NeoCanvasColors.accent, modifier = Modifier.size(26.dp))
         Text(
             effectName(type),
             color = NeoCanvasColors.paper,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).padding(start = 9.dp),
         )
         Text(
             if (percent > 0 && type in signedEffects) "+$percent%" else "$percent%",
@@ -187,6 +273,7 @@ private fun LiveAdjustmentReadout(type: RasterEffectType, amount: Float) {
 @Composable
 private fun EffectGrid(
     selected: RasterEffectType,
+    currentColour: Color,
     onSelect: (RasterEffectType) -> Unit,
 ) {
     val effects = listOf(
@@ -202,24 +289,26 @@ private fun EffectGrid(
     effects.chunked(2).forEach { row ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             row.forEach { effect ->
-                Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
-                        .background(if (selected == effect) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
+                val chosen = selected == effect
+                Row(
+                    Modifier.weight(1f).clip(RoundedCornerShape(11.dp))
+                        .background(if (chosen) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
                         .clickable { onSelect(effect) }
-                        .padding(11.dp),
+                        .padding(horizontal = 10.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        effectSymbol(effect),
-                        color = if (selected == effect) NeoCanvasColors.ink else NeoCanvasColors.accent,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                    EffectIcon(
+                        type = effect,
+                        selected = chosen,
+                        currentColour = currentColour,
+                        modifier = Modifier.size(30.dp),
                     )
                     Text(
                         effectName(effect),
-                        color = if (selected == effect) NeoCanvasColors.ink else NeoCanvasColors.paper,
-                        fontSize = 12.sp,
+                        color = if (chosen) NeoCanvasColors.ink else NeoCanvasColors.paper,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(start = 8.dp),
                     )
                 }
             }
@@ -229,10 +318,113 @@ private fun EffectGrid(
 }
 
 @Composable
+private fun EffectIcon(
+    type: RasterEffectType,
+    selected: Boolean,
+    currentColour: Color,
+    modifier: Modifier = Modifier,
+) {
+    val mono = if (selected) NeoCanvasColors.ink else NeoCanvasColors.accent
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val s = 1.7.dp.toPx()
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float, width: Float = s, tint: Color = mono) =
+            drawLine(tint, Offset(w * x1, h * y1), Offset(w * x2, h * y2), width, StrokeCap.Round)
+
+        when (type) {
+            RasterEffectType.Blur -> {
+                drawCircle(mono.copy(alpha = .30f), w * .34f, Offset(w * .50f, h * .50f))
+                drawCircle(mono.copy(alpha = .55f), w * .23f, Offset(w * .50f, h * .50f), style = Stroke(s))
+                drawCircle(mono, w * .10f, Offset(w * .50f, h * .50f))
+            }
+
+            RasterEffectType.MotionBlur -> {
+                line(.10f, .33f, .76f, .33f, s, mono.copy(alpha = .45f))
+                line(.18f, .50f, .90f, .50f, s * 1.2f)
+                line(.10f, .67f, .70f, .67f, s, mono.copy(alpha = .65f))
+                drawCircle(mono, w * .08f, Offset(w * .75f, h * .50f))
+            }
+
+            RasterEffectType.HueSaturation -> {
+                val colors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta)
+                val points = listOf(
+                    .50f to .17f, .78f to .34f, .78f to .66f,
+                    .50f to .83f, .22f to .66f, .22f to .34f,
+                )
+                points.forEachIndexed { index, point ->
+                    drawCircle(colors[index], w * .105f, Offset(w * point.first, h * point.second))
+                }
+                drawCircle(if (selected) NeoCanvasColors.ink else NeoCanvasColors.paper, w * .08f, Offset(w * .50f, h * .50f))
+            }
+
+            RasterEffectType.ColourBalance -> {
+                drawCircle(Color.Red.copy(alpha = .90f), w * .19f, Offset(w * .42f, h * .42f))
+                drawCircle(Color.Green.copy(alpha = .90f), w * .19f, Offset(w * .60f, h * .42f))
+                drawCircle(Color.Blue.copy(alpha = .90f), w * .19f, Offset(w * .51f, h * .60f))
+            }
+
+            RasterEffectType.Curves -> {
+                line(.16f, .82f, .16f, .18f)
+                line(.16f, .82f, .86f, .82f)
+                val path = Path().apply {
+                    moveTo(w * .18f, h * .75f)
+                    cubicTo(w * .35f, h * .72f, w * .48f, h * .25f, w * .84f, h * .20f)
+                }
+                drawPath(path, mono, style = Stroke(s * 1.25f, cap = StrokeCap.Round))
+            }
+
+            RasterEffectType.GradientMap -> {
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(listOf(Color.Black, currentColour)),
+                    topLeft = Offset(w * .12f, h * .28f),
+                    size = Size(w * .76f, h * .44f),
+                    cornerRadius = CornerRadius(w * .08f, w * .08f),
+                )
+                drawRoundRect(
+                    color = mono,
+                    topLeft = Offset(w * .12f, h * .28f),
+                    size = Size(w * .76f, h * .44f),
+                    cornerRadius = CornerRadius(w * .08f, w * .08f),
+                    style = Stroke(s),
+                )
+            }
+
+            RasterEffectType.Grayscale -> {
+                drawCircle(Color(0xFF303030), w * .29f, Offset(w * .50f, h * .50f))
+                drawArc(
+                    color = Color(0xFFE0E0E0),
+                    startAngle = -90f,
+                    sweepAngle = 180f,
+                    useCenter = true,
+                    topLeft = Offset(w * .21f, h * .21f),
+                    size = Size(w * .58f, h * .58f),
+                )
+                drawCircle(mono, w * .29f, Offset(w * .50f, h * .50f), style = Stroke(s))
+            }
+
+            RasterEffectType.Invert -> {
+                drawCircle(Color.White, w * .29f, Offset(w * .50f, h * .50f))
+                drawArc(
+                    color = Color.Black,
+                    startAngle = 90f,
+                    sweepAngle = 180f,
+                    useCenter = true,
+                    topLeft = Offset(w * .21f, h * .21f),
+                    size = Size(w * .58f, h * .58f),
+                )
+                drawCircle(mono, w * .29f, Offset(w * .50f, h * .50f), style = Stroke(s))
+            }
+        }
+    }
+}
+
+@Composable
 private fun EffectSlider(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    colors: List<Color>,
     onChange: (Float) -> Unit,
 ) {
     Column {
@@ -243,10 +435,64 @@ private fun EffectSlider(
                 if (range.start < 0f && percent > 0) "+$percent%" else "$percent%",
                 color = NeoCanvasColors.paper,
                 fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
             )
         }
-        Slider(value = value, onValueChange = onChange, valueRange = range, colors = studioSliderColors())
+
+        val update: (Float, Float) -> Unit = { x, width ->
+            if (width > 0f) {
+                val fraction = (x / width).coerceIn(0f, 1f)
+                onChange(range.start + (range.endInclusive - range.start) * fraction)
+            }
+        }
+
+        Canvas(
+            Modifier.fillMaxWidth().height(30.dp).padding(top = 6.dp)
+                .pointerInput(range, colors) {
+                    detectTapGestures { point -> update(point.x, size.width.toFloat()) }
+                }
+                .pointerInput(range, colors) {
+                    detectDragGestures(
+                        onDragStart = { point -> update(point.x, size.width.toFloat()) },
+                        onDrag = { change, _ ->
+                            update(change.position.x, size.width.toFloat())
+                            change.consume()
+                        },
+                    )
+                },
+        ) {
+            val trackHeight = 10.dp.toPx()
+            val top = (size.height - trackHeight) / 2f
+            drawRoundRect(
+                brush = Brush.horizontalGradient(colors),
+                topLeft = Offset(0f, top),
+                size = Size(size.width, trackHeight),
+                cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f),
+            )
+            drawRoundRect(
+                color = NeoCanvasColors.line.copy(alpha = .8f),
+                topLeft = Offset(0f, top),
+                size = Size(size.width, trackHeight),
+                cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f),
+                style = Stroke(1.dp.toPx()),
+            )
+
+            val fraction = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+            val thumbX = size.width * fraction
+            drawCircle(Color.Black.copy(alpha = .35f), 9.dp.toPx(), Offset(thumbX, size.height / 2f))
+            drawCircle(Color.White, 7.dp.toPx(), Offset(thumbX, size.height / 2f))
+            drawCircle(NeoCanvasColors.ink, 3.dp.toPx(), Offset(thumbX, size.height / 2f))
+        }
     }
+}
+
+@Composable
+private fun GradientPreview(colors: List<Color>) {
+    Box(
+        Modifier.fillMaxWidth().height(22.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Brush.horizontalGradient(colors))
+    )
 }
 
 internal fun effectName(type: RasterEffectType): String = when (type) {
@@ -268,14 +514,3 @@ private val signedEffects = setOf(
     RasterEffectType.ColourBalance,
     RasterEffectType.Curves,
 )
-
-private fun effectSymbol(type: RasterEffectType): String = when (type) {
-    RasterEffectType.Blur -> "◌"
-    RasterEffectType.MotionBlur -> "≋"
-    RasterEffectType.HueSaturation -> "H/S"
-    RasterEffectType.ColourBalance -> "RGB"
-    RasterEffectType.Curves -> "⌁"
-    RasterEffectType.GradientMap -> "▰"
-    RasterEffectType.Grayscale -> "◐"
-    RasterEffectType.Invert -> "◑"
-}
