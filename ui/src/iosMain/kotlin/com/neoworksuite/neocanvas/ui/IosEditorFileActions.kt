@@ -9,6 +9,7 @@ import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
+import com.neoworksuite.neocanvas.renderer.PsdCodec
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.allocArrayOf
 import kotlinx.cinterop.memScoped
@@ -27,6 +28,9 @@ import platform.Foundation.writeToFile
 import platform.UIKit.UIApplication
 import platform.UIKit.UIImage
 import platform.UIKit.UIImagePickerController
+import platform.UIKit.UIDocumentPickerDelegateProtocol
+import platform.UIKit.UIDocumentPickerMode
+import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
@@ -48,6 +52,7 @@ internal class IosEditorFileActions(
 ) : EditorFileActions {
     private val fm: NSFileManager get() = NSFileManager.defaultManager
     private var activeImagePickerDelegate: ImagePickerDelegate? = null
+    private var activePsdPickerDelegate: PsdPickerDelegate? = null
     private var currentDocumentName: String? = null
 
     private val documentsRoot: String
@@ -65,6 +70,8 @@ internal class IosEditorFileActions(
     override val supportsLocalLibrary: Boolean = true
     override val supportsSaveAs: Boolean = true
     override val supportsRecovery: Boolean = true
+    override val supportsPsdImport: Boolean = true
+    override val supportsPsdExport: Boolean = true
 
     init {
         ensureDirectory(libraryDirectory)
@@ -243,6 +250,20 @@ internal class IosEditorFileActions(
         }
     }
 
+    override fun exportPsd(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult = try {
+        ensureDirectory(exportDirectory)
+        val base = currentDocumentName?.removeSuffix(".neocanvas") ?: "NeoCanvas"
+        val target = join(exportDirectory, "$base.psd")
+        val bytes = PsdCodec.encode(document, tiles)
+        if (writeBytes(target, bytes)) SaveResult.Success
+        else SaveResult.Failure("Could not write PSD to iPad Documents.")
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
+    }
+
     override fun openExternalUrl(url: String): Boolean {
         val target = NSURL.URLWithString(url) ?: return false
         if (!UIApplication.sharedApplication.canOpenURL(target)) return false
@@ -252,6 +273,29 @@ internal class IosEditorFileActions(
             completionHandler = null,
         )
         return true
+    }
+
+    override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
+        val host = presenter()
+        if (host == null) {
+            onResult(Result.failure(IllegalStateException("The iPad file picker is not ready yet.")))
+            return
+        }
+
+        val picker = UIDocumentPickerViewController(
+            documentTypes = listOf("com.adobe.photoshop-image"),
+            inMode = UIDocumentPickerMode.UIDocumentPickerModeImport,
+        ).apply {
+            allowsMultipleSelection = false
+            modalPresentationStyle = UIModalPresentationFullScreen
+        }
+        val delegate = PsdPickerDelegate(
+            onResult = onResult,
+            onFinished = { activePsdPickerDelegate = null },
+        )
+        activePsdPickerDelegate = delegate
+        picker.delegate = delegate
+        host.presentViewController(picker, animated = true, completion = null)
     }
 
     override fun importImage(onResult: (Result<ImportedImage?>) -> Unit) {
@@ -326,6 +370,38 @@ internal class IosEditorFileActions(
     private fun writeBytes(path: String, bytes: ByteArray): Boolean = bytes.toNSData().writeToFile(path, true)
 
     private fun join(directory: String, name: String): String = "${directory.trimEnd('/')}/$name"
+}
+
+private class PsdPickerDelegate(
+    private val onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit,
+    private val onFinished: () -> Unit,
+) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(
+        controller: UIDocumentPickerViewController,
+        didPickDocumentsAtURLs: List<*>,
+    ) {
+        val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+        controller.dismissViewControllerAnimated(true, null)
+        if (url == null) {
+            finish(Result.failure(IllegalStateException("No PSD file was selected.")))
+            return
+        }
+        finish(runCatching {
+            val data = NSData.dataWithContentsOfURL(url)
+                ?: error("iPadOS could not read the selected PSD.")
+            PsdCodec.decode(data.toByteArray())
+        })
+    }
+
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+        controller.dismissViewControllerAnimated(true, null)
+        finish(Result.success(null))
+    }
+
+    private fun finish(result: Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) {
+        onResult(result)
+        onFinished()
+    }
 }
 
 private class ImagePickerDelegate(
