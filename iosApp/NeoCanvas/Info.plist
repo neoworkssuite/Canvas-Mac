@@ -32,6 +32,12 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
+    <key>UIFileSharingEnabled</key>
+    <true/>
+
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+
     <key>NSPhotoLibraryUsageDescription</key>
     <string>NeoCanvas uses your photo library only when you choose an image to import onto the canvas.</string>
 
