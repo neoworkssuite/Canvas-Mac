@@ -5,7 +5,6 @@ struct NeoCanvasIOSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .ignoresSafeArea()
         }
     }
 }
