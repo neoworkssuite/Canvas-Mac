@@ -91,6 +91,7 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         StudioButton(Glyph.Brush, "Paint brush", state.tool == Tool.Brush) { state.activateTool(Tool.Brush) }
         StudioButton(Glyph.Eraser, "Eraser", state.tool == Tool.Eraser) { state.activateTool(Tool.Eraser) }
+        StudioButton(Glyph.Smudge, "Smudge pigment", state.tool == Tool.Smudge) { state.activateTool(Tool.Smudge) }
         StudioButton(Glyph.Transform, "Move canvas", state.tool == Tool.Pan) { state.activateTool(Tool.Pan) }
         StudioButton(Glyph.Fill, "Fill connected area on active layer", state.tool == Tool.Fill) { state.activateTool(Tool.Fill) }
         StudioButton(Glyph.Eyedropper, "Sample visible colour", state.tool == Tool.Eyedropper) { state.activateTool(Tool.Eyedropper) }
@@ -216,10 +217,13 @@ fun StudioRail(state: EditorState, modifier: Modifier = Modifier) {
     ) {
         if (state.tool == Tool.Fill)
             VerticalRailControl("TOL", state.fillTolerance.toFloat(), 0f..255f, { "${it.toInt()}" }) { state.fillTolerance = it.toInt() }
-        else VerticalRailControl("SIZE", state.brushSize, 1f..96f, { "${it.toInt()}" }) { state.brushSize = it }
+        else VerticalRailControl("SIZE", state.brushSize, 1f..192f, { "${it.toInt()}" }) { state.brushSize = it }
         StudioButton(Glyph.Undo, "Undo", enabled = state.canUndo) { state.undo() }
         StudioButton(Glyph.Redo, "Redo", enabled = state.canRedo) { state.redo() }
-        VerticalRailControl("FLOW", state.brushOpacity, 0.05f..1f, { "${(it * 100).toInt()}" }) { state.brushOpacity = it }
+        if (state.tool == Tool.Smudge)
+            VerticalRailControl("POWER", state.smudgeStrength, 0.01f..1f, { "${(it * 100).toInt()}" }) { state.smudgeStrength = it }
+        else
+            VerticalRailControl("FLOW", state.brushOpacity, 0.05f..1f, { "${(it * 100).toInt()}" }) { state.brushOpacity = it }
         Spacer(Modifier.weight(1f))
         Box(Modifier.size(38.dp).border(2.dp, Color.White, CircleShape).padding(3.dp).clip(CircleShape).background(state.color)
             .clickable { state.showInspector(InspectorPanel.Colors) }
@@ -267,7 +271,7 @@ fun studioSliderColors() = SliderDefaults.colors(
     inactiveTrackColor = NeoCanvasColors.track,
 )
 
-private enum class Glyph { Previous, Next, Gallery, ImportImage, New, Open, Save, Export, Brush, Eraser, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }
+private enum class Glyph { Previous, Next, Gallery, ImportImage, New, Open, Save, Export, Brush, Eraser, Smudge, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -404,6 +408,15 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(28.dp
             line(Offset(w * .79f, h * .50f), Offset(w * .51f, h * .80f), 3.0f)
             line(Offset(w * .51f, h * .80f), Offset(w * .23f, h * .64f), 3.0f)
             line(Offset(w * .37f, h * .47f), Offset(w * .64f, h * .69f), 2.0f)
+        }
+        Glyph.Smudge -> {
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .18f, h * .62f)
+                cubicTo(w * .34f, h * .34f, w * .52f, h * .74f, w * .82f, h * .38f)
+            }
+            drawPath(path, color, style = Stroke(3.3f, cap = StrokeCap.Round))
+            drawCircle(color.copy(alpha = .45f), w * .10f, Offset(w * .27f, h * .72f))
+            drawCircle(color.copy(alpha = .28f), w * .07f, Offset(w * .18f, h * .80f))
         }
         Glyph.Transform -> {
             val s = 2.1f
