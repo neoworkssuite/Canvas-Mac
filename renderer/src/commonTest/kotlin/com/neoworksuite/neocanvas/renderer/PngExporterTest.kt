@@ -28,7 +28,7 @@ class PngExporterTest {
     @Test fun clipping_mask_uses_alpha_of_layer_below() {
         val base = tile(10, 20, 30, 0)
         val baseOpaque = base.copyOf().also {
-            it[3] = 255
+            it[3] = 255.toByte()
         }
         val top = tile(255, 0, 0, 255)
         val document = CanvasDocument("clip", 2, 1, listOf(
