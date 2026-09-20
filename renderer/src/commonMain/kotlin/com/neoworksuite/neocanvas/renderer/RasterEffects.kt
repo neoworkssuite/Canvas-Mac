@@ -1,6 +1,5 @@
 package com.neoworksuite.neocanvas.renderer
 
-import androidx.compose.ui.graphics.Color
 import kotlin.math.roundToInt
 
 enum class RasterEffectType {
@@ -29,7 +28,7 @@ object RasterEffects {
         canvasHeight: Int,
         type: RasterEffectType,
         settings: RasterEffectSettings,
-        gradientHighlight: Color = Color.White,
+        gradientHighlight: RasterColor = RasterColor(255, 255, 255),
     ): RasterPatch {
         val snapshot = store.snapshot()
         val keys = snapshot.keys.filter { it.layerId == layerId }
@@ -68,9 +67,9 @@ object RasterEffects {
                     intArrayOf(curveChannel(r, contrast), curveChannel(g, contrast), curveChannel(b, contrast), a)
                 }
                 RasterEffectType.GradientMap -> {
-                    val hr = (gradientHighlight.red * 255f).roundToInt()
-                    val hg = (gradientHighlight.green * 255f).roundToInt()
-                    val hb = (gradientHighlight.blue * 255f).roundToInt()
+                    val hr = gradientHighlight.red
+                    val hg = gradientHighlight.green
+                    val hb = gradientHighlight.blue
                     transform(source) { r, g, b, a ->
                         val luminance = ((r * .2126f + g * .7152f + b * .0722f) / 255f).coerceIn(0f, 1f)
                         intArrayOf((hr * luminance).roundToInt(), (hg * luminance).roundToInt(), (hb * luminance).roundToInt(), a)
