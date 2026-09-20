@@ -663,6 +663,16 @@ private fun DrawScope.drawStoredTiles(state: EditorState, preview: com.neoworksu
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Multiply -> androidx.compose.ui.graphics.BlendMode.Multiply
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Screen -> androidx.compose.ui.graphics.BlendMode.Screen
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Overlay -> androidx.compose.ui.graphics.BlendMode.Overlay
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Darken -> androidx.compose.ui.graphics.BlendMode.Darken
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Lighten -> androidx.compose.ui.graphics.BlendMode.Lighten
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.ColorDodge -> androidx.compose.ui.graphics.BlendMode.ColorDodge
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.ColorBurn -> androidx.compose.ui.graphics.BlendMode.ColorBurn
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.SoftLight -> androidx.compose.ui.graphics.BlendMode.Softlight
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.HardLight -> androidx.compose.ui.graphics.BlendMode.Hardlight
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Difference -> androidx.compose.ui.graphics.BlendMode.Difference
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Exclusion -> androidx.compose.ui.graphics.BlendMode.Exclusion
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Add -> androidx.compose.ui.graphics.BlendMode.Plus
+                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Subtract -> androidx.compose.ui.graphics.BlendMode.SrcOver
             }
             drawImage(images.image(address, pixels), Offset(address.x * 256f, address.y * 256f), alpha = layer.opacity, blendMode = blendMode)
         }
