@@ -177,6 +177,7 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                     append(if (layer.visible) "Visible" else "Hidden")
                     if (layer.locked) append(" · Locked")
                     if (layer.alphaLocked) append(" · α locked")
+                    if (layer.clipping) append(" · Clipped")
                     if (layer.blendMode != LayerBlendMode.Normal) append(" · ${layer.blendMode.name}")
                 }, color = NeoCanvasColors.faint, fontSize = 9.sp)
             }
@@ -184,14 +185,17 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                 modifier = Modifier.clickable { state.toggleLayerVisibility(layer.id) }.padding(7.dp).semantics { contentDescription = "Toggle ${layer.name} visibility" })
         }
         if (selected) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 LayerTrayAction(if (layer.locked) "Unlock" else "Lock", Modifier.weight(1f)) { state.toggleLayerLock(layer.id) }
                 LayerTrayAction(if (layer.alphaLocked) "Alpha ✓" else "Alpha", Modifier.weight(1f)) {
                     state.toggleLayerAlphaLock(layer.id)
                 }
+                LayerTrayAction(if (layer.clipping) "Clip ✓" else "Clip", Modifier.weight(1f)) {
+                    state.toggleLayerClipping(layer.id)
+                }
                 BlendModePicker(
                     layer = layer,
-                    modifier = Modifier.weight(1.4f),
+                    modifier = Modifier.weight(1.35f),
                     onSelect = { state.setLayerBlendMode(layer.id, it) },
                 )
             }
