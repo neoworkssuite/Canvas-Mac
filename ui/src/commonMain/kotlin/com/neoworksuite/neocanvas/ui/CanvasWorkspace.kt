@@ -710,12 +710,20 @@ private fun DrawScope.drawSelectionOutline(selection: CanvasSelection, color: Co
 
 /** Draws persisted tile pixels, so reopening a saved document is visibly identical to the original. */
 private fun DrawScope.drawStoredTiles(state: EditorState, preview: com.neoworksuite.neocanvas.renderer.RasterPatch?, images: TileImageCache) {
-    state.document.layers.filter { it.visible && it.opacity > 0f }.forEach { layer ->
-        val raster = layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster ?: return@forEach
+    state.document.layers.forEachIndexed { index, layer ->
+        if (!layer.visible || layer.opacity <= 0f) return@forEachIndexed
+        val raster = layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster ?: return@forEachIndexed
+        val clippingBase = if (layer.clipping && index > 0) state.document.layers[index - 1] else null
         val addresses = raster.tileAddresses + preview?.keys.orEmpty().filter { it.layerId == layer.id }
         addresses.forEach { address ->
-            val pixels = (if (preview != null) preview.previewTile(address, state.tileStore)
+            val sourcePixels = (if (preview != null) preview.previewTile(address, state.tileStore)
                 else state.tileStore.read(address)) ?: return@forEach
+            val pixels = if (layer.clipping) {
+                val mask = clippingBase?.let { base ->
+                    state.tileStore.read(com.neoworksuite.neocanvas.renderer.TileKey(base.id, address.x, address.y))
+                }
+                clipTileAlpha(sourcePixels, mask)
+            } else sourcePixels
             val blendMode = when (layer.blendMode) {
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Normal -> androidx.compose.ui.graphics.BlendMode.SrcOver
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Multiply -> androidx.compose.ui.graphics.BlendMode.Multiply
@@ -735,6 +743,25 @@ private fun DrawScope.drawStoredTiles(state: EditorState, preview: com.neoworksu
             drawImage(images.image(address, pixels), Offset(address.x * 256f, address.y * 256f), alpha = layer.opacity, blendMode = blendMode)
         }
     }
+}
+
+private fun clipTileAlpha(source: ByteArray, mask: ByteArray?): ByteArray {
+    if (mask == null) return ByteArray(source.size)
+    val output = source.copyOf()
+    var offset = 0
+    while (offset < output.size) {
+        val sourceAlpha = output[offset + 3].toInt() and 255
+        val maskAlpha = mask[offset + 3].toInt() and 255
+        val clipped = (sourceAlpha * maskAlpha + 127) / 255
+        output[offset + 3] = clipped.toByte()
+        if (clipped == 0) {
+            output[offset] = 0
+            output[offset + 1] = 0
+            output[offset + 2] = 0
+        }
+        offset += 4
+    }
+    return output
 }
 
 internal object NeoCanvasColors {
