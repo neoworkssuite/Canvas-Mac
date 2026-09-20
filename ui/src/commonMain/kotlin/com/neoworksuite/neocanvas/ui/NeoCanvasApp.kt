@@ -119,10 +119,6 @@ fun NeoCanvasApp(
             actions = fileActions,
             onNew = { destination = AppDestination.Editor; state.newCanvasDialogVisible = true },
             onImportDocument = { if (state.importDocument()) destination = AppDestination.Editor },
-            onImportImage = { image ->
-                state.insertImage(image)
-                destination = AppDestination.Editor
-            },
             onKids = { destination = AppDestination.Kids },
             onOpen = { name -> if (state.openFromGallery(name)) destination = AppDestination.Editor },
         )
