@@ -409,6 +409,34 @@ fun CanvasWorkspace(
             }) {
                 drawRect(NeoCanvasColors.paper, size = Size(document.width.toFloat(), document.height.toFloat()))
                 drawStoredTiles(state, transformPreview ?: movePreview ?: state.effectPreviewPatch ?: strokePreview, tileImages)
+
+                if (state.gridGuideVisible) {
+                    val spacing = state.guideSpacing.coerceIn(32f, 512f)
+                    val gridColor = NeoCanvasColors.accent.copy(alpha = .22f)
+                    var gx = spacing
+                    while (gx < document.width) {
+                        drawLine(gridColor, Offset(gx, 0f), Offset(gx, document.height.toFloat()), 1f / scale)
+                        gx += spacing
+                    }
+                    var gy = spacing
+                    while (gy < document.height) {
+                        drawLine(gridColor, Offset(0f, gy), Offset(document.width.toFloat(), gy), 1f / scale)
+                        gy += spacing
+                    }
+                }
+
+                if (state.perspectiveGuideVisible) {
+                    val perspectiveColor = NeoCanvasColors.accent.copy(alpha = .34f)
+                    val vanishing = Offset(document.width / 2f, document.height / 2f)
+                    val edgeStep = (state.guideSpacing * 1.5f).coerceIn(64f, 768f)
+                    var x = 0f
+                    while (x <= document.width) {
+                        drawLine(perspectiveColor, Offset(x, 0f), vanishing, 1f / scale)
+                        drawLine(perspectiveColor, Offset(x, document.height.toFloat()), vanishing, 1f / scale)
+                        x += edgeStep
+                    }
+                }
+
                 val symmetry = state.symmetry
                 val guideColor = NeoCanvasColors.accent.copy(alpha = .65f)
                 if (symmetry == com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Vertical ||
