@@ -168,6 +168,7 @@ class EditorState(
     var selection: CanvasSelection? by mutableStateOf(null)
         private set
     var selectionMode: SelectionShape by mutableStateOf(SelectionShape.Rectangle)
+    var selectionCombineMode: SelectionCombineMode by mutableStateOf(SelectionCombineMode.Replace)
     var transformSession: TransformSession? by mutableStateOf(null)
         private set
 
@@ -473,15 +474,35 @@ class EditorState(
         val top = kotlin.math.floor(minOf(from.y, to.y)).toInt().coerceIn(0, document.height)
         val right = (kotlin.math.floor(maxOf(from.x, to.x)).toInt() + 1).coerceIn(0, document.width)
         val bottom = (kotlin.math.floor(maxOf(from.y, to.y)).toInt() + 1).coerceIn(0, document.height)
-        selection = if (right > left && bottom > top) CanvasSelection(left, top, right, bottom) else null
+        val next = if (right > left && bottom > top) CanvasSelection(left, top, right, bottom) else null
+        applySelection(next)
     }
+
+    private fun applySelection(next: CanvasSelection?) {
+        if (next == null) {
+            if (selectionCombineMode == SelectionCombineMode.Replace) selection = null
+            return
+        }
+        val current = selection
+        selection = if (current == null || selectionCombineMode == SelectionCombineMode.Replace) next
+            else current.combine(next, selectionCombineMode)
+        transformSession = null
+        statusMessage = when (selectionCombineMode) {
+            SelectionCombineMode.Replace -> "Selection replaced"
+            SelectionCombineMode.Add -> "Added to selection"
+            SelectionCombineMode.Subtract -> "Subtracted from selection"
+            SelectionCombineMode.Intersect -> "Intersected selection"
+        }
+    }
+
     fun selectArea(points: List<DrawPoint>) {
         if (points.isEmpty()) return
         if (selectionMode == SelectionShape.Lasso) {
-            selection = CanvasSelection.lasso(points)?.let {
+            val next = CanvasSelection.lasso(points)?.let {
                 it.copy(left = it.left.coerceIn(0, document.width), top = it.top.coerceIn(0, document.height),
                     right = it.right.coerceIn(0, document.width), bottom = it.bottom.coerceIn(0, document.height))
             }
+            applySelection(next)
             return
         }
         val from = points.first()
@@ -490,8 +511,9 @@ class EditorState(
         val top = kotlin.math.floor(minOf(from.y, to.y)).toInt().coerceIn(0, document.height)
         val right = (kotlin.math.floor(maxOf(from.x, to.x)).toInt() + 1).coerceIn(0, document.width)
         val bottom = (kotlin.math.floor(maxOf(from.y, to.y)).toInt() + 1).coerceIn(0, document.height)
-        selection = if (right <= left || bottom <= top) null else if (selectionMode == SelectionShape.Ellipse)
+        val next = if (right <= left || bottom <= top) null else if (selectionMode == SelectionShape.Ellipse)
             CanvasSelection.ellipse(left, top, right, bottom) else CanvasSelection(left, top, right, bottom)
+        applySelection(next)
     }
     fun invertSelection() {
         val current = selection ?: return
