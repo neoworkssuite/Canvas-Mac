@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,6 +66,32 @@ fun SettingsPanel(
             "Use smooth interpolation when resizing selected artwork.",
             state.smoothResizing,
         ) { state.smoothResizing = it; state.persistPreferences() }
+
+        SettingsToggle(
+            "2D drawing grid",
+            "Overlay an adjustable local drawing grid on the canvas.",
+            state.gridGuideVisible,
+        ) { state.gridGuideVisible = it; state.persistPreferences() }
+
+        SettingsToggle(
+            "Perspective guide",
+            "Overlay a one-point perspective guide from the canvas centre.",
+            state.perspectiveGuideVisible,
+        ) { state.perspectiveGuideVisible = it; state.persistPreferences() }
+
+        Column(Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Grid spacing", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                Text("${state.guideSpacing.toInt()} px", color = NeoCanvasColors.muted, fontSize = 11.sp)
+            }
+            Slider(
+                value = state.guideSpacing,
+                onValueChange = { state.guideSpacing = it },
+                onValueChangeFinished = state::persistPreferences,
+                valueRange = 32f..512f,
+                colors = studioSliderColors(),
+            )
+        }
 
         SettingsSection("SAVING & RECOVERY")
         SettingsToggle(
