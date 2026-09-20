@@ -75,7 +75,7 @@ fun NeoCanvasApp(
         state.checkRecovery()
         while (true) {
             delay(30_000)
-            state.autosaveRecovery()
+            if (state.autoRecoveryEnabled) state.autosaveRecovery()
         }
     }
     if (state.recoveryChecking || state.recoveryCandidate != null) {
@@ -192,7 +192,7 @@ fun NeoCanvasApp(
                     }
                 }
             }
-            state.statusMessage?.let { message ->
+            if (state.showStatusMessages) state.statusMessage?.let { message ->
                 Text(
                     message,
                     color = NeoCanvasColors.muted,
@@ -212,6 +212,20 @@ fun NeoCanvasApp(
                 Text("×", color = NeoCanvasColors.paper, fontSize = 22.sp,
                     modifier = Modifier.align(Alignment.TopEnd).clickable { state.inspectorVisible = false }
                         .padding(horizontal = 15.dp, vertical = 8.dp))
+            }
+        }
+        if (state.settingsVisible) {
+            Box(
+                Modifier.align(Alignment.Center).fillMaxWidth(.82f).fillMaxHeight(.82f)
+                    .widthIn(max = 720.dp).heightIn(max = 680.dp)
+                    .clip(RoundedCornerShape(18.dp)).background(NeoCanvasColors.panel)
+                    .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(18.dp)),
+            ) {
+                SettingsPanel(
+                    state = state,
+                    modifier = Modifier.fillMaxSize(),
+                    onClose = { state.settingsVisible = false },
+                )
             }
         }
     }
