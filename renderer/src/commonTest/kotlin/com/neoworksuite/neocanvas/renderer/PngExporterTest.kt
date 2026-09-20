@@ -25,6 +25,44 @@ class PngExporterTest {
         assertEquals(178, screen[0].toInt() and 255)
     }
 
+    @Test fun clipping_mask_uses_alpha_of_layer_below() {
+        val base = tile(10, 20, 30, 0)
+        val baseOpaque = base.copyOf().also {
+            it[3] = 255.toByte()
+        }
+        val top = tile(255.toByte(), 0, 0, 255.toByte())
+        val document = CanvasDocument("clip", 2, 1, listOf(
+            Layer("base", "Base", payload = LayerPayload.Raster(setOf(TileAddress("base", 0, 0)))),
+            Layer("top", "Top", payload = LayerPayload.Raster(setOf(TileAddress("top", 0, 0))), clipping = true),
+        ))
+        val basePixels = ByteArray(TileFormat.BYTES_PER_TILE)
+        baseOpaque.copyInto(basePixels)
+        basePixels[7] = 0
+        val image = PngExporter.render(
+            document,
+            mapOf(
+                TileAddress("base", 0, 0) to basePixels,
+                TileAddress("top", 0, 0) to top,
+            ),
+        )
+        assertEquals(255, image.rgbaAt(0, 0)[0].toInt() and 255)
+        assertEquals(0, image.rgbaAt(1, 0)[3].toInt() and 255)
+    }
+
+    @Test fun extended_blend_modes_render_without_falling_back_to_normal() {
+        val base = tile(80, 120, 180, 255.toByte())
+        val top = tile(180.toByte(), 80, 40, 255.toByte())
+        val document = CanvasDocument("blend-more", 1, 1, listOf(
+            Layer("base", "Base", payload = LayerPayload.Raster(setOf(TileAddress("base", 0, 0)))),
+            Layer("top", "Top", payload = LayerPayload.Raster(setOf(TileAddress("top", 0, 0))), blendMode = LayerBlendMode.Difference),
+        ))
+        val result = PngExporter.render(document, mapOf(
+            TileAddress("base", 0, 0) to base,
+            TileAddress("top", 0, 0) to top,
+        )).rgbaAt(0, 0)
+        assertEquals(100, result[0].toInt() and 255)
+    }
+
     @Test
     fun png_dimensions_match_document_and_hidden_layers_are_excluded() {
         val red = tile(255.toByte(), 0, 0, 255.toByte())
