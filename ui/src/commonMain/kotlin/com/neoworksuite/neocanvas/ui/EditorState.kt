@@ -210,6 +210,39 @@ class EditorState(
         transformSession = current.copy(translationX = translationX, translationY = translationY,
             scale = scale.coerceIn(.02f, 50f), rotationDegrees = rotationDegrees)
     }
+    fun resetTransform() {
+        val current = transformSession ?: return
+        transformSession = current.copy(
+            translationX = 0f,
+            translationY = 0f,
+            scale = 1f,
+            rotationDegrees = 0f,
+        )
+        statusMessage = "Transform reset"
+    }
+
+    fun fitTransformToCanvas() {
+        val current = transformSession ?: return
+        val sourceWidth = (current.sourceBounds.right - current.sourceBounds.left).coerceAtLeast(1)
+        val sourceHeight = (current.sourceBounds.bottom - current.sourceBounds.top).coerceAtLeast(1)
+        val rotated = com.neoworksuite.neocanvas.renderer.RasterMove.rotatedSize(
+            sourceWidth,
+            sourceHeight,
+            current.rotationDegrees,
+        )
+        val fitScale = minOf(
+            document.width.toFloat() / rotated.first.coerceAtLeast(1),
+            document.height.toFloat() / rotated.second.coerceAtLeast(1),
+        ).coerceIn(.02f, 50f)
+        val sourceCenterX = (current.sourceBounds.left + current.sourceBounds.right) / 2f
+        val sourceCenterY = (current.sourceBounds.top + current.sourceBounds.bottom) / 2f
+        transformSession = current.copy(
+            translationX = document.width / 2f - sourceCenterX,
+            translationY = document.height / 2f - sourceCenterY,
+            scale = fitScale,
+        )
+        statusMessage = "Transform fitted to canvas"
+    }
     private fun transformPatch(): Pair<com.neoworksuite.neocanvas.renderer.RasterPatch, CanvasSelection>? {
         val session = transformSession ?: return null
         val layerId = activeLayerId ?: return null
