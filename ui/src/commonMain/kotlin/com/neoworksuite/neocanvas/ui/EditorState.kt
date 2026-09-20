@@ -12,6 +12,7 @@ import com.neoworksuite.neocanvas.core.model.AddRasterLayer
 import com.neoworksuite.neocanvas.core.model.ApplyRasterPatch
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.DeleteLayer
+import com.neoworksuite.neocanvas.core.model.CropCanvas
 import com.neoworksuite.neocanvas.core.model.DocumentCommand
 import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import com.neoworksuite.neocanvas.core.model.DuplicateLayer
@@ -540,6 +541,40 @@ class EditorState(
             CanvasSelection.ellipse(left, top, right, bottom) else CanvasSelection(left, top, right, bottom)
         applySelection(next)
     }
+    fun cropCanvasToSelection(): Boolean {
+        val bounds = selection ?: run {
+            statusMessage = "Make a selection before cropping the canvas"
+            return false
+        }
+        if (bounds.invertedRegion != null || bounds.baseRegion != null || bounds.shape != SelectionShape.Rectangle) {
+            statusMessage = "Crop Canvas currently requires one rectangular selection"
+            return false
+        }
+        if (bounds.left == 0 && bounds.top == 0 && bounds.right == document.width && bounds.bottom == document.height) {
+            statusMessage = "Selection already matches the full canvas"
+            return false
+        }
+
+        val before = tileStore.snapshot()
+        val cropped = com.neoworksuite.neocanvas.renderer.RasterCanvasCrop.crop(
+            store = tileStore,
+            layers = document.layers,
+            left = bounds.left,
+            top = bounds.top,
+            right = bounds.right,
+            bottom = bounds.bottom,
+        )
+        tileStore.restore(cropped.tiles)
+        val addresses = cropped.tiles.keys.groupBy { it.layerId }.mapValues { (_, keys) ->
+            keys.mapTo(linkedSetOf()) { TileAddress(it.layerId, it.x, it.y) }
+        }
+        execute(CropCanvas(cropped.width, cropped.height, addresses), before)
+        clearSelection()
+        resetView()
+        statusMessage = "Cropped canvas to ${cropped.width} × ${cropped.height}"
+        return true
+    }
+
     fun invertSelection() {
         val current = selection ?: return
         selection = if (current.invertedRegion != null) current.invertedRegion
