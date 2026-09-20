@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -127,6 +130,9 @@ fun CanvasWorkspace(
         }
         val transformPreview = remember(state.transformSession, state.activeLayerId, document, state.smoothResizing) {
             state.previewTransform()
+        }
+        val transformSelection = remember(state.transformSession, document) {
+            state.previewTransformSelection()
         }
 
         Canvas(
@@ -450,7 +456,11 @@ fun CanvasWorkspace(
                         Offset(document.width.toFloat(), document.height / 2f), 1f / scale)
                 }
                 drawRect(NeoCanvasColors.canvasEdge, size = Size(document.width.toFloat(), document.height.toFloat()), style = Stroke(1f / scale))
-                val liveSelection = if (state.tool == Tool.Select && inProgress.isNotEmpty()) {
+                val liveSelection = if (
+                    state.tool == Tool.Select &&
+                    state.selectionMode != SelectionShape.Automatic &&
+                    inProgress.isNotEmpty()
+                ) {
                     val first = inProgress.first()
                     val last = inProgress.last()
                     if (state.selectionMode == SelectionShape.Lasso) CanvasSelection.lasso(inProgress.toList())
@@ -458,11 +468,10 @@ fun CanvasWorkspace(
                         maxOf(first.x, last.x).toInt() + 1, maxOf(first.y, last.y).toInt() + 1,
                         shape = state.selectionMode)
                 } else null
-                val bounds = state.transformSession?.targetBounds(document.width, document.height) ?: liveSelection ?: state.selection?.let {
+                val bounds = transformSelection ?: liveSelection ?: state.selection?.let {
                     val dx = moveDelta.x.toInt().coerceIn(-it.left, document.width - it.right)
                     val dy = moveDelta.y.toInt().coerceIn(-it.top, document.height - it.bottom)
-                    it.copy(left = it.left + dx, top = it.top + dy, right = it.right + dx, bottom = it.bottom + dy,
-                        points = it.points.map { point -> point.copy(x = point.x + dx, y = point.y + dy) })
+                    it.translated(dx, dy)
                 }
                 bounds?.let {
                     drawSelectionOutline(it, Color.Black, 3f / scale)
@@ -504,7 +513,7 @@ fun CanvasWorkspace(
             )
         }
 
-        if (state.selection != null) {
+        if (state.selection != null || state.tool == Tool.Select) {
             SelectionControlDock(
                 state = state,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 12.dp),
@@ -580,10 +589,47 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
     ) {
         if (transform == null) {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransformDockButton("Rectangle") { state.selectionMode = SelectionShape.Rectangle; state.tool = Tool.Select }
-                TransformDockButton("Ellipse") { state.selectionMode = SelectionShape.Ellipse; state.tool = Tool.Select }
-                TransformDockButton("Lasso") { state.selectionMode = SelectionShape.Lasso; state.tool = Tool.Select }
-                TransformDockButton("Invert") { state.invertSelection() }
+                TransformDockButton("Rectangle", emphasized = state.selectionMode == SelectionShape.Rectangle) {
+                    state.selectionMode = SelectionShape.Rectangle; state.tool = Tool.Select
+                }
+                TransformDockButton("Ellipse", emphasized = state.selectionMode == SelectionShape.Ellipse) {
+                    state.selectionMode = SelectionShape.Ellipse; state.tool = Tool.Select
+                }
+                TransformDockButton("Lasso", emphasized = state.selectionMode == SelectionShape.Lasso) {
+                    state.selectionMode = SelectionShape.Lasso; state.tool = Tool.Select
+                }
+                TransformDockButton("Automatic", emphasized = state.selectionMode == SelectionShape.Automatic) {
+                    state.selectionMode = SelectionShape.Automatic
+                    state.tool = Tool.Select
+                    state.statusMessage = "Automatic selection — tap a colour area"
+                }
+                if (state.selection != null) TransformDockButton("Invert") { state.invertSelection() }
+            }
+            if (state.selectionMode == SelectionShape.Automatic) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Tolerance", color = NeoCanvasColors.muted, fontSize = 10.sp)
+                    Slider(
+                        value = state.automaticSelectionTolerancePercent.toFloat(),
+                        onValueChange = { state.automaticSelectionTolerancePercent = it.toInt().coerceIn(0, 100) },
+                        onValueChangeFinished = { state.persistPreferences() },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.width(180.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = NeoCanvasColors.accent,
+                            activeTrackColor = NeoCanvasColors.accent,
+                            inactiveTrackColor = NeoCanvasColors.track,
+                        ),
+                    )
+                    Text(
+                        state.automaticSelectionTolerancePercent.toString() + "%",
+                        color = NeoCanvasColors.accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                 TransformDockButton("Replace", emphasized = state.selectionCombineMode == SelectionCombineMode.Replace) {
@@ -599,12 +645,23 @@ private fun SelectionControlDock(state: EditorState, modifier: Modifier = Modifi
                     state.selectionCombineMode = SelectionCombineMode.Intersect
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransformDockButton("Transform", emphasized = true) { state.beginTransform() }
-                TransformDockButton("Move") { state.tool = Tool.MoveSelection }
-                TransformDockButton("Crop Canvas") { state.cropCanvasToSelection() }
-                TransformDockButton("Deselect", muted = true) { state.clearSelection() }
-                TransformDockButton("Clear pixels", muted = true) { state.clearSelectedPixels() }
+            if (state.selection != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TransformDockButton("Transform", emphasized = true) { state.beginTransform() }
+                    TransformDockButton("Move") { state.tool = Tool.MoveSelection }
+                    TransformDockButton("Crop Canvas") { state.cropCanvasToSelection() }
+                    TransformDockButton("Deselect", muted = true) { state.clearSelection() }
+                    TransformDockButton("Clear pixels", muted = true) { state.clearSelectedPixels() }
+                }
+            } else {
+                Text(
+                    if (state.selectionMode == SelectionShape.Automatic)
+                        "Tap a colour area on the active layer"
+                    else "Drag on the canvas to make a selection",
+                    color = NeoCanvasColors.faint,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
             }
         } else {
             val scalePercent = (transform.scale * 100f).toInt()
@@ -705,6 +762,14 @@ private fun DrawScope.drawSelectionOutline(selection: CanvasSelection, color: Co
                 close()
             }
             drawPath(path, color, style = Stroke(width))
+        }
+        SelectionShape.Automatic -> selection.rasterRegion?.outline?.forEach { edge ->
+            drawLine(
+                color,
+                Offset(edge.x1.toFloat(), edge.y1.toFloat()),
+                Offset(edge.x2.toFloat(), edge.y2.toFloat()),
+                width,
+            )
         }
     }
 }

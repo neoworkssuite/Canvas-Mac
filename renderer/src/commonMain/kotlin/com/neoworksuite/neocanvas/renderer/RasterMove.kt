@@ -15,7 +15,9 @@ object RasterMove {
     fun move(store: TileStore, layer: String, left: Int, top: Int, right: Int, bottom: Int,
         dx: Int, dy: Int, width: Int, height: Int, rotateClockwise: Boolean = false,
         resizedWidth: Int? = null, resizedHeight: Int? = null,
-        sampling: ResizeSampling = ResizeSampling.Pixel, degrees: Float = 0f): RasterPatch {
+        sampling: ResizeSampling = ResizeSampling.Pixel, degrees: Float = 0f,
+        acceptsSourcePixel: (Int, Int) -> Boolean = { _, _ -> true },
+    ): RasterPatch {
         require(left >= 0 && top >= 0 && right <= width && bottom <= height)
         require(left < right && top < bottom)
         require(degrees.isFinite() && !(rotateClockwise && degrees != 0f))
@@ -33,6 +35,7 @@ object RasterMove {
         fun index(x: Int, y: Int) = ((y % 256) * 256 + x % 256) * 4
         fun writable(k: TileKey) = working.getOrPut(k) { source[k]?.copyOf() ?: ByteArray(TileFormat.BYTES_PER_TILE) }
         for (y in top until bottom) for (x in left until right) {
+            if (!acceptsSourcePixel(x, y)) continue
             val k = key(x, y)
             val original = source[k] ?: continue
             val i = index(x, y)
@@ -45,6 +48,7 @@ object RasterMove {
             val x = if (rotateClockwise) left + ry else left + rx
             val y = if (rotateClockwise) bottom - 1 - rx else top + ry
             if (x !in left until right || y !in top until bottom) return
+            if (!acceptsSourcePixel(x, y)) return
             val original = source[key(x, y)] ?: return
             val i = index(x, y)
             val alpha = (original[i + 3].toInt() and 255) / 255f * weight

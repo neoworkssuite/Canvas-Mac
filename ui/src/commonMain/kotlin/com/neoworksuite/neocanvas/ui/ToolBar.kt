@@ -95,7 +95,7 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
         StudioButton(Glyph.Transform, "Move canvas", state.tool == Tool.Pan) { state.activateTool(Tool.Pan) }
         StudioButton(Glyph.Fill, "Fill connected area on active layer", state.tool == Tool.Fill) { state.activateTool(Tool.Fill) }
         StudioButton(Glyph.Eyedropper, "Sample visible colour", state.tool == Tool.Eyedropper) { state.activateTool(Tool.Eyedropper) }
-        StudioButton(Glyph.Select, "Rectangle selection", state.tool == Tool.Select) { state.activateTool(Tool.Select) }
+        StudioButton(Glyph.Select, "Selection tools", state.tool == Tool.Select) { state.activateTool(Tool.Select) }
         DividerTick()
         SymmetryMenu(state)
         if (state.selection != null) {

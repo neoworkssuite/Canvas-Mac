@@ -33,6 +33,7 @@ import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.RasterColor
 import com.neoworksuite.neocanvas.renderer.RasterPoint
 import com.neoworksuite.neocanvas.renderer.Rasterizer
+import com.neoworksuite.neocanvas.renderer.RasterSelection
 import com.neoworksuite.neocanvas.renderer.TileKey
 import com.neoworksuite.neocanvas.renderer.TileStore
 
@@ -162,6 +163,7 @@ class EditorState(
     var color: Color by mutableStateOf(Color(0xFF1B1C20))
     var brushSize: Float by mutableFloatStateOf(BuiltInBrushes.pencil.baseSize)
     var fillTolerance: Int by mutableIntStateOf(0)
+    var automaticSelectionTolerancePercent: Int by mutableIntStateOf(12)
     var brushOpacity: Float by mutableFloatStateOf(1f)
     var smudgeStrength: Float by mutableFloatStateOf(.65f)
     var stabilization: Float by mutableFloatStateOf(0f)
@@ -285,10 +287,12 @@ class EditorState(
             sampling = if (smoothResizing) com.neoworksuite.neocanvas.renderer.ResizeSampling.Smooth
                 else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel,
             degrees = session.rotationDegrees,
+            acceptsSourcePixel = session.sourceBounds::contains,
         )
-        return patch to target
+        return patch to session.sourceBounds.transformedTo(target, session.rotationDegrees)
     }
     fun previewTransform(): com.neoworksuite.neocanvas.renderer.RasterPatch? = transformPatch()?.first
+    fun previewTransformSelection(): CanvasSelection? = transformPatch()?.second
     fun cancelTransform() {
         if (transformSession == null) return
         transformSession = null
@@ -347,8 +351,12 @@ class EditorState(
         val moveX = dx.coerceIn(-bounds.left, document.width - bounds.right)
         val moveY = dy.coerceIn(-bounds.top, document.height - bounds.bottom)
         if (moveX == 0 && moveY == 0) return null
-        return com.neoworksuite.neocanvas.renderer.RasterMove.move(tileStore, layer,
-            bounds.left, bounds.top, bounds.right, bounds.bottom, moveX, moveY, document.width, document.height)
+        return com.neoworksuite.neocanvas.renderer.RasterMove.move(
+            tileStore, layer,
+            bounds.left, bounds.top, bounds.right, bounds.bottom,
+            moveX, moveY, document.width, document.height,
+            acceptsSourcePixel = bounds::contains,
+        )
     }
     fun importImage() {
         val targetDocument = document.id
@@ -405,6 +413,7 @@ class EditorState(
             if (left >= right || top >= bottom) return@forEach
             val bytes = original.copyOf()
             for (y in top until bottom) for (x in left until right) {
+                if (!bounds.contains(x, y)) continue
                 val index = ((y % 256) * 256 + x % 256) * 4
                 for (channel in 0..3) bytes[index + channel] = 0
             }
@@ -435,13 +444,15 @@ class EditorState(
             bounds.left, bounds.top, bounds.right, bounds.bottom, left - bounds.left, top - bounds.top,
             document.width, document.height, resizedWidth = newWidth, resizedHeight = newHeight,
             sampling = if (smoothResizing) com.neoworksuite.neocanvas.renderer.ResizeSampling.Smooth
-                else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel)
+                else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel,
+            acceptsSourcePixel = bounds::contains,
+        )
         if (patch.keys.isNotEmpty()) {
             val before = tileStore.snapshot()
             tileStore.applyPatch(patch)
             execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
         }
-        selection = CanvasSelection(left, top, left + newWidth, top + newHeight)
+        selection = bounds.transformedTo(CanvasSelection(left, top, left + newWidth, top + newHeight), 0f)
         statusMessage = "Resized selection to $newWidth × $newHeight pixels"
     }
     fun rotateSelection(degrees: Float = 90f) {
@@ -460,25 +471,33 @@ class EditorState(
             bounds.left, bounds.top, bounds.right, bounds.bottom, left - bounds.left, top - bounds.top,
             document.width, document.height, rotateClockwise = degrees == 90f,
             sampling = if (smoothResizing) com.neoworksuite.neocanvas.renderer.ResizeSampling.Smooth else com.neoworksuite.neocanvas.renderer.ResizeSampling.Pixel,
-            degrees = if (degrees == 90f) 0f else degrees)
+            degrees = if (degrees == 90f) 0f else degrees,
+            acceptsSourcePixel = bounds::contains,
+        )
         if (patch.keys.isNotEmpty()) {
             val before = tileStore.snapshot()
             tileStore.applyPatch(patch)
             execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
         }
-        selection = CanvasSelection(left, top, left + newWidth, top + newHeight)
+        val target = CanvasSelection(left, top, left + newWidth, top + newHeight)
+        selection = if (degrees == 90f) bounds.rotatedClockwiseTo(target) else bounds.transformedTo(target, degrees)
         statusMessage = "Rotated selection ${degrees.toInt()}°"
     }
     fun flipSelection(horizontal: Boolean) {
         val bounds = selection ?: return
         val layer = activeLayerId ?: return
         if (document.layers.none { it.id == layer && it.visible && !it.locked }) return
-        val patch = com.neoworksuite.neocanvas.renderer.RasterFlip.flip(tileStore, layer,
-            bounds.left, bounds.top, bounds.right, bounds.bottom, document.width, document.height, horizontal)
+        val patch = com.neoworksuite.neocanvas.renderer.RasterFlip.flip(
+            tileStore, layer,
+            bounds.left, bounds.top, bounds.right, bounds.bottom,
+            document.width, document.height, horizontal,
+            acceptsSourcePixel = bounds::contains,
+        )
         if (patch.keys.isEmpty()) return
         val before = tileStore.snapshot()
         tileStore.applyPatch(patch)
         execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+        selection = bounds.flipped(horizontal)
         statusMessage = if (horizontal) "Flipped selection horizontally" else "Flipped selection vertically"
     }
     fun moveSelection(dx: Int, dy: Int) {
@@ -492,7 +511,7 @@ class EditorState(
         val before = tileStore.snapshot()
         tileStore.applyPatch(patch)
         execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
-        selection = CanvasSelection(bounds.left + moveX, bounds.top + moveY, bounds.right + moveX, bounds.bottom + moveY)
+        selection = bounds.translated(moveX, moveY)
         statusMessage = "Moved selected artwork on active layer"
     }
     fun selectRectangle(from: DrawPoint, to: DrawPoint) {
@@ -523,6 +542,10 @@ class EditorState(
 
     fun selectArea(points: List<DrawPoint>) {
         if (points.isEmpty()) return
+        if (selectionMode == SelectionShape.Automatic) {
+            selectAutomatic(points.first())
+            return
+        }
         if (selectionMode == SelectionShape.Lasso) {
             val next = CanvasSelection.lasso(points)?.let {
                 it.copy(left = it.left.coerceIn(0, document.width), top = it.top.coerceIn(0, document.height),
@@ -541,6 +564,35 @@ class EditorState(
             CanvasSelection.ellipse(left, top, right, bottom) else CanvasSelection(left, top, right, bottom)
         applySelection(next)
     }
+    fun selectAutomatic(point: DrawPoint) {
+        val layerId = activeLayerId ?: run {
+            statusMessage = "Select a raster layer before using Automatic Selection"
+            return
+        }
+        val layer = document.layers.firstOrNull { it.id == layerId && it.visible }
+        if (layer?.payload !is LayerPayload.Raster) {
+            statusMessage = "Automatic Selection needs a visible raster layer"
+            return
+        }
+        val x = kotlin.math.floor(point.x).toInt()
+        val y = kotlin.math.floor(point.y).toInt()
+        val tolerance = automaticSelectionTolerancePercent.coerceIn(0, 100) * 255 / 100
+        val region = RasterSelection.connectedColour(
+            tileStore,
+            layerId,
+            document.width,
+            document.height,
+            x,
+            y,
+            tolerance,
+        )
+        applySelection(region?.let(CanvasSelection::automatic))
+        if (region != null) {
+            statusMessage = "Automatic selection • " +
+                automaticSelectionTolerancePercent.coerceIn(0, 100) + "% tolerance"
+        }
+    }
+
     fun cropCanvasToSelection(): Boolean {
         val bounds = selection ?: run {
             statusMessage = "Make a selection before cropping the canvas"
@@ -605,6 +657,7 @@ class EditorState(
         gridGuideVisible = false
         perspectiveGuideVisible = false
         guideSpacing = 128f
+        automaticSelectionTolerancePercent = 12
         smoothResizing = true
         inspectorVisible = false
         settingsVisible = false
@@ -624,6 +677,7 @@ class EditorState(
                     "gridGuideVisible" to gridGuideVisible.toString(),
                     "perspectiveGuideVisible" to perspectiveGuideVisible.toString(),
                     "guideSpacing" to guideSpacing.toString(),
+                    "automaticSelectionTolerancePercent" to automaticSelectionTolerancePercent.coerceIn(0, 100).toString(),
                     "smoothResizing" to smoothResizing.toString(),
                 ),
             )
@@ -648,6 +702,9 @@ class EditorState(
             gridGuideVisible = preferences["gridGuideVisible"]?.toBoolean() ?: gridGuideVisible
             perspectiveGuideVisible = preferences["perspectiveGuideVisible"]?.toBoolean() ?: perspectiveGuideVisible
             guideSpacing = preferences["guideSpacing"]?.toFloatOrNull()?.coerceIn(32f, 512f) ?: guideSpacing
+            automaticSelectionTolerancePercent =
+                preferences["automaticSelectionTolerancePercent"]?.toIntOrNull()?.coerceIn(0, 100)
+                    ?: automaticSelectionTolerancePercent
             smoothResizing = preferences["smoothResizing"]?.toBoolean() ?: smoothResizing
         } catch (_: Exception) {
             // Defaults remain active if a stored preference file cannot be read.
