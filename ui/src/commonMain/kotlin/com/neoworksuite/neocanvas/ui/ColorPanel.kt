@@ -127,7 +127,7 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
                 val center = Offset(size.width / 2f, size.height / 2f)
                 val dx = position.x - center.x
                 val dy = position.y - center.y
-                val radius = size.minDimension / 2f
+                val radius = minOf(size.width, size.height).toFloat() / 2f
                 val distance = kotlin.math.sqrt(dx * dx + dy * dy)
 
                 if (distance >= radius * .67f) {
@@ -152,7 +152,7 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
                 val center = Offset(size.width / 2f, size.height / 2f)
                 val dx = selectPosition.x - center.x
                 val dy = selectPosition.y - center.y
-                val radius = size.minDimension / 2f
+                val radius = minOf(size.width, size.height).toFloat() / 2f
                 val distance = kotlin.math.sqrt(dx * dx + dy * dy)
                 if (distance >= radius * .67f) {
                     val hue = ((kotlin.math.atan2(dy, dx) * 180f / kotlin.math.PI.toFloat()) + 360f) % 360f
@@ -171,7 +171,7 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
             }
         },
     ) {
-        val radius = size.minDimension / 2f
+        val radius = minOf(size.width, size.height).toFloat() / 2f
         val center = Offset(size.width / 2f, size.height / 2f)
 
         // Hue ring.
