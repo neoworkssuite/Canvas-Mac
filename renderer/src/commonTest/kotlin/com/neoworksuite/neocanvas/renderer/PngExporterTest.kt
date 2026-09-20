@@ -10,8 +10,8 @@ import kotlin.test.assertEquals
 
 class PngExporterTest {
     @Test fun multiply_and_screen_blend_modes_are_used_during_export() {
-        val base = tile(100.toByte(), 150.toByte(), 200.toByte(), 255.toByte())
-        val top = tile(128.toByte(), 128.toByte(), 128.toByte(), 255.toByte())
+        val base = tile(100, 150, 200, 255)
+        val top = tile(128, 128, 128, 255)
         fun pixel(mode: LayerBlendMode): ByteArray {
             val document = CanvasDocument("blend", 1, 1, listOf(
                 Layer("base", "Base", payload = LayerPayload.Raster(setOf(TileAddress("base", 0, 0)))),
@@ -26,11 +26,11 @@ class PngExporterTest {
     }
 
     @Test fun clipping_mask_uses_alpha_of_layer_below() {
-        val base = tile(10.toByte(), 20.toByte(), 30.toByte(), 0)
+        val base = tile(10, 20, 30, 0)
         val baseOpaque = base.copyOf().also {
-            it[3] = 255.toByte()
+            it[3] = 255
         }
-        val top = tile(255.toByte(), 0, 0, 255.toByte())
+        val top = tile(255, 0, 0, 255)
         val document = CanvasDocument("clip", 2, 1, listOf(
             Layer("base", "Base", payload = LayerPayload.Raster(setOf(TileAddress("base", 0, 0)))),
             Layer("top", "Top", payload = LayerPayload.Raster(setOf(TileAddress("top", 0, 0))), clipping = true),
@@ -50,8 +50,8 @@ class PngExporterTest {
     }
 
     @Test fun extended_blend_modes_render_without_falling_back_to_normal() {
-        val base = tile(80.toByte(), 120.toByte(), 180.toByte(), 255.toByte())
-        val top = tile(180.toByte(), 80.toByte(), 40.toByte(), 255.toByte())
+        val base = tile(80, 120, 180, 255)
+        val top = tile(180, 80, 40, 255)
         val document = CanvasDocument("blend-more", 1, 1, listOf(
             Layer("base", "Base", payload = LayerPayload.Raster(setOf(TileAddress("base", 0, 0)))),
             Layer("top", "Top", payload = LayerPayload.Raster(setOf(TileAddress("top", 0, 0))), blendMode = LayerBlendMode.Difference),
@@ -65,8 +65,8 @@ class PngExporterTest {
 
     @Test
     fun png_dimensions_match_document_and_hidden_layers_are_excluded() {
-        val red = tile(255.toByte(), 0, 0, 255.toByte())
-        val blue = tile(0, 0, 255.toByte(), 255.toByte())
+        val red = tile(255, 0, 0, 255)
+        val blue = tile(0, 0, 255, 255)
         val document = CanvasDocument(
             id = "document",
             width = 100,
@@ -85,10 +85,13 @@ class PngExporterTest {
         assertEquals(0, image.rgbaAt(0, 0)[2].toInt() and 0xff)
     }
 
-    private fun tile(r: Byte, g: Byte, b: Byte, a: Byte): ByteArray =
+    private fun tile(r: Int, g: Int, b: Int, a: Int): ByteArray =
         ByteArray(TILE_SIZE_PIXELS * TILE_SIZE_PIXELS * 4).also { pixels ->
             for (index in pixels.indices step 4) {
-                pixels[index] = r; pixels[index + 1] = g; pixels[index + 2] = b; pixels[index + 3] = a
+                pixels[index] = r.coerceIn(0, 255).toByte()
+                pixels[index + 1] = g.coerceIn(0, 255).toByte()
+                pixels[index + 2] = b.coerceIn(0, 255).toByte()
+                pixels[index + 3] = a.coerceIn(0, 255).toByte()
             }
         }
 }
