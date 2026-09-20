@@ -79,6 +79,7 @@ object NeoCanvasPackage {
             Layer(id, name, visible, opacity, LayerPayload.Raster(addresses),
                 locked = if ("locked" in layerObject.fields) layerObject.boolean("locked") else false,
                 alphaLocked = if ("alphaLocked" in layerObject.fields) layerObject.boolean("alphaLocked") else false,
+                clipping = if ("clipping" in layerObject.fields) layerObject.boolean("clipping") else false,
                 blendMode = if ("blendMode" in layerObject.fields) {
                     runCatching { LayerBlendMode.valueOf(layerObject.string("blendMode")) }
                         .getOrElse { throw PackageIncompatibleException("Unsupported layer blend mode.") }
@@ -109,6 +110,7 @@ object NeoCanvasPackage {
             append("\",\"visible\":").append(layer.visible).append(",\"opacity\":").append(layer.opacity)
             append(",\"locked\":").append(layer.locked)
             append(",\"alphaLocked\":").append(layer.alphaLocked)
+            append(",\"clipping\":").append(layer.clipping)
             append(",\"blendMode\":\"").append(layer.blendMode.name).append('"')
             append(",\"type\":\"raster\",\"tiles\":[")
             raster.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEachIndexed { tileIndex, address ->
