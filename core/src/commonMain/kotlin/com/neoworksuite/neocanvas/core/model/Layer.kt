@@ -59,6 +59,7 @@ data class Layer(
     val payload: LayerPayload,
     val locked: Boolean = false,
     val alphaLocked: Boolean = false,
+    val clipping: Boolean = false,
     val blendMode: LayerBlendMode = LayerBlendMode.Normal,
 ) {
     init {
