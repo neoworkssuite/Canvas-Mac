@@ -75,18 +75,13 @@ fun ColorPanel(state: EditorState, modifier: Modifier = Modifier) {
                 TextButton(onClick = { state.removePaletteColor(saved) }) { Text("Remove", color = NeoCanvasColors.muted) }
             }
         }
-        ColourWheel(state.color, hsv.hue, Modifier.size(164.dp).align(Alignment.CenterHorizontally)) {
-            choose(hsv.copy(hue = it))
-        }
-        Text("Hue: ${hsv.hue.toInt()}°", color = NeoCanvasColors.muted, fontSize = 11.sp)
-        Slider(hsv.hue, { choose(hsv.copy(hue = it)) }, valueRange = 0f..359.99f, colors = studioSliderColors(),
-            modifier = Modifier.semantics { contentDescription = "Colour hue" })
-        Text("Saturation: ${(hsv.saturation * 100).toInt()}%", color = NeoCanvasColors.muted, fontSize = 11.sp)
-        Slider(hsv.saturation, { choose(hsv.copy(saturation = it)) }, colors = studioSliderColors(),
-            modifier = Modifier.semantics { contentDescription = "Colour saturation" })
-        Text("Brightness: ${(hsv.value * 100).toInt()}%", color = NeoCanvasColors.muted, fontSize = 11.sp)
-        Slider(hsv.value, { choose(hsv.copy(value = it)) }, colors = studioSliderColors(),
-            modifier = Modifier.semantics { contentDescription = "Colour brightness" })
+        ColourWheel(hsv, Modifier.size(190.dp).align(Alignment.CenterHorizontally)) { choose(it) }
+        Text(
+            "H ${hsv.hue.toInt()}°   S ${(hsv.saturation * 100).toInt()}%   B ${(hsv.value * 100).toInt()}%",
+            color = NeoCanvasColors.muted,
+            fontSize = 11.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
         OutlinedTextField(value = hex, onValueChange = { hex = it }, singleLine = true,
             label = { Text("Hex colour (#RRGGBB)") }, isError = parseColorHex(hex) == null,
             modifier = Modifier.fillMaxWidth())
@@ -122,32 +117,111 @@ private fun ColourSwatch(color: Color, selected: Boolean, onClick: () -> Unit) =
 }
 
 @Composable
-private fun ColourWheel(selected: Color, hue: Float, modifier: Modifier = Modifier, onHue: (Float) -> Unit) {
-    val currentOnHue by rememberUpdatedState(onHue)
-    Canvas(modifier.semantics { contentDescription = "Hue wheel; hue slider also available below" }
-        .pointerInput(Unit) {
+private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) -> Unit) {
+    val currentOnHsv by rememberUpdatedState(onHsv)
+    Canvas(
+        modifier.semantics {
+            contentDescription = "Colour wheel. Outer ring selects hue; inner disc selects saturation and brightness"
+        }.pointerInput(hsv) {
             fun select(position: Offset) {
-                val dx = position.x - size.width / 2f
-                val dy = position.y - size.height / 2f
-                currentOnHue(((kotlin.math.atan2(dy, dx) * 180f / kotlin.math.PI.toFloat()) + 360f) % 360f)
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val dx = position.x - center.x
+                val dy = position.y - center.y
+                val radius = size.minDimension / 2f
+                val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+
+                if (distance >= radius * .67f) {
+                    val hue = ((kotlin.math.atan2(dy, dx) * 180f / kotlin.math.PI.toFloat()) + 360f) % 360f
+                    // When starting from black/grey, choosing a hue should immediately produce a visible colour.
+                    val saturation = if (hsv.saturation < .02f) 1f else hsv.saturation
+                    val value = if (hsv.value < .02f) 1f else hsv.value
+                    currentOnHsv(Hsv(hue, saturation, value))
+                } else {
+                    val extent = radius * .46f
+                    val saturation = ((dx / (extent * 2f)) + .5f).coerceIn(0f, 1f)
+                    val value = (1f - ((dy / (extent * 2f)) + .5f)).coerceIn(0f, 1f)
+                    currentOnHsv(hsv.copy(saturation = saturation, value = value))
+                }
             }
-            detectDragGestures(onDragStart = { select(it) }, onDrag = { change, _ -> change.consume(); select(change.position) })
-        }.pointerInput(Unit) {
-            detectTapGestures { position ->
-                val dx = position.x - size.width / 2f
-                val dy = position.y - size.height / 2f
-                currentOnHue(((kotlin.math.atan2(dy, dx) * 180f / kotlin.math.PI.toFloat()) + 360f) % 360f)
+            detectDragGestures(
+                onDragStart = { select(it) },
+                onDrag = { change, _ -> change.consume(); select(change.position) },
+            )
+        }.pointerInput(hsv) {
+            detectTapGestures { selectPosition ->
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val dx = selectPosition.x - center.x
+                val dy = selectPosition.y - center.y
+                val radius = size.minDimension / 2f
+                val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+                if (distance >= radius * .67f) {
+                    val hue = ((kotlin.math.atan2(dy, dx) * 180f / kotlin.math.PI.toFloat()) + 360f) % 360f
+                    currentOnHsv(Hsv(
+                        hue,
+                        if (hsv.saturation < .02f) 1f else hsv.saturation,
+                        if (hsv.value < .02f) 1f else hsv.value,
+                    ))
+                } else {
+                    val extent = radius * .46f
+                    currentOnHsv(hsv.copy(
+                        saturation = ((dx / (extent * 2f)) + .5f).coerceIn(0f, 1f),
+                        value = (1f - ((dy / (extent * 2f)) + .5f)).coerceIn(0f, 1f),
+                    ))
+                }
             }
-        }) {
-    val colors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
-    drawCircle(Brush.sweepGradient(colors), size.minDimension * .48f)
-    drawCircle(NeoCanvasColors.panel, size.minDimension * .33f)
-    drawCircle(selected, size.minDimension * .18f)
-    drawCircle(NeoCanvasColors.paper, size.minDimension * .18f, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-    val angle = hue * kotlin.math.PI.toFloat() / 180f
-    val marker = Offset(size.width / 2f + kotlin.math.cos(angle) * size.minDimension * .405f,
-        size.height / 2f + kotlin.math.sin(angle) * size.minDimension * .405f)
-    drawCircle(Color.Black, 6.dp.toPx(), marker)
-    drawCircle(Color.White, 4.dp.toPx(), marker)
+        },
+    ) {
+        val radius = size.minDimension / 2f
+        val center = Offset(size.width / 2f, size.height / 2f)
+
+        // Hue ring.
+        val hueColors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
+        drawCircle(Brush.sweepGradient(hueColors), radius * .96f)
+        drawCircle(NeoCanvasColors.panel, radius * .67f)
+
+        // Saturation/value disc for the currently selected hue.
+        val discRadius = radius * .62f
+        drawCircle(
+            Brush.horizontalGradient(
+                listOf(Color.White, Color.hsv(hsv.hue, 1f, 1f)),
+                startX = center.x - discRadius,
+                endX = center.x + discRadius,
+            ),
+            discRadius,
+            center,
+        )
+        drawCircle(
+            Brush.verticalGradient(
+                listOf(Color.Transparent, Color.Black),
+                startY = center.y - discRadius,
+                endY = center.y + discRadius,
+            ),
+            discRadius,
+            center,
+        )
+
+        // Hue marker.
+        val hueAngle = hsv.hue * kotlin.math.PI.toFloat() / 180f
+        val hueMarker = Offset(
+            center.x + kotlin.math.cos(hueAngle) * radius * .815f,
+            center.y + kotlin.math.sin(hueAngle) * radius * .815f,
+        )
+        drawCircle(Color.Black, 6.dp.toPx(), hueMarker)
+        drawCircle(Color.White, 4.dp.toPx(), hueMarker)
+
+        // Saturation/value marker. Keep it in the square safely inscribed inside the disc.
+        val extent = radius * .46f
+        val svMarker = Offset(
+            center.x + (hsv.saturation - .5f) * extent * 2f,
+            center.y + ((1f - hsv.value) - .5f) * extent * 2f,
+        )
+        drawCircle(Color.Black, 7.dp.toPx(), svMarker)
+        drawCircle(Color.White, 4.5.dp.toPx(), svMarker)
+        drawCircle(
+            Color.hsv(hsv.hue, hsv.saturation, hsv.value),
+            3.dp.toPx(),
+            svMarker,
+        )
     }
 }
+
