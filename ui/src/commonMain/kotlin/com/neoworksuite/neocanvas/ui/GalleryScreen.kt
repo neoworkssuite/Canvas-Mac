@@ -51,7 +51,8 @@ fun GalleryScreen(
     actions: EditorFileActions,
     onNew: () -> Unit,
     onImportDocument: () -> Unit,
-    onImportImage: () -> Unit,
+    onImportImage: (ImportedImage) -> Unit,
+    onKids: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
     var documents by remember { mutableStateOf(runCatching { actions.listLocalDocuments() }.getOrDefault(emptyList())) }
@@ -87,8 +88,20 @@ fun GalleryScreen(
                 Spacer(Modifier.weight(1f))
                 if (stackOpen) GalleryAction("Back") { stackOpen = false; selected = emptySet() }
                 GalleryAction(if (selecting) "Done" else "Select") { selecting = !selecting; if (!selecting) selected = emptySet() }
-                GalleryAction("Import") { onImportDocument() }
-                GalleryAction("Photo") { onImportImage() }
+                GalleryAction("Open file") { onImportDocument() }
+                GalleryAction("Import image") {
+                    actions.importImage { result ->
+                        result.fold(
+                            onSuccess = { image ->
+                                if (image != null) onImportImage(image)
+                            },
+                            onFailure = { error ->
+                                message = "Could not import image: ${error.message ?: "Unknown error"}"
+                            },
+                        )
+                    }
+                }
+                GalleryAction("Kids") { onKids() }
                 Button(onClick = onNew) { Text("+  New artwork") }
             }
 
@@ -121,8 +134,11 @@ fun GalleryScreen(
                 Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Image(neoCanvasIcon(), null, Modifier.size(112.dp))
                     Text("Your Gallery is ready", color = NeoCanvasColors.paper, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Create a canvas or import an image. Everything stays local.", color = NeoCanvasColors.muted, modifier = Modifier.padding(10.dp))
-                    Button(onClick = onNew) { Text("Create artwork") }
+                    Text("Create a canvas, import an image, or open Kids activities. Everything stays local.", color = NeoCanvasColors.muted, modifier = Modifier.padding(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(onClick = onNew) { Text("Create artwork") }
+                        Button(onClick = onKids) { Text("Kids activities") }
+                    }
                 }
             } else {
                 LazyVerticalGrid(
