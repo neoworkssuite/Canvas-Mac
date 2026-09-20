@@ -56,6 +56,7 @@ fun StudioInspector(state: EditorState, compact: Boolean, modifier: Modifier = M
             InspectorPanel.Layers -> LayersPanel(state, Modifier.fillMaxSize())
             InspectorPanel.Brushes -> BrushPanel(state, Modifier.fillMaxSize())
             InspectorPanel.Colors -> ColorPanel(state, Modifier.fillMaxSize())
+            InspectorPanel.Effects -> EffectsPanel(state, Modifier.fillMaxSize())
         }
     }
 }
@@ -66,6 +67,7 @@ private fun InspectorTabs(state: EditorState) {
         InspectorTab("LAYERS", state.inspectorPanel == InspectorPanel.Layers) { state.showInspector(InspectorPanel.Layers) }
         InspectorTab("BRUSHES", state.inspectorPanel == InspectorPanel.Brushes) { state.showInspector(InspectorPanel.Brushes) }
         InspectorTab("COLOUR", state.inspectorPanel == InspectorPanel.Colors) { state.showInspector(InspectorPanel.Colors) }
+        InspectorTab("FX", state.inspectorPanel == InspectorPanel.Effects) { state.showInspector(InspectorPanel.Effects) }
     }
 }
 
