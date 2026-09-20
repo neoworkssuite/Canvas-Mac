@@ -375,6 +375,30 @@ class EditorStateTest {
     }
 
     @Test
+    fun psd_import_replaces_the_document_and_marks_it_unsaved() {
+        val importedLayer = Layer("psd-layer-1", "PSD Paint", payload = LayerPayload.Raster())
+        val imported = com.neoworksuite.neocanvas.renderer.PsdImportResult(
+            CanvasDocument("psd", 24, 18, listOf(importedLayer)),
+            emptyMap(),
+        )
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsPsdImport = true
+            override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
+                onResult(Result.success(imported))
+            }
+        }
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(8, 8)), actions)
+
+        state.importPsd()
+
+        assertEquals(24, state.document.width)
+        assertEquals(18, state.document.height)
+        assertEquals("PSD Paint", state.document.layers.single().name)
+        assertTrue(state.hasUnsavedChanges)
+        assertEquals("psd-layer-1", state.activeLayerId)
+    }
+
+    @Test
     fun inspector_switches_between_layers_colours_and_brushes() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(100, 100)))
 

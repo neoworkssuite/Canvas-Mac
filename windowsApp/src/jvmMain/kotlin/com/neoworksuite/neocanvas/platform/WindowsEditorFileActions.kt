@@ -5,6 +5,7 @@ import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.PngExporter
+import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import java.awt.FileDialog
 import java.awt.Frame
@@ -17,6 +18,8 @@ class WindowsEditorFileActions(
 ) : EditorFileActions {
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
+    override val supportsPsdImport = true
+    override val supportsPsdExport = true
     private val libraryDirectory = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/Documents",
@@ -79,6 +82,14 @@ class WindowsEditorFileActions(
     override fun loadRecovery(): LoadResult? = recoveryFile.let { if (it.exists()) documents.load(it.absolutePath) else null }
     override fun saveRecovery(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         documents.save(recoveryFile.absolutePath, document, tiles)
+    override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
+        onResult(runCatching {
+            val path = choose("Import Photoshop PSD", FileDialog.LOAD, null) ?: return@runCatching null
+            require(path.endsWith(".psd", ignoreCase = true)) { "Choose a Photoshop .psd file." }
+            PsdCodec.decode(File(path).readBytes())
+        })
+    }
+
     override fun importImage(onResult: (Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) {
         onResult(runCatching {
             val path = choose("Import PNG or JPEG image", FileDialog.LOAD, null) ?: return@runCatching null
@@ -141,6 +152,16 @@ class WindowsEditorFileActions(
         val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".png" } ?: "Untitled.png"
         val path = choose("Export PNG", FileDialog.SAVE, suggested) ?: return SaveResult.Failure("Export cancelled.")
         return PngExporter.export(document, tiles) { bytes -> File(path.ensureExtension(".png")).writeBytes(bytes) }
+    }
+
+    override fun exportPsd(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult = try {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".psd" } ?: "Untitled.psd"
+        val path = choose("Export layered Photoshop PSD", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("PSD export cancelled.")
+        File(path.ensureExtension(".psd")).writeBytes(PsdCodec.encode(document, tiles))
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
     }
 
     private fun choose(title: String, mode: Int, suggested: String?): String? {

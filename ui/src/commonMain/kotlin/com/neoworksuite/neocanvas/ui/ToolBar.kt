@@ -169,6 +169,9 @@ private fun StudioActionsMenu(state: EditorState) {
                 ActionMenuPage.Add -> {
                     ActionBackItem { page = ActionMenuPage.Root }
                     ActionItem("Import Image…") { closeMenu(); state.importImage() }
+                    if (state.supportsPsdImport) {
+                        ActionItem("Import Photoshop PSD…") { closeMenu(); state.importPsd() }
+                    }
                 }
                 ActionMenuPage.Canvas -> {
                     ActionBackItem { page = ActionMenuPage.Root }
@@ -206,6 +209,9 @@ private fun StudioActionsMenu(state: EditorState) {
                         ActionItem("Save As…") { closeMenu(); state.saveAs() }
                     }
                     ActionItem("Export PNG…") { closeMenu(); state.exportPng() }
+                    if (state.supportsPsdExport) {
+                        ActionItem("Export Photoshop PSD…") { closeMenu(); state.exportPsd() }
+                    }
                 }
             }
         }

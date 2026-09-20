@@ -97,6 +97,49 @@ class EditorState(
         acceptOpenResult(result)
         return result is LoadResult.Success
     }
+
+    val supportsPsdImport: Boolean get() = fileActions.supportsPsdImport
+    val supportsPsdExport: Boolean get() = fileActions.supportsPsdExport
+
+    fun importPsd() {
+        val targetDocument = document.id
+        fileActions.importPsd { result ->
+            result.fold(
+                onSuccess = { imported ->
+                    if (imported != null && document.id == targetDocument) acceptPsdImport(imported)
+                },
+                onFailure = { error ->
+                    statusMessage = "Could not import PSD: " + (error.message ?: "unknown PSD error")
+                },
+            )
+        }
+    }
+
+    fun exportPsd(): Boolean {
+        val result = try { fileActions.exportPsd(document, tilesForDocument()) }
+            catch (error: Exception) { SaveResult.Failure(error.message ?: "Could not export PSD") }
+        applySaveResult(result, "Exported layered Photoshop PSD")
+        return result == SaveResult.Success
+    }
+
+    private fun acceptPsdImport(imported: com.neoworksuite.neocanvas.renderer.PsdImportResult) {
+        clearSelection()
+        resetView()
+        history.reset(imported.document)
+        tileStore.restore(imported.tiles)
+        undoTileStates.clear()
+        redoTileStates.clear()
+        fileActions.resetDocumentTarget()
+        markCleanDocument()
+        editVersion = ++nextVersion
+        activeLayerId = document.layers.lastOrNull()?.id
+        documentRevision++
+        statusMessage = if (imported.warnings.isEmpty()) {
+            "Imported layered PSD — save as NeoCanvas to keep editing"
+        } else {
+            "Imported PSD with " + imported.warnings.size + " compatibility notice(s)"
+        }
+    }
     fun saveAs(): Boolean {
         if (fileActions.supportsLocalLibrary) { namingLocalCopy = true; libraryError = null; return false }
         val result = fileActions.saveAs(document, tilesForDocument())
