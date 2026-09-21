@@ -69,6 +69,51 @@ class TileStore(initialTiles: Map<TileKey, ByteArray> = emptyMap()) {
         snapshot.forEach { (key, pixels) -> tiles[key] = checkedTileCopy(pixels) }
     }
 
+    /** Defensive snapshot for one raster layer, used by lossless Deep Layers hibernation. */
+    fun snapshotLayer(layerId: String): Map<TileKey, ByteArray> {
+        require(layerId.isNotBlank()) { "Layer id must not be blank." }
+        return tiles.entries
+            .asSequence()
+            .filter { (key, _) -> key.layerId == layerId }
+            .associateTo(linkedMapOf()) { (key, pixels) -> key to pixels.copyOf() }
+    }
+
+    /** Removes one layer's resident tiles and returns the addresses released from RAM. */
+    fun removeLayer(layerId: String): Set<TileKey> {
+        require(layerId.isNotBlank()) { "Layer id must not be blank." }
+        val removed = tiles.keys.filterTo(linkedSetOf()) { it.layerId == layerId }
+        removed.forEach(tiles::remove)
+        return removed
+    }
+
+    /**
+     * Replaces only [layerId]'s resident buffers from a defensive snapshot.
+     * Other layers are untouched.
+     */
+    fun restoreLayer(layerId: String, snapshot: Map<TileKey, ByteArray>): Set<TileKey> {
+        require(layerId.isNotBlank()) { "Layer id must not be blank." }
+        require(snapshot.keys.all { it.layerId == layerId }) {
+            "A layer snapshot may only contain addresses for the requested layer."
+        }
+
+        val before = snapshotLayer(layerId)
+        removeLayer(layerId)
+        snapshot.forEach { (key, pixels) -> tiles[key] = checkedTileCopy(pixels) }
+
+        val changed = linkedSetOf<TileKey>()
+        (before.keys + snapshot.keys).forEach { key ->
+            val previous = before[key]
+            val next = snapshot[key]
+            if (previous == null || next == null || !previous.contentEquals(next)) changed += key
+        }
+        return changed
+    }
+
+    fun residentTileCount(layerId: String): Int = tiles.keys.count { it.layerId == layerId }
+
+    val estimatedResidentBytes: Long
+        get() = tiles.size.toLong() * TileFormat.BYTES_PER_TILE
+
     /** Applies complete-tile replacements/removals and reports addresses whose stored state changed. */
     fun applyPatch(patch: RasterPatch): Set<TileKey> {
         val changed = linkedSetOf<TileKey>()
