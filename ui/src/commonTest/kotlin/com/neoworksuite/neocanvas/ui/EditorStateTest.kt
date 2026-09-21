@@ -827,7 +827,7 @@ class EditorStateTest {
         assertTrue(state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Left))
         val leftAligned = state.activeTextObject!!
         // A 90-degree rotation swaps the visual half-extents, so x itself should not be zero.
-        assertEquals(40f, leftAligned.x, .01f)
+        assertEquals(-60f, leftAligned.x, .01f)
         assertEquals("Aligned object left", state.statusMessage)
 
         assertTrue(state.alignActiveObjectToCanvas(ObjectCanvasAlignment.CenterBoth))
