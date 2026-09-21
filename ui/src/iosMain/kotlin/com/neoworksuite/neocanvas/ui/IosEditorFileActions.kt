@@ -558,7 +558,14 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
         "mono", "monospace" -> "Menlo"
         else -> "Helvetica Neue"
     }
-    val typeface = FontMgr.default.matchFamilyStyle(requestedFamily, FontStyle.NORMAL)
+    val requestedStyle = when {
+        text.bold && text.italic -> FontStyle.BOLD_ITALIC
+        text.bold -> FontStyle.BOLD
+        text.italic -> FontStyle.ITALIC
+        else -> FontStyle.NORMAL
+    }
+    val typeface = FontMgr.default.matchFamilyStyle(requestedFamily, requestedStyle)
+        ?: FontMgr.default.matchFamilyStyle("Helvetica", requestedStyle)
         ?: FontMgr.default.matchFamilyStyle("Helvetica", FontStyle.NORMAL)
     val font = Font(typeface, text.fontSize)
     val paint = Paint().apply {
@@ -575,7 +582,7 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
     canvas.clipRect(Rect.makeXYWH(text.x, text.y, text.width, text.height))
 
     val lines = wrapEditableText(text.text, font, text.width)
-    val lineHeight = text.fontSize * 1.2f
+    val lineHeight = text.fontSize * text.lineSpacing
     var baseline = text.y + text.fontSize
     for (line in lines) {
         if (baseline - text.fontSize > text.y + text.height) break

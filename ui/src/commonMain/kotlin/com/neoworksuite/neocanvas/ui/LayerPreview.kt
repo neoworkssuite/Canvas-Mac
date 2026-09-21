@@ -1,5 +1,6 @@
 package com.neoworksuite.neocanvas.ui
 
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -53,9 +54,27 @@ internal fun DrawScope.drawLayerPreview(
                     }) {
                         when (payload.kind) {
                             com.neoworksuite.neocanvas.core.model.ShapeKind.Rectangle -> {
-                                fill?.let { drawRect(it, Offset(payload.x, payload.y), Size(payload.width, payload.height)) }
-                                stroke?.let { drawRect(it, Offset(payload.x, payload.y), Size(payload.width, payload.height),
-                                    style = androidx.compose.ui.graphics.drawscope.Stroke(payload.strokeWidth)) }
+                                val radius = payload.cornerRadius.coerceIn(
+                                    0f,
+                                    minOf(kotlin.math.abs(payload.width), kotlin.math.abs(payload.height)) / 2f,
+                                )
+                                fill?.let {
+                                    drawRoundRect(
+                                        it,
+                                        Offset(payload.x, payload.y),
+                                        Size(payload.width, payload.height),
+                                        CornerRadius(radius, radius),
+                                    )
+                                }
+                                stroke?.let {
+                                    drawRoundRect(
+                                        it,
+                                        Offset(payload.x, payload.y),
+                                        Size(payload.width, payload.height),
+                                        CornerRadius(radius, radius),
+                                        style = androidx.compose.ui.graphics.drawscope.Stroke(payload.strokeWidth),
+                                    )
+                                }
                             }
                             com.neoworksuite.neocanvas.core.model.ShapeKind.Ellipse -> {
                                 fill?.let { drawOval(it, Offset(payload.x, payload.y), Size(payload.width, payload.height)) }

@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.drawText
@@ -982,6 +984,9 @@ private fun DrawScope.drawStoredTiles(
                             ),
                             fontSize = payload.fontSize.toSp(),
                             fontFamily = editableTextFontFamily(payload.fontFamily),
+                            fontWeight = if (payload.bold) FontWeight.Bold else FontWeight.Normal,
+                            fontStyle = if (payload.italic) FontStyle.Italic else FontStyle.Normal,
+                            lineHeight = (payload.fontSize * payload.lineSpacing).toSp(),
                             textAlign = when (payload.alignment) {
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> TextAlign.Left
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> TextAlign.Center
@@ -1018,12 +1023,25 @@ private fun DrawScope.drawEditableShape(
     withTransform({ rotate(shape.rotationDegrees, pivot = center) }) {
         when (shape.kind) {
             com.neoworksuite.neocanvas.core.model.ShapeKind.Rectangle -> {
-                fill?.let { drawRect(it, Offset(shape.x, shape.y), Size(shape.width, shape.height), blendMode = blendMode) }
-                stroke?.let {
-                    drawRect(
+                val radius = shape.cornerRadius.coerceIn(
+                    0f,
+                    minOf(kotlin.math.abs(shape.width), kotlin.math.abs(shape.height)) / 2f,
+                )
+                fill?.let {
+                    drawRoundRect(
                         it,
                         Offset(shape.x, shape.y),
                         Size(shape.width, shape.height),
+                        CornerRadius(radius, radius),
+                        blendMode = blendMode,
+                    )
+                }
+                stroke?.let {
+                    drawRoundRect(
+                        it,
+                        Offset(shape.x, shape.y),
+                        Size(shape.width, shape.height),
+                        CornerRadius(radius, radius),
                         style = Stroke(shape.strokeWidth),
                         blendMode = blendMode,
                     )
@@ -1242,6 +1260,7 @@ private fun transformEditableObject(
                 width = newWidth,
                 height = newHeight,
                 strokeWidth = (payload.strokeWidth * safeScale).coerceIn(0f, 128f),
+                cornerRadius = (payload.cornerRadius * safeScale).coerceAtLeast(0f),
                 rotationDegrees = normalizeViewRotation(payload.rotationDegrees + rotationDelta),
             )
         }

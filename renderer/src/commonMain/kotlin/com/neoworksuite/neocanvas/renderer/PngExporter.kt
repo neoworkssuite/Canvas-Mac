@@ -215,7 +215,7 @@ object PngExporter {
         val toX = kotlin.math.ceil(centerX + radius).toInt().coerceIn(0, outputWidth)
         val toY = kotlin.math.ceil(centerY + radius).toInt().coerceIn(0, outputHeight)
         val lineCount = (text.text.lineSequence().count().coerceIn(1, 4))
-        val lineHeight = text.height / (lineCount + 2f)
+        val lineHeight = (text.fontSize * text.lineSpacing).coerceAtLeast(text.height / (lineCount + 2f))
         val strokeThickness = maxOf(1f, minOf(text.fontSize * .08f, lineHeight * .18f))
         val alphaBase = ((argb ushr 24) and 255) / 255f
 
@@ -310,20 +310,53 @@ object PngExporter {
             return (rx - shape.x) to (ry - shape.y)
         }
 
+        fun roundedRectContains(
+            lx: Float,
+            ly: Float,
+            left: Float,
+            top: Float,
+            right: Float,
+            bottom: Float,
+            radius: Float,
+        ): Boolean {
+            if (lx < left || lx > right || ly < top || ly > bottom || right < left || bottom < top) return false
+            val safeRadius = radius.coerceIn(
+                0f,
+                minOf((right - left) / 2f, (bottom - top) / 2f).coerceAtLeast(0f),
+            )
+            if (safeRadius <= 0f) return true
+            val cx = when {
+                lx < left + safeRadius -> left + safeRadius
+                lx > right - safeRadius -> right - safeRadius
+                else -> lx
+            }
+            val cy = when {
+                ly < top + safeRadius -> top + safeRadius
+                ly > bottom - safeRadius -> bottom - safeRadius
+                else -> ly
+            }
+            val dx = lx - cx
+            val dy = ly - cy
+            return dx * dx + dy * dy <= safeRadius * safeRadius
+        }
+
         fun rectangleFill(lx: Float, ly: Float): Boolean =
-            lx >= 0f && lx <= shape.width && ly >= 0f && ly <= shape.height
+            roundedRectContains(lx, ly, 0f, 0f, shape.width, shape.height, shape.cornerRadius)
 
         fun rectangleStroke(lx: Float, ly: Float): Boolean {
             if (shape.strokeArgb == null) return false
             val half = shape.strokeWidth / 2f
-            val outer = lx >= -half && lx <= shape.width + half && ly >= -half && ly <= shape.height + half
+            val outer = roundedRectContains(
+                lx, ly,
+                -half, -half, shape.width + half, shape.height + half,
+                shape.cornerRadius + half,
+            )
             if (!outer) return false
-            val innerLeft = half
-            val innerTop = half
-            val innerRight = shape.width - half
-            val innerBottom = shape.height - half
-            val inner = innerRight > innerLeft && innerBottom > innerTop &&
-                lx > innerLeft && lx < innerRight && ly > innerTop && ly < innerBottom
+            val inner = roundedRectContains(
+                lx, ly,
+                half, half, shape.width - half, shape.height - half,
+                (shape.cornerRadius - half).coerceAtLeast(0f),
+            )
             return !inner
         }
 
