@@ -65,6 +65,7 @@ interface EditorFileActions {
     val supportsPsdExport: Boolean get() = false
     val supportsJpegExport: Boolean get() = false
     val supportsPdfExport: Boolean get() = false
+    val supportsTiffExport: Boolean get() = false
     val supportsEditableObjectPsdFlattening: Boolean get() = false
     fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
         onResult(Result.failure(IllegalStateException("PSD import is unavailable in this host.")))
@@ -78,6 +79,8 @@ interface EditorFileActions {
     ): SaveResult = SaveResult.Failure("JPEG export is unavailable in this host.")
     fun exportPdf(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         SaveResult.Failure("PDF export is unavailable in this host.")
+    fun exportTiff(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
+        SaveResult.Failure("TIFF export is unavailable in this host.")
     fun loadPalette(): List<String> = emptyList()
     fun savePalette(colors: List<String>): SaveResult = SaveResult.Failure("Palette storage is unavailable in this host.")
     fun loadBrushLibrary(): ByteArray? = null

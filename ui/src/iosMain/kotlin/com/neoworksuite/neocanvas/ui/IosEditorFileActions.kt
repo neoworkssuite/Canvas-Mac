@@ -13,6 +13,7 @@ import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PngImage
 import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.renderer.TextRasterizer
+import com.neoworksuite.neocanvas.renderer.TiffExporter
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.allocArrayOf
 import kotlinx.cinterop.memScoped
@@ -97,6 +98,7 @@ internal class IosEditorFileActions(
     override val supportsPsdExport: Boolean = true
     override val supportsJpegExport: Boolean = true
     override val supportsPdfExport: Boolean = true
+    override val supportsTiffExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
 
     init {
@@ -441,6 +443,22 @@ internal class IosEditorFileActions(
         else SaveResult.Failure("Could not write PDF to iPad Documents.")
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PDF: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportTiff(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult {
+        ensureDirectory(exportDirectory)
+        val base = currentDocumentName?.removeSuffix(".neocanvas") ?: "NeoCanvas"
+        val target = join(exportDirectory, "$base.tiff")
+        return TiffExporter.export(
+            document,
+            tiles,
+            textRasterizer = ipadTextRasterizer,
+        ) { bytes ->
+            check(writeBytes(target, bytes)) { "Could not write TIFF to iPad Documents." }
+        }
     }
 
     override fun exportPsd(

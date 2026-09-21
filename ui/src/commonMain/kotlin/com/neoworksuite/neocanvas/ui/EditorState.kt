@@ -443,6 +443,7 @@ class EditorState(
     val supportsPsdExport: Boolean get() = fileActions.supportsPsdExport
     val supportsJpegExport: Boolean get() = fileActions.supportsJpegExport
     val supportsPdfExport: Boolean get() = fileActions.supportsPdfExport
+    val supportsTiffExport: Boolean get() = fileActions.supportsTiffExport
 
     var psdCompatibilityVisible by mutableStateOf(false)
         private set
@@ -3605,6 +3606,20 @@ class EditorState(
             SaveResult.Failure(error.message ?: "Could not export PDF")
         }
         applySaveResult(result, "Exported PDF locally")
+        return result == SaveResult.Success
+    }
+
+    fun exportTiff(): Boolean {
+        if (!supportsTiffExport) {
+            statusMessage = "TIFF export is unavailable on this device"
+            return false
+        }
+        val result = try {
+            fileActions.exportTiff(document, tilesForDocument())
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not export TIFF")
+        }
+        applySaveResult(result, "Exported TIFF locally")
         return result == SaveResult.Success
     }
 

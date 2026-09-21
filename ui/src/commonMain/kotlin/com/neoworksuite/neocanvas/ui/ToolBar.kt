@@ -229,6 +229,9 @@ private fun StudioActionsMenu(state: EditorState) {
                     if (state.supportsPdfExport) {
                         ActionItem("Export PDF…") { closeMenu(); state.exportPdf() }
                     }
+                    if (state.supportsTiffExport) {
+                        ActionItem("Export TIFF…") { closeMenu(); state.exportTiff() }
+                    }
                     if (state.supportsPsdExport) {
                         ActionItem("PSD Compatibility…") { closeMenu(); state.openPsdCompatibility() }
                         ActionItem("Export Photoshop PSD…") { closeMenu(); state.exportPsd() }
