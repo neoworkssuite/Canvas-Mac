@@ -70,6 +70,34 @@ data class UpdateTextLayer(val layerId: String, val text: LayerPayload.TextObjec
     }
 }
 
+class UpdateEditableObjects(updates: Map<String, LayerPayload>) : DocumentCommand {
+    val updates: Map<String, LayerPayload> = updates.toMap()
+
+    init {
+        require(this.updates.isNotEmpty()) { "Editable object updates must not be empty." }
+        require(this.updates.values.all { it is LayerPayload.TextObject || it is LayerPayload.ShapeObject }) {
+            "Only editable text and shape payloads can be updated together."
+        }
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        val layersById = document.layers.associateBy(Layer::id)
+        updates.forEach { (layerId, payload) ->
+            val layer = layersById[layerId]
+                ?: throw IllegalArgumentException("No layer with id '$layerId' exists.")
+            require(
+                (layer.payload is LayerPayload.TextObject && payload is LayerPayload.TextObject) ||
+                    (layer.payload is LayerPayload.ShapeObject && payload is LayerPayload.ShapeObject),
+            ) { "Editable object update type must match the existing layer type." }
+        }
+        return document.copy(
+            layers = document.layers.map { layer ->
+                updates[layer.id]?.let { layer.copy(payload = it) } ?: layer
+            },
+        )
+    }
+}
+
 data class AddShapeLayer(val layerId: String, val name: String, val shape: LayerPayload.ShapeObject, val insertionIndex: Int? = null) : DocumentCommand {
     override fun apply(document: CanvasDocument): CanvasDocument {
         require(document.layers.none { it.id == layerId })

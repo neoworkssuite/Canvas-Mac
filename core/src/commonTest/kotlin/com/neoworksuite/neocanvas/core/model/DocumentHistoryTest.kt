@@ -142,6 +142,45 @@ class DocumentHistoryTest {
     }
 
     @Test
+    fun editable_object_batch_update_is_one_undo_step() {
+        val first = LayerPayload.TextObject(
+            text = "One",
+            x = 10f,
+            y = 20f,
+            width = 120f,
+            height = 60f,
+        )
+        val second = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 200f,
+            y = 40f,
+            width = 80f,
+            height = 70f,
+        )
+        val initial = CanvasDocument(
+            id = "batch-objects",
+            width = 400,
+            height = 300,
+            layers = listOf(
+                Layer("text-1", "Text", payload = first),
+                Layer("shape-1", "Shape", payload = second),
+            ),
+        )
+        val history = DocumentHistory(initial)
+
+        history.execute(UpdateEditableObjects(mapOf(
+            "text-1" to first.copy(x = 50f),
+            "shape-1" to second.copy(x = 50f),
+        )))
+
+        assertEquals(50f, (history.current.layers[0].payload as LayerPayload.TextObject).x)
+        assertEquals(50f, (history.current.layers[1].payload as LayerPayload.ShapeObject).x)
+        assertTrue(history.undo())
+        assertEquals(initial, history.current)
+        assertFalse(history.undo())
+    }
+
+    @Test
     fun editable_text_and_shape_layers_are_undoable_and_duplicate_without_raster_copies() {
         val history = DocumentHistory(CanvasDocument.blank(800, 600))
         val text = LayerPayload.TextObject(
