@@ -705,7 +705,7 @@ class EditorStateTest {
         assertEquals(transformed, state.activeTextObject)
 
         assertTrue(state.undo())
-        assertEquals(initial.layers.single().payload, state.activeTextObject)
+        assertEquals(initial.layers.single().payload, state.document.layers.single().payload)
     }
 
     @Test
