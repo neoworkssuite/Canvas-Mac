@@ -29,7 +29,7 @@ interface EditorFileActions {
         label: String,
         document: CanvasDocument,
         tiles: Map<TileAddress, ByteArray>,
-    ): SaveResult = createVersionOnBranch(label, "Main", null, document, tiles)
+    ): SaveResult = SaveResult.Failure("Local version history is unavailable in this host.")
 
     fun createVersionOnBranch(
         label: String,
@@ -37,7 +37,7 @@ interface EditorFileActions {
         parentVersionId: String?,
         document: CanvasDocument,
         tiles: Map<TileAddress, ByteArray>,
-    ): SaveResult = SaveResult.Failure("Local version history is unavailable in this host.")
+    ): SaveResult = createVersion(label, document, tiles)
     fun loadVersion(documentId: String, versionId: String): LoadResult =
         LoadResult.Failure("Local version history is unavailable in this host.")
     fun deleteVersion(documentId: String, versionId: String): SaveResult =
