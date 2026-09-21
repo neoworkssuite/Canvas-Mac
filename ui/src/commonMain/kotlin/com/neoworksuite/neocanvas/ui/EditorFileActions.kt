@@ -34,6 +34,12 @@ interface EditorFileActions {
         LoadResult.Failure("Local version history is unavailable in this host.")
     fun deleteVersion(documentId: String, versionId: String): SaveResult =
         SaveResult.Failure("Local version history is unavailable in this host.")
+
+    val supportsWorkbench: Boolean get() = false
+    fun loadWorkbench(documentId: String): ByteArray? = null
+    fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult =
+        SaveResult.Failure("Workbench storage is unavailable in this host.")
+
     fun saveRecovery(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         SaveResult.Failure("Recovery storage is unavailable.")
     fun importImage(onResult: (Result<ImportedImage?>) -> Unit) {

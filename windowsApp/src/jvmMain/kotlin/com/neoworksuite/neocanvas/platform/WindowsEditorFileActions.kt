@@ -97,6 +97,7 @@ class WindowsEditorFileActions(
         value.isNotBlank() && value == File(value).name && value.endsWith(".neoversion", true)
     override val supportsRecovery = true
     override val supportsVersions = true
+    override val supportsWorkbench = true
     private val recoveryFile get() = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/recovery/last-session.neocanvas",
@@ -150,6 +151,21 @@ class WindowsEditorFileActions(
         if (!target.isFile) return SaveResult.Failure("Local version was not found.")
         return if (target.delete()) SaveResult.Success else SaveResult.Failure("Could not delete local version.")
     }
+    private val workbenchDirectory get() = File(libraryDirectory.parentFile, "Workbench")
+
+    override fun loadWorkbench(documentId: String): ByteArray? {
+        val file = File(workbenchDirectory, safeDocumentId(documentId) + ".ncworkbench")
+        return if (file.isFile) file.readBytes() else null
+    }
+
+    override fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult = try {
+        workbenchDirectory.mkdirs()
+        File(workbenchDirectory, safeDocumentId(documentId) + ".ncworkbench").writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save Workbench: " + (error.message ?: "unknown error"))
+    }
+
     override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
         onResult(runCatching {
             val path = choose("Import Photoshop PSD", FileDialog.LOAD, null) ?: return@runCatching null

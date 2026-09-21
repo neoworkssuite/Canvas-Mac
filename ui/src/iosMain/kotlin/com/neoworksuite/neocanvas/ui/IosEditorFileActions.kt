@@ -63,6 +63,7 @@ internal class IosEditorFileActions(
     private val libraryDirectory: String get() = join(documentsRoot, "NeoCanvas")
     private val recoveryDirectory: String get() = join(libraryDirectory, "Recovery")
     private val versionsDirectory: String get() = join(libraryDirectory, "Versions")
+    private val workbenchDirectory: String get() = join(libraryDirectory, "Workbench")
     private val exportDirectory: String get() = join(libraryDirectory, "Exports")
     private val palettePath: String get() = join(libraryDirectory, "palette.txt")
     private val brushLibraryPath: String get() = join(libraryDirectory, "brush-library.txt")
@@ -73,6 +74,7 @@ internal class IosEditorFileActions(
     override val supportsSaveAs: Boolean = true
     override val supportsRecovery: Boolean = true
     override val supportsVersions: Boolean = true
+    override val supportsWorkbench: Boolean = true
     override val supportsPsdImport: Boolean = true
     override val supportsPsdExport: Boolean = true
 
@@ -80,6 +82,7 @@ internal class IosEditorFileActions(
         ensureDirectory(libraryDirectory)
         ensureDirectory(recoveryDirectory)
         ensureDirectory(versionsDirectory)
+        ensureDirectory(workbenchDirectory)
         ensureDirectory(exportDirectory)
     }
 
@@ -248,6 +251,18 @@ internal class IosEditorFileActions(
         if (!fm.fileExistsAtPath(path)) return SaveResult.Failure("Local version was not found.")
         return if (fm.removeItemAtPath(path, null)) SaveResult.Success
         else SaveResult.Failure("Could not delete local version.")
+    }
+
+    override fun loadWorkbench(documentId: String): ByteArray? {
+        val path = join(workbenchDirectory, safeDocumentId(documentId) + ".ncworkbench")
+        return NSData.dataWithContentsOfFile(path)?.toByteArray()
+    }
+
+    override fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult {
+        ensureDirectory(workbenchDirectory)
+        val path = join(workbenchDirectory, safeDocumentId(documentId) + ".ncworkbench")
+        return if (writeBytes(path, bytes)) SaveResult.Success
+        else SaveResult.Failure("Could not save Workbench on this iPad.")
     }
 
     override fun loadPalette(): List<String> {

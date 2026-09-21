@@ -258,6 +258,7 @@ class EditorState(
         editVersion = ++nextVersion
         activeLayerId = document.layers.lastOrNull()?.id
         documentRevision++
+        loadWorkbench()
         statusMessage = if (imported.warnings.isEmpty()) {
             "Imported layered PSD — save as NeoCanvas to keep editing"
         } else {
@@ -358,6 +359,151 @@ class EditorState(
     var transformSession: TransformSession? by mutableStateOf(null)
         private set
     var transformSnapping: Boolean by mutableStateOf(false)
+
+    val supportsWorkbench: Boolean get() = fileActions.supportsWorkbench
+    var workbenchVisible: Boolean by mutableStateOf(true)
+    var workbenchPanelVisible: Boolean by mutableStateOf(false)
+        private set
+    var workbenchItems: List<WorkbenchItem> by mutableStateOf(emptyList())
+        private set
+    private var nextWorkbenchOrdinal: Int = 1
+
+    fun openWorkbench() {
+        if (!supportsWorkbench) {
+            statusMessage = "Workbench storage is unavailable on this device"
+            return
+        }
+        if (inspectorVisible) hideInspector()
+        versionsVisible = false
+        settingsVisible = false
+        workbenchVisible = true
+        workbenchPanelVisible = true
+    }
+
+    fun closeWorkbench() { workbenchPanelVisible = false }
+
+    fun importWorkbenchReference() {
+        val targetDocument = document.id
+        fileActions.importImage { result ->
+            result.fold(
+                onSuccess = { image ->
+                    if (image != null && document.id == targetDocument) addWorkbenchReference(image)
+                },
+                onFailure = { statusMessage = "Could not import Workbench reference: " + (it.message ?: "unknown error") },
+            )
+        }
+    }
+
+    fun addWorkbenchNote(text: String): Boolean {
+        val clean = text.trim()
+        if (clean.isEmpty()) return false
+        updateWorkbench(
+            workbenchItems + WorkbenchItem.Note(
+                id = nextWorkbenchId(),
+                text = clean.take(500),
+                x = document.width + 110f,
+                y = 80f + workbenchItems.size * 34f,
+            ),
+            "Added Workbench note",
+        )
+        return true
+    }
+
+    fun addWorkbenchColourCard() {
+        updateWorkbench(
+            workbenchItems + WorkbenchItem.ColourCard(
+                id = nextWorkbenchId(),
+                hex = colorHex(color),
+                x = document.width + 110f,
+                y = 80f + workbenchItems.size * 34f,
+            ),
+            "Added Workbench colour card",
+        )
+    }
+
+    fun deleteWorkbenchItem(id: String) {
+        if (workbenchItems.none { it.id == id }) return
+        updateWorkbench(workbenchItems.filterNot { it.id == id }, "Removed Workbench item")
+    }
+
+    fun moveWorkbenchItem(id: String, dx: Float, dy: Float) {
+        if (!dx.isFinite() || !dy.isFinite()) return
+        val next = workbenchItems.map { if (it.id == id) it.moved(dx, dy) else it }
+        if (next != workbenchItems) {
+            workbenchItems = next
+            persistWorkbench(silent = true)
+        }
+    }
+
+    fun bringWorkbenchItemToFront(id: String) {
+        val item = workbenchItems.firstOrNull { it.id == id } ?: return
+        workbenchItems = workbenchItems.filterNot { it.id == id } + item
+    }
+
+    private fun addWorkbenchReference(image: ImportedImage) {
+        val reference = downsampleWorkbenchReference(image)
+        val displayWidth = 360f
+        updateWorkbench(
+            workbenchItems + WorkbenchItem.Reference(
+                id = nextWorkbenchId(),
+                name = image.name.ifBlank { "Reference" },
+                pixelWidth = reference.width,
+                pixelHeight = reference.height,
+                argb = reference.argb,
+                x = document.width + 110f,
+                y = 80f + workbenchItems.size * 34f,
+                width = displayWidth,
+                height = (displayWidth * reference.height / reference.width).coerceIn(120f, 520f),
+            ),
+            "Added Workbench reference",
+        )
+    }
+
+    private fun downsampleWorkbenchReference(image: ImportedImage): ImportedImage {
+        val maxSide = 1200
+        val factor = minOf(1.0, maxSide.toDouble() / maxOf(image.width, image.height))
+        if (factor >= .999) return image
+        val width = (image.width * factor).toInt().coerceAtLeast(1)
+        val height = (image.height * factor).toInt().coerceAtLeast(1)
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) for (x in 0 until width) {
+            val sx = ((x + .5) * image.width / width).toInt().coerceAtMost(image.width - 1)
+            val sy = ((y + .5) * image.height / height).toInt().coerceAtMost(image.height - 1)
+            pixels[y * width + x] = image.argb[sy * image.width + sx]
+        }
+        return ImportedImage(image.name, width, height, pixels)
+    }
+
+    private fun nextWorkbenchId(): String = "desk-" + document.id.take(8) + "-" + nextWorkbenchOrdinal++
+
+    private fun updateWorkbench(next: List<WorkbenchItem>, message: String) {
+        if (next.size > 128) {
+            statusMessage = "Workbench holds up to 128 items"
+            return
+        }
+        workbenchItems = next
+        workbenchVisible = true
+        persistWorkbench()
+        statusMessage = message
+    }
+
+    private fun persistWorkbench(silent: Boolean = false) {
+        if (!supportsWorkbench) return
+        val result = runCatching {
+            fileActions.saveWorkbench(document.id, WorkbenchCodec.encode(workbenchItems))
+        }.getOrElse { SaveResult.Failure(it.message ?: "Could not save Workbench") }
+        if (!silent && result is SaveResult.Failure) statusMessage = result.message
+    }
+
+    private fun loadWorkbench() {
+        workbenchItems = if (!supportsWorkbench) emptyList() else runCatching {
+            fileActions.loadWorkbench(document.id)?.let(WorkbenchCodec::decode).orEmpty()
+        }.getOrElse {
+            statusMessage = "Could not load Workbench: " + (it.message ?: "invalid desk data")
+            emptyList()
+        }
+        nextWorkbenchOrdinal = workbenchItems.size + 1
+    }
 
     var effectPreviewPatch: com.neoworksuite.neocanvas.renderer.RasterPatch? by mutableStateOf(null)
         private set
@@ -914,6 +1060,8 @@ class EditorState(
             palette = fileActions.loadPalette().mapNotNull { parseColorHex(it)?.let(::colorHex) }.distinct().take(32)
         } catch (error: Exception) { statusMessage = "Could not load local palette: ${error.message}" }
     }
+        loadWorkbench()
+    }
     fun loadBrushLibrarySnapshot(): ByteArray? =
         runCatching { fileActions.loadBrushLibrary() }.getOrNull()
 
@@ -1419,6 +1567,7 @@ class EditorState(
         markCleanDocument()
         activeLayerId = "layer-1"
         documentRevision++
+        loadWorkbench()
         statusMessage = "New local canvas"
     }
     fun open() {
@@ -1447,6 +1596,7 @@ class EditorState(
                 markCleanDocument()
                 activeLayerId = document.layers.lastOrNull()?.id
                 documentRevision++
+                loadWorkbench()
                 statusMessage = "Opened local NeoCanvas document"
             }
             is LoadResult.Failure -> statusMessage = result.message

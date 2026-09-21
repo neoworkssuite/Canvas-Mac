@@ -378,6 +378,65 @@ class EditorStateTest {
     }
 
     @Test
+    fun workbench_items_persist_without_entering_document_exports() {
+        var snapshot: ByteArray? = null
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsWorkbench = true
+            override fun loadWorkbench(documentId: String): ByteArray? = snapshot
+            override fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult {
+                snapshot = bytes
+                return SaveResult.Success
+            }
+        }
+        val initial = CanvasDocument(
+            id = "desk-test",
+            width = 64,
+            height = 64,
+            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial), actions)
+        val before = state.document
+        assertTrue(state.addWorkbenchNote("Client wants warmer shadows"))
+        state.color = Color.Red
+        state.addWorkbenchColourCard()
+
+        assertEquals(2, state.workbenchItems.size)
+        assertEquals(before, state.document)
+        assertTrue(state.tilesForDocument().isEmpty())
+        assertNotNull(snapshot)
+
+        val reopened = EditorState(DocumentHistory(initial), actions)
+        assertEquals(2, reopened.workbenchItems.size)
+        assertTrue(reopened.workbenchItems.any { it is WorkbenchItem.Note })
+        assertTrue(reopened.workbenchItems.any { it is WorkbenchItem.ColourCard })
+    }
+
+    @Test
+    fun workbench_codec_round_trips_reference_pixels_and_positions() {
+        val encoded = WorkbenchCodec.encode(listOf(
+            WorkbenchItem.Reference(
+                id = "ref-1",
+                name = "Mood",
+                pixelWidth = 2,
+                pixelHeight = 1,
+                argb = intArrayOf(0xFFFF0000.toInt(), 0x800000FF.toInt()),
+                x = 900f,
+                y = 40f,
+                width = 320f,
+                height = 160f,
+            ),
+            WorkbenchItem.Note("note-1", "Remember texture", 40f, 700f),
+        ))
+        val decoded = WorkbenchCodec.decode(encoded)
+        assertEquals(2, decoded.size)
+        val reference = decoded[0] as WorkbenchItem.Reference
+        assertEquals("Mood", reference.name)
+        assertTrue(reference.argb.contentEquals(intArrayOf(0xFFFF0000.toInt(), 0x800000FF.toInt())))
+        assertEquals(900f, reference.x)
+        assertEquals("Remember texture", (decoded[1] as WorkbenchItem.Note).text)
+    }
+
+    @Test
     fun local_versions_create_and_restore_with_a_safety_snapshot() {
         val saved = mutableListOf<Pair<LocalVersionEntry, LoadResult.Success>>()
         var clock = 1000L
