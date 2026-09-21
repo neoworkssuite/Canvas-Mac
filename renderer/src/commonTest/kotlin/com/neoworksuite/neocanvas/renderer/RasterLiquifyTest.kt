@@ -103,6 +103,29 @@ class RasterLiquifyTest {
     }
 
     @Test
+    fun crystals_and_edge_create_distinct_local_distortions() {
+        val store = storeWithBlock(left = 10, top = 10, right = 22, bottom = 22)
+        val crystals = RasterLiquify.stroke(
+            store, "paint", listOf(RasterPoint(16f, 16f)),
+            size = 30f, strength = 1f, mode = LiquifyMode.Crystals,
+            canvasWidth = 64, canvasHeight = 64,
+        )
+        val edge = RasterLiquify.stroke(
+            store, "paint", listOf(RasterPoint(10f, 16f)),
+            size = 30f, strength = 1f, mode = LiquifyMode.Edge,
+            canvasWidth = 64, canvasHeight = 64,
+        )
+        assertFalse(crystals.keys.isEmpty())
+        assertFalse(edge.keys.isEmpty())
+
+        val crystalTile = TileStore(store.snapshot()).apply { applyPatch(crystals) }
+            .snapshot().getValue(TileKey("paint", 0, 0))
+        val edgeTile = TileStore(store.snapshot()).apply { applyPatch(edge) }
+            .snapshot().getValue(TileKey("paint", 0, 0))
+        assertFalse(crystalTile.contentEquals(edgeTile))
+    }
+
+    @Test
     fun reconstruct_moves_a_warped_layer_back_toward_the_reference() {
         val baseline = storeWithBlock(left = 10, top = 12, right = 18, bottom = 20)
         val pushedPatch = RasterLiquify.stroke(

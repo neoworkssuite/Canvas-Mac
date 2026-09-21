@@ -57,7 +57,11 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
             LiquifyModeButton("Twirl R", LiquifyMode.TwirlRight, state, Modifier.weight(1f))
             LiquifyModeButton("Smooth", LiquifyMode.Smooth, state, Modifier.weight(1f))
         }
-        LiquifyModeButton("Reconstruct", LiquifyMode.Reconstruct, state, Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            LiquifyModeButton("Crystals", LiquifyMode.Crystals, state, Modifier.weight(1f))
+            LiquifyModeButton("Edge", LiquifyMode.Edge, state, Modifier.weight(1f))
+            LiquifyModeButton("Rebuild", LiquifyMode.Reconstruct, state, Modifier.weight(1f))
+        }
 
         LiquifySlider(
             label = "Size",
@@ -92,6 +96,8 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
                     LiquifyMode.TwirlLeft -> "TWIRL LEFT · rotate pixels anticlockwise under the brush"
                     LiquifyMode.TwirlRight -> "TWIRL RIGHT · rotate pixels clockwise under the brush"
                     LiquifyMode.Smooth -> "SMOOTH · soften local distortion and hard transitions"
+                    LiquifyMode.Crystals -> "CRYSTALS · break local pixels into faceted displaced regions"
+                    LiquifyMode.Edge -> "EDGE · pull contrast boundaries into sharper local contours"
                     LiquifyMode.Reconstruct -> "RECONSTRUCT · locally restore pixels toward the session start"
                 },
                 color = NeoCanvasColors.paper,

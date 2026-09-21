@@ -15,6 +15,8 @@ enum class LiquifyMode(val displayName: String) {
     TwirlLeft("Twirl Left"),
     TwirlRight("Twirl Right"),
     Smooth("Smooth"),
+    Crystals("Crystals"),
+    Edge("Edge"),
     Reconstruct("Reconstruct"),
 }
 
@@ -114,6 +116,17 @@ object RasterLiquify {
         fun referenceSample(x: Float, y: Float): IntArray =
             sampleWith(::referencePixel, x, y)
 
+        fun intensity(pixel: IntArray): Float =
+            (pixel[0] * .2126f + pixel[1] * .7152f + pixel[2] * .0722f) *
+                (pixel[3] / 255f)
+
+        fun noise01(x: Int, y: Int, salt: Int): Float {
+            var value = x * 374761393 + y * 668265263 + salt * 69069
+            value = (value xor (value ushr 13)) * 1274126177
+            value = value xor (value ushr 16)
+            return (value ushr 1) / Int.MAX_VALUE.toFloat()
+        }
+
         fun dab(cx: Float, cy: Float, ux: Float, uy: Float, pressure: Float) {
             val safePressure = pressure.coerceIn(.05f, 1f)
             val radius = max(.75f, size * safePressure * .5f)
@@ -180,6 +193,36 @@ object RasterLiquify {
                         )
                         IntArray(4) { channel ->
                             samples.sumOf { it[channel] } / samples.size
+                        }
+                    }
+                    LiquifyMode.Crystals -> {
+                        val cellSize = max(2f, radius * .16f)
+                        val cellX = floor((x + .5f) / cellSize).toInt()
+                        val cellY = floor((y + .5f) / cellSize).toInt()
+                        val angle = noise01(cellX, cellY, 17) * 6.2831855f
+                        val scatter = radius * (.08f + .20f * noise01(cellX, cellY, 41)) * amount
+                        sample(
+                            x + .5f + cos(angle) * scatter,
+                            y + .5f + sin(angle) * scatter,
+                        )
+                    }
+                    LiquifyMode.Edge -> {
+                        val step = (radius * .08f).coerceIn(1f, 4f)
+                        val leftSample = sample(x + .5f - step, y + .5f)
+                        val rightSample = sample(x + .5f + step, y + .5f)
+                        val topSample = sample(x + .5f, y + .5f - step)
+                        val bottomSample = sample(x + .5f, y + .5f + step)
+                        val gx = intensity(rightSample) - intensity(leftSample)
+                        val gy = intensity(bottomSample) - intensity(topSample)
+                        val gradient = sqrt(gx * gx + gy * gy)
+                        if (gradient <= .001f) {
+                            sample(x + .5f, y + .5f)
+                        } else {
+                            val displacement = min(6f, radius * .18f) * amount
+                            sample(
+                                x + .5f - gx / gradient * displacement,
+                                y + .5f - gy / gradient * displacement,
+                            )
                         }
                     }
                     LiquifyMode.Reconstruct -> referenceSample(x + .5f, y + .5f)
