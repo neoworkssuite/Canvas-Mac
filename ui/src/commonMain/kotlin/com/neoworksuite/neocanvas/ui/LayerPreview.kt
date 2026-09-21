@@ -27,8 +27,50 @@ internal fun DrawScope.drawLayerPreview(
                 Offset(left + x * cell, top + y * cell), Size(cell, cell))
         }
         withTransform({ translate(left, top); scale(scale, scale, Offset.Zero) }) {
-            (layer.payload as? LayerPayload.Raster)?.tileAddresses?.forEach { key ->
-                store.read(key)?.let { drawImage(images.image(key, it), Offset(key.x * 256f, key.y * 256f)) }
+            when (val payload = layer.payload) {
+                is LayerPayload.Raster -> payload.tileAddresses.forEach { key ->
+                    store.read(key)?.let { drawImage(images.image(key, it), Offset(key.x * 256f, key.y * 256f)) }
+                }
+                is LayerPayload.TextObject -> {
+                    val color = Color(payload.colorArgb)
+                    drawRect(color.copy(alpha = .16f), Offset(payload.x, payload.y), Size(payload.width, payload.height))
+                    val lineHeight = (payload.height / 5f).coerceAtLeast(2f)
+                    repeat(3) { line ->
+                        val y = payload.y + lineHeight * (line + 1)
+                        drawLine(
+                            color,
+                            Offset(payload.x + payload.width * .12f, y),
+                            Offset(payload.x + payload.width * (if (line == 2) .65f else .88f), y),
+                            lineHeight * .16f,
+                        )
+                    }
+                }
+                is LayerPayload.ShapeObject -> {
+                    val fill = payload.fillArgb?.let(::Color)
+                    val stroke = payload.strokeArgb?.let(::Color)
+                    withTransform({
+                        rotate(payload.rotationDegrees, Offset(payload.x + payload.width / 2f, payload.y + payload.height / 2f))
+                    }) {
+                        when (payload.kind) {
+                            com.neoworksuite.neocanvas.core.model.ShapeKind.Rectangle -> {
+                                fill?.let { drawRect(it, Offset(payload.x, payload.y), Size(payload.width, payload.height)) }
+                                stroke?.let { drawRect(it, Offset(payload.x, payload.y), Size(payload.width, payload.height),
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(payload.strokeWidth)) }
+                            }
+                            com.neoworksuite.neocanvas.core.model.ShapeKind.Ellipse -> {
+                                fill?.let { drawOval(it, Offset(payload.x, payload.y), Size(payload.width, payload.height)) }
+                                stroke?.let { drawOval(it, Offset(payload.x, payload.y), Size(payload.width, payload.height),
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(payload.strokeWidth)) }
+                            }
+                            com.neoworksuite.neocanvas.core.model.ShapeKind.Line -> {
+                                val color = stroke ?: fill ?: Color.Black
+                                drawLine(color, Offset(payload.x, payload.y),
+                                    Offset(payload.x + payload.width, payload.y + payload.height),
+                                    payload.strokeWidth.coerceAtLeast(1f))
+                            }
+                        }
+                    }
+                }
             }
         }
     }

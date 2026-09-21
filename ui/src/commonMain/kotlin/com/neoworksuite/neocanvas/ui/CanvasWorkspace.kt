@@ -49,6 +49,11 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
@@ -82,6 +87,7 @@ fun CanvasWorkspace(
     var quickShapeRawPoints by remember { mutableStateOf<List<DrawPoint>>(emptyList()) }
     var quickShapeSnapped by remember { mutableStateOf(false) }
     val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
 
     LaunchedEffect(quickShapePointerDown, quickShapeRevision, state.quickShapeEnabled, state.tool) {
         if (!quickShapePointerDown || !state.quickShapeEnabled || state.tool != Tool.Brush) return@LaunchedEffect
@@ -416,7 +422,12 @@ fun CanvasWorkspace(
                 rotate(state.viewRotationDegrees, pivot = Offset(document.width / 2f, document.height / 2f))
             }) {
                 drawRect(NeoCanvasColors.paper, size = Size(document.width.toFloat(), document.height.toFloat()))
-                drawStoredTiles(state, transformPreview ?: movePreview ?: state.effectPreviewPatch ?: strokePreview, tileImages)
+                drawStoredTiles(
+                    state,
+                    transformPreview ?: movePreview ?: state.effectPreviewPatch ?: strokePreview,
+                    tileImages,
+                    textMeasurer,
+                )
 
                 if (state.gridGuideVisible) {
                     val spacing = state.guideSpacing.coerceIn(32f, 512f)
@@ -832,46 +843,139 @@ private fun DrawScope.drawSelectionOutline(selection: CanvasSelection, color: Co
 }
 
 /** Draws persisted tile pixels, so reopening a saved document is visibly identical to the original. */
-private fun DrawScope.drawStoredTiles(state: EditorState, preview: com.neoworksuite.neocanvas.renderer.RasterPatch?, images: TileImageCache) {
+private fun DrawScope.drawStoredTiles(
+    state: EditorState,
+    preview: com.neoworksuite.neocanvas.renderer.RasterPatch?,
+    images: TileImageCache,
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+) {
     val groupsById = state.document.groups.associateBy { it.id }
     state.document.layers.forEachIndexed { index, layer ->
         val group = layer.groupId?.let(groupsById::get)
         val effectiveOpacity = layer.opacity * (group?.opacity ?: 1f)
         if (!layer.visible || group?.visible == false || effectiveOpacity <= 0f) return@forEachIndexed
-        val raster = layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster ?: return@forEachIndexed
-        val clippingBase = if (layer.clipping && index > 0) state.document.layers[index - 1] else null
-        val layerPreview = preview?.takeIf { patch -> patch.keys.any { it.layerId == layer.id } }
-        val addresses = raster.tileAddresses + layerPreview?.keys.orEmpty().filter { it.layerId == layer.id }
-        addresses.forEach { address ->
-            val sourcePixels = (if (layerPreview != null) layerPreview.previewTile(address, state.tileStore)
-                else state.tileStore.read(address)) ?: return@forEach
-            val maskedPixels = applyLayerMaskPreview(sourcePixels, layer, address, state, preview)
-            val pixels = if (layer.clipping) {
-                val mask = clippingBase?.let { base ->
-                    val raw = state.tileStore.read(com.neoworksuite.neocanvas.renderer.TileKey(base.id, address.x, address.y))
-                    raw?.let { applyLayerMaskPreview(it, base, address, state, preview) }
+        val blendMode = layerBlendMode(layer.blendMode)
+        when (val payload = layer.payload) {
+            is com.neoworksuite.neocanvas.core.model.LayerPayload.Raster -> {
+                val clippingBase = if (layer.clipping && index > 0) state.document.layers[index - 1] else null
+                val layerPreview = preview?.takeIf { patch -> patch.keys.any { it.layerId == layer.id } }
+                val addresses = payload.tileAddresses + layerPreview?.keys.orEmpty().filter { it.layerId == layer.id }
+                addresses.forEach { address ->
+                    val sourcePixels = (if (layerPreview != null) layerPreview.previewTile(address, state.tileStore)
+                        else state.tileStore.read(address)) ?: return@forEach
+                    val maskedPixels = applyLayerMaskPreview(sourcePixels, layer, address, state, preview)
+                    val pixels = if (layer.clipping) {
+                        val mask = clippingBase?.let { base ->
+                            val raw = state.tileStore.read(com.neoworksuite.neocanvas.renderer.TileKey(base.id, address.x, address.y))
+                            raw?.let { applyLayerMaskPreview(it, base, address, state, preview) }
+                        }
+                        clipTileAlpha(maskedPixels, mask)
+                    } else maskedPixels
+                    drawImage(
+                        images.image(address, pixels),
+                        Offset(address.x * 256f, address.y * 256f),
+                        alpha = effectiveOpacity,
+                        blendMode = blendMode,
+                    )
                 }
-                clipTileAlpha(maskedPixels, mask)
-            } else maskedPixels
-            val blendMode = when (layer.blendMode) {
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Normal -> androidx.compose.ui.graphics.BlendMode.SrcOver
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Multiply -> androidx.compose.ui.graphics.BlendMode.Multiply
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Screen -> androidx.compose.ui.graphics.BlendMode.Screen
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Overlay -> androidx.compose.ui.graphics.BlendMode.Overlay
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Darken -> androidx.compose.ui.graphics.BlendMode.Darken
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Lighten -> androidx.compose.ui.graphics.BlendMode.Lighten
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.ColorDodge -> androidx.compose.ui.graphics.BlendMode.ColorDodge
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.ColorBurn -> androidx.compose.ui.graphics.BlendMode.ColorBurn
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.SoftLight -> androidx.compose.ui.graphics.BlendMode.Softlight
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.HardLight -> androidx.compose.ui.graphics.BlendMode.Hardlight
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Difference -> androidx.compose.ui.graphics.BlendMode.Difference
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Exclusion -> androidx.compose.ui.graphics.BlendMode.Exclusion
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Add -> androidx.compose.ui.graphics.BlendMode.Plus
-                com.neoworksuite.neocanvas.core.model.LayerBlendMode.Subtract -> androidx.compose.ui.graphics.BlendMode.SrcOver
             }
-            drawImage(images.image(address, pixels), Offset(address.x * 256f, address.y * 256f), alpha = effectiveOpacity, blendMode = blendMode)
+
+            is com.neoworksuite.neocanvas.core.model.LayerPayload.TextObject -> {
+                val center = Offset(payload.x + payload.width / 2f, payload.y + payload.height / 2f)
+                withTransform({ rotate(payload.rotationDegrees, pivot = center) }) {
+                    drawText(
+                        textMeasurer = textMeasurer,
+                        text = payload.text,
+                        topLeft = Offset(payload.x, payload.y),
+                        style = TextStyle(
+                            color = Color(payload.colorArgb).copy(
+                                alpha = Color(payload.colorArgb).alpha * effectiveOpacity,
+                            ),
+                            fontSize = payload.fontSize.toSp(),
+                            fontFamily = FontFamily.Default,
+                            textAlign = when (payload.alignment) {
+                                com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> TextAlign.Left
+                                com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> TextAlign.Center
+                                com.neoworksuite.neocanvas.core.model.TextAlignment.Right -> TextAlign.Right
+                            },
+                        ),
+                        size = Size(payload.width, payload.height),
+                        blendMode = blendMode,
+                    )
+                }
+            }
+
+            is com.neoworksuite.neocanvas.core.model.LayerPayload.ShapeObject ->
+                drawEditableShape(payload, effectiveOpacity, blendMode)
         }
     }
+}
+
+private fun DrawScope.drawEditableShape(
+    shape: com.neoworksuite.neocanvas.core.model.LayerPayload.ShapeObject,
+    opacity: Float,
+    blendMode: androidx.compose.ui.graphics.BlendMode,
+) {
+    val fill = shape.fillArgb?.let { Color(it).copy(alpha = Color(it).alpha * opacity) }
+    val stroke = shape.strokeArgb?.let { Color(it).copy(alpha = Color(it).alpha * opacity) }
+    val center = Offset(shape.x + shape.width / 2f, shape.y + shape.height / 2f)
+    withTransform({ rotate(shape.rotationDegrees, pivot = center) }) {
+        when (shape.kind) {
+            com.neoworksuite.neocanvas.core.model.ShapeKind.Rectangle -> {
+                fill?.let { drawRect(it, Offset(shape.x, shape.y), Size(shape.width, shape.height), blendMode = blendMode) }
+                stroke?.let {
+                    drawRect(
+                        it,
+                        Offset(shape.x, shape.y),
+                        Size(shape.width, shape.height),
+                        style = Stroke(shape.strokeWidth),
+                        blendMode = blendMode,
+                    )
+                }
+            }
+            com.neoworksuite.neocanvas.core.model.ShapeKind.Ellipse -> {
+                fill?.let { drawOval(it, Offset(shape.x, shape.y), Size(shape.width, shape.height), blendMode = blendMode) }
+                stroke?.let {
+                    drawOval(
+                        it,
+                        Offset(shape.x, shape.y),
+                        Size(shape.width, shape.height),
+                        style = Stroke(shape.strokeWidth),
+                        blendMode = blendMode,
+                    )
+                }
+            }
+            com.neoworksuite.neocanvas.core.model.ShapeKind.Line -> {
+                val color = stroke ?: fill ?: Color.Black
+                drawLine(
+                    color,
+                    Offset(shape.x, shape.y),
+                    Offset(shape.x + shape.width, shape.y + shape.height),
+                    shape.strokeWidth.coerceAtLeast(1f),
+                    blendMode = blendMode,
+                )
+            }
+        }
+    }
+}
+
+private fun layerBlendMode(
+    mode: com.neoworksuite.neocanvas.core.model.LayerBlendMode,
+): androidx.compose.ui.graphics.BlendMode = when (mode) {
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Normal -> androidx.compose.ui.graphics.BlendMode.SrcOver
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Multiply -> androidx.compose.ui.graphics.BlendMode.Multiply
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Screen -> androidx.compose.ui.graphics.BlendMode.Screen
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Overlay -> androidx.compose.ui.graphics.BlendMode.Overlay
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Darken -> androidx.compose.ui.graphics.BlendMode.Darken
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Lighten -> androidx.compose.ui.graphics.BlendMode.Lighten
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.ColorDodge -> androidx.compose.ui.graphics.BlendMode.ColorDodge
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.ColorBurn -> androidx.compose.ui.graphics.BlendMode.ColorBurn
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.SoftLight -> androidx.compose.ui.graphics.BlendMode.Softlight
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.HardLight -> androidx.compose.ui.graphics.BlendMode.Hardlight
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Difference -> androidx.compose.ui.graphics.BlendMode.Difference
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Exclusion -> androidx.compose.ui.graphics.BlendMode.Exclusion
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Add -> androidx.compose.ui.graphics.BlendMode.Plus
+    com.neoworksuite.neocanvas.core.model.LayerBlendMode.Subtract -> androidx.compose.ui.graphics.BlendMode.SrcOver
 }
 
 private fun applyLayerMaskPreview(

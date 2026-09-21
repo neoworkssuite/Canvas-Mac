@@ -208,6 +208,14 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                     }
                     Text(
                         buildString {
+                            append(
+                                when (val payload = layer.payload) {
+                                    is com.neoworksuite.neocanvas.core.model.LayerPayload.Raster -> "Raster"
+                                    is com.neoworksuite.neocanvas.core.model.LayerPayload.TextObject -> "Text"
+                                    is com.neoworksuite.neocanvas.core.model.LayerPayload.ShapeObject -> payload.kind.name
+                                },
+                            )
+                            append(" · ")
                             append(layer.blendMode.displayName())
                             append(" · ")
                             append((layer.opacity * 100).toInt())
@@ -306,22 +314,33 @@ private fun LayerOptionsPanel(
             )
         }
 
+        val rasterLayer = layer.payload is com.neoworksuite.neocanvas.core.model.LayerPayload.Raster
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             LayerTrayAction(if (layer.locked) "Unlock" else "Lock", Modifier.weight(1f)) {
                 state.toggleLayerLock(layer.id)
             }
-            LayerTrayAction(if (layer.alphaLocked) "Alpha ✓" else "Alpha", Modifier.weight(1f)) {
-                state.toggleLayerAlphaLock(layer.id)
-            }
-            LayerTrayAction(if (layer.clipping) "Clip ✓" else "Clip", Modifier.weight(1f)) {
-                state.toggleLayerClipping(layer.id)
+            if (rasterLayer) {
+                LayerTrayAction(if (layer.alphaLocked) "Alpha ✓" else "Alpha", Modifier.weight(1f)) {
+                    state.toggleLayerAlphaLock(layer.id)
+                }
+                LayerTrayAction(if (layer.clipping) "Clip ✓" else "Clip", Modifier.weight(1f)) {
+                    state.toggleLayerClipping(layer.id)
+                }
+            } else {
+                LayerTrayAction("Edit Object", Modifier.weight(2f)) {
+                    state.openObjectEditor(layer.id)
+                    onClose()
+                }
             }
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            LayerTrayAction("Select", Modifier.weight(1f)) {
-                state.selectLayerArtwork()
-                onClose()
+            if (rasterLayer) {
+                LayerTrayAction("Select", Modifier.weight(1f)) {
+                    state.selectLayerArtwork()
+                    onClose()
+                }
             }
             LayerTrayAction(if (renaming) "Done Name" else "Rename", Modifier.weight(1f)) {
                 onToggleRename()
@@ -334,40 +353,44 @@ private fun LayerOptionsPanel(
 
         LayerGroupPicker(layer, state)
 
-        val mask = layer.mask
-        if (mask == null) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                LayerTrayAction("Add Mask", Modifier.weight(1f)) {
-                    state.addMaskToActiveLayer()
+        if (rasterLayer) {
+            val mask = layer.mask
+            if (mask == null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LayerTrayAction("Add Mask", Modifier.weight(1f)) {
+                        state.addMaskToActiveLayer()
+                    }
                 }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                LayerTrayAction(
-                    if (state.maskEditingLayerId == layer.id) "Artwork" else "Edit Mask",
-                    Modifier.weight(1f),
-                ) {
-                    if (state.maskEditingLayerId == layer.id) state.editLayerArtwork()
-                    else state.editLayerMask(layer.id)
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LayerTrayAction(
+                        if (state.maskEditingLayerId == layer.id) "Artwork" else "Edit Mask",
+                        Modifier.weight(1f),
+                    ) {
+                        if (state.maskEditingLayerId == layer.id) state.editLayerArtwork()
+                        else state.editLayerMask(layer.id)
+                    }
+                    LayerTrayAction(if (mask.enabled) "Mask ✓" else "Mask Off", Modifier.weight(1f)) {
+                        state.toggleActiveMaskEnabled()
+                    }
+                    LayerTrayAction(if (mask.inverted) "Invert ✓" else "Invert", Modifier.weight(1f)) {
+                        state.toggleActiveMaskInverted()
+                    }
                 }
-                LayerTrayAction(if (mask.enabled) "Mask ✓" else "Mask Off", Modifier.weight(1f)) {
-                    state.toggleActiveMaskEnabled()
-                }
-                LayerTrayAction(if (mask.inverted) "Invert ✓" else "Invert", Modifier.weight(1f)) {
-                    state.toggleActiveMaskInverted()
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                LayerTrayAction("Remove Mask", Modifier.weight(1f), destructive = true) {
-                    state.removeActiveMask()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LayerTrayAction("Remove Mask", Modifier.weight(1f), destructive = true) {
+                        state.removeActiveMask()
+                    }
                 }
             }
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            LayerTrayAction("Merge Down", Modifier.weight(1f)) {
-                state.mergeActiveLayerDown()
-                onClose()
+            if (rasterLayer) {
+                LayerTrayAction("Merge Down", Modifier.weight(1f)) {
+                    state.mergeActiveLayerDown()
+                    onClose()
+                }
             }
             LayerTrayAction("Delete", Modifier.weight(1f), destructive = true) {
                 state.deleteActiveLayer()
