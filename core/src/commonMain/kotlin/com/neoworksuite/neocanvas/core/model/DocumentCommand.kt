@@ -325,12 +325,27 @@ data class DuplicateLayer(
     override fun apply(document: CanvasDocument): CanvasDocument {
         val plan = plan(document)
         val source = document.layers[plan.sourceIndex]
+        val duplicateMaskId = source.mask?.let { duplicateLayerId + "-mask" }
         val payload = when (source.payload) {
             is LayerPayload.Raster -> LayerPayload.Raster(
-                plan.tileCopies.mapTo(linkedSetOf()) { it.destination },
+                plan.tileCopies.filter { it.destination.layerId == duplicateLayerId }
+                    .mapTo(linkedSetOf()) { it.destination },
             )
         }
-        val duplicate = source.copy(id = duplicateLayerId, name = duplicateName, payload = payload)
+        val duplicateMask = source.mask?.let { mask ->
+            val maskId = requireNotNull(duplicateMaskId)
+            mask.copy(
+                id = maskId,
+                tileAddresses = plan.tileCopies.filter { it.destination.layerId == maskId }
+                    .mapTo(linkedSetOf()) { it.destination },
+            )
+        }
+        val duplicate = source.copy(
+            id = duplicateLayerId,
+            name = duplicateName,
+            payload = payload,
+            mask = duplicateMask,
+        )
         return document.copy(layers = document.layers.toMutableList().apply {
             add(plan.sourceIndex + 1, duplicate)
         })
@@ -339,10 +354,20 @@ data class DuplicateLayer(
     private fun plan(document: CanvasDocument): DuplicateLayerPlan {
         require(document.layers.none { it.id == duplicateLayerId }) { "A layer with id '$duplicateLayerId' already exists." }
         val sourceIndex = document.layers.indexOfLayer(sourceLayerId)
-        val tileCopies = when (val sourcePayload = document.layers[sourceIndex].payload) {
-            is LayerPayload.Raster -> immutableSetSnapshot(sourcePayload.tileAddresses.mapTo(linkedSetOf()) { address ->
-                RasterTileCopy(address, address.copy(layerId = duplicateLayerId))
-            })
+        val source = document.layers[sourceIndex]
+        val tileCopies = when (val sourcePayload = source.payload) {
+            is LayerPayload.Raster -> {
+                val copies = sourcePayload.tileAddresses.mapTo(linkedSetOf()) { address ->
+                    RasterTileCopy(address, address.copy(layerId = duplicateLayerId))
+                }
+                source.mask?.let { mask ->
+                    val duplicateMaskId = duplicateLayerId + "-mask"
+                    mask.tileAddresses.mapTo(copies) { address ->
+                        RasterTileCopy(address, address.copy(layerId = duplicateMaskId))
+                    }
+                }
+                immutableSetSnapshot(copies)
+            }
         }
         return DuplicateLayerPlan(sourceIndex, tileCopies)
     }

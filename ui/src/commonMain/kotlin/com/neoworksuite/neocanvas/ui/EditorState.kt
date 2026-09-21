@@ -9,9 +9,13 @@ import androidx.compose.ui.graphics.Color
 import com.neoworksuite.neocanvas.brushes.BrushDefinition
 import com.neoworksuite.neocanvas.brushes.BuiltInBrushes
 import com.neoworksuite.neocanvas.core.model.AddRasterLayer
+import com.neoworksuite.neocanvas.core.model.AddLayerGroup
+import com.neoworksuite.neocanvas.core.model.AddLayerMask
+import com.neoworksuite.neocanvas.core.model.ApplyLayerMaskPatch
 import com.neoworksuite.neocanvas.core.model.ApplyRasterPatch
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.DeleteLayer
+import com.neoworksuite.neocanvas.core.model.DeleteLayerGroup
 import com.neoworksuite.neocanvas.core.model.CropCanvas
 import com.neoworksuite.neocanvas.core.model.DocumentCommand
 import com.neoworksuite.neocanvas.core.model.DocumentHistory
@@ -19,6 +23,15 @@ import com.neoworksuite.neocanvas.core.model.DuplicateLayer
 import com.neoworksuite.neocanvas.core.model.MoveLayer
 import com.neoworksuite.neocanvas.core.model.RenameLayer
 import com.neoworksuite.neocanvas.core.model.SetLayerOpacity
+import com.neoworksuite.neocanvas.core.model.SetLayerGroupMembership
+import com.neoworksuite.neocanvas.core.model.SetLayerGroupVisibility
+import com.neoworksuite.neocanvas.core.model.SetLayerGroupOpacity
+import com.neoworksuite.neocanvas.core.model.SetLayerGroupLocked
+import com.neoworksuite.neocanvas.core.model.SetLayerGroupCollapsed
+import com.neoworksuite.neocanvas.core.model.SetLayerMaskEnabled
+import com.neoworksuite.neocanvas.core.model.SetLayerMaskInverted
+import com.neoworksuite.neocanvas.core.model.RemoveLayerMask
+import com.neoworksuite.neocanvas.core.model.RenameLayerGroup
 import com.neoworksuite.neocanvas.core.model.SetLayerVisibility
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.SetLayerAlphaLocked
@@ -564,6 +577,12 @@ class EditorState(
             com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE
 
     var activeLayerId: String? by mutableStateOf(history.current.layers.lastOrNull()?.id)
+    var maskEditingLayerId: String? by mutableStateOf(null)
+        private set
+
+    val isEditingLayerMask: Boolean
+        get() = maskEditingLayerId != null
+
     var brush: BrushDefinition by mutableStateOf(BuiltInBrushes.pencil)
     private var primaryColor: Color by mutableStateOf(Color(0xFF1B1C20))
     var previousColor: Color by mutableStateOf(primaryColor)
@@ -854,6 +873,7 @@ class EditorState(
 
     private fun resetDormantLayerState() {
         dormantLayerIds = emptySet()
+        maskEditingLayerId = null
         resetEditableStrokes()
     }
 
@@ -1720,6 +1740,106 @@ class EditorState(
         else showInspector(panel)
     }
 
+    fun addGroupFromActive(): Boolean {
+        val id = nextGroupId()
+        val layerId = activeLayerId
+        execute(AddLayerGroup(id, "Group " + (document.groups.size + 1)))
+        if (layerId != null) execute(SetLayerGroupMembership(layerId, id))
+        statusMessage = if (layerId == null) "Added layer group" else "Grouped active layer"
+        return true
+    }
+
+    fun renameGroup(id: String, name: String) {
+        if (name.isNotBlank()) execute(RenameLayerGroup(id, name.trim()))
+    }
+
+    fun toggleGroupVisibility(id: String) {
+        document.groups.firstOrNull { it.id == id }?.let {
+            execute(SetLayerGroupVisibility(id, !it.visible))
+        }
+    }
+
+    fun toggleGroupLocked(id: String) {
+        document.groups.firstOrNull { it.id == id }?.let {
+            execute(SetLayerGroupLocked(id, !it.locked))
+        }
+    }
+
+    fun toggleGroupCollapsed(id: String) {
+        document.groups.firstOrNull { it.id == id }?.let {
+            execute(SetLayerGroupCollapsed(id, !it.collapsed))
+        }
+    }
+
+    fun setGroupOpacity(id: String, opacity: Float) {
+        execute(SetLayerGroupOpacity(id, opacity.coerceIn(0f, 1f)))
+    }
+
+    fun deleteGroup(id: String) {
+        execute(DeleteLayerGroup(id))
+        statusMessage = "Removed group; layers kept"
+    }
+
+    fun setActiveLayerGroup(groupId: String?) {
+        val layerId = activeLayerId ?: return
+        execute(SetLayerGroupMembership(layerId, groupId))
+        statusMessage = if (groupId == null) "Moved layer out of group" else "Moved layer into group"
+    }
+
+    fun addMaskToActiveLayer(): Boolean {
+        val layerId = activeLayerId ?: return false
+        val layer = document.layers.firstOrNull { it.id == layerId } ?: return false
+        if (layer.mask != null) {
+            maskEditingLayerId = layerId
+            statusMessage = "Editing existing layer mask"
+            return true
+        }
+        val maskId = nextMaskId(layerId)
+        execute(AddLayerMask(layerId, maskId))
+        maskEditingLayerId = layerId
+        statusMessage = "Added non-destructive layer mask"
+        return true
+    }
+
+    fun editLayerMask(layerId: String): Boolean {
+        val layer = document.layers.firstOrNull { it.id == layerId && it.mask != null } ?: return false
+        activeLayerId = layer.id
+        maskEditingLayerId = layer.id
+        tool = Tool.Brush
+        statusMessage = "Mask editing — black hides, white reveals"
+        return true
+    }
+
+    fun editLayerArtwork() {
+        maskEditingLayerId = null
+        statusMessage = "Editing layer artwork"
+    }
+
+    fun toggleActiveMaskEnabled() {
+        val layerId = activeLayerId ?: return
+        val mask = document.layers.firstOrNull { it.id == layerId }?.mask ?: return
+        execute(SetLayerMaskEnabled(layerId, !mask.enabled))
+    }
+
+    fun toggleActiveMaskInverted() {
+        val layerId = activeLayerId ?: return
+        val mask = document.layers.firstOrNull { it.id == layerId }?.mask ?: return
+        execute(SetLayerMaskInverted(layerId, !mask.inverted))
+    }
+
+    fun removeActiveMask() {
+        val layerId = activeLayerId ?: return
+        val mask = document.layers.firstOrNull { it.id == layerId }?.mask ?: return
+        val before = tileStore.snapshot()
+        val removals = tileStore.keys.filterTo(linkedSetOf()) { it.layerId == mask.id }
+        if (removals.isNotEmpty()) {
+            tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterPatch.of(emptyMap(), removals))
+        }
+        execute(RemoveLayerMask(layerId), before)
+        maskEditingLayerId = null
+        statusMessage = "Removed layer mask"
+    }
+
     fun addLayer() {
         val id = nextLayerId()
         execute(AddRasterLayer(id, "Layer ${document.layers.size + 1}"))
@@ -1810,12 +1930,47 @@ class EditorState(
         return true
     }
 
+    private fun isGroupLocked(layer: Layer): Boolean =
+        layer.groupId?.let { id -> document.groups.firstOrNull { it.id == id }?.locked } == true
+
     /** Rasterizes one completed gesture into sparse tiles and commits its address patch to history. */
     fun recordStroke(points: List<DrawPoint>, stabilize: Boolean = true) {
         val layerId = activeLayerId ?: return
         if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge)) return
         if (!wakeLayer(layerId)) return
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return
+        if (isGroupLocked(activeLayer)) {
+            statusMessage = "Unlock this group before editing its layers"
+            return
+        }
+
+        if (maskEditingLayerId == layerId) {
+            if (tool == Tool.Smudge) {
+                statusMessage = "Smudge is unavailable while editing a mask"
+                return
+            }
+            val mask = activeLayer.mask ?: run {
+                maskEditingLayerId = null
+                return
+            }
+            val patch = previewStroke(points, stabilize) ?: return
+            val before = tileStore.snapshot()
+            val beforeKeys = tileStore.keys.filterTo(linkedSetOf()) { it.layerId == mask.id }
+            if (tileStore.applyPatch(patch).isEmpty()) return
+            val afterKeys = tileStore.keys.filterTo(linkedSetOf()) { it.layerId == mask.id }
+            execute(
+                ApplyLayerMaskPatch(
+                    layerId,
+                    mask.id,
+                    afterKeys - beforeKeys,
+                    beforeKeys - afterKeys,
+                ),
+                before,
+            )
+            statusMessage = "Layer mask updated"
+            return
+        }
+
         val patch = if (tool == Tool.Smudge) previewSmudge(points, stabilize) else previewStroke(points, stabilize)
         if (patch == null) return
         val before = tileStore.snapshot()
@@ -1847,25 +2002,87 @@ class EditorState(
         val layerId = activeLayerId ?: return null
         if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return null
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
+        if (isGroupLocked(activeLayer)) return null
+        val editingMask = maskEditingLayerId == layerId
+        val mask = if (editingMask) activeLayer.mask else null
+        val targetStore = if (mask != null) maskPreviewStore(mask.id, points) else tileStore
+        val targetLayerId = mask?.id ?: layerId
+        val maskLuma = (
+            color.red * .2126f +
+                color.green * .7152f +
+                color.blue * .0722f
+            ).coerceIn(0f, 1f)
+        val targetColor = if (mask != null) {
+            val value = if (tool == Tool.Eraser) 255 else (maskLuma * 255f + .5f).toInt()
+            RasterColor(value, value, value)
+        } else {
+            RasterColor(
+                (color.red * 255).toInt(),
+                (color.green * 255).toInt(),
+                (color.blue * 255).toInt(),
+            )
+        }
         return Rasterizer.stroke(
-            existing = tileStore,
-            layerId = layerId,
+            existing = targetStore,
+            layerId = targetLayerId,
             points = points.map { RasterPoint(it.x, it.y, normalizedPressure(it.pressure)) }.let { rasterPoints ->
                 if (stabilize) com.neoworksuite.neocanvas.renderer.smoothStroke(rasterPoints, stabilization)
                 else rasterPoints
             },
-            color = RasterColor((color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()),
+            color = targetColor,
             size = brushSize,
             opacity = brushOpacity,
-            mode = if (tool == Tool.Eraser) com.neoworksuite.neocanvas.brushes.BrushMode.ERASE else com.neoworksuite.neocanvas.brushes.BrushMode.PAINT,
+            mode = if (mask != null) com.neoworksuite.neocanvas.brushes.BrushMode.PAINT
+                else if (tool == Tool.Eraser) com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
+                else com.neoworksuite.neocanvas.brushes.BrushMode.PAINT,
             canvasWidth = document.width,
             canvasHeight = document.height,
             acceptsPixel = { x, y -> selection?.contains(x, y) ?: true },
-            brush = if (tool == Tool.Eraser && brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE) BuiltInBrushes.eraser else brush,
+            brush = if (mask != null && brush.mode == com.neoworksuite.neocanvas.brushes.BrushMode.ERASE)
+                BuiltInBrushes.pencil
+            else if (tool == Tool.Eraser && brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE)
+                BuiltInBrushes.eraser
+            else brush,
             symmetry = symmetry,
-            alphaLocked = activeLayer.alphaLocked,
+            alphaLocked = if (mask != null) false else activeLayer.alphaLocked,
         )
     }
+
+    private fun maskPreviewStore(maskId: String, points: List<DrawPoint>): TileStore {
+        val tiles = tileStore.snapshotLayer(maskId).toMutableMap()
+        val margin = (brushSize * 1.75f).coerceAtLeast(4f)
+        val seedPoints = mutableListOf<DrawPoint>()
+        points.forEach { point ->
+            seedPoints += point
+            when (symmetry) {
+                com.neoworksuite.neocanvas.renderer.DrawingSymmetry.None -> Unit
+                com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Vertical ->
+                    seedPoints += point.copy(x = document.width - point.x)
+                com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Horizontal ->
+                    seedPoints += point.copy(y = document.height - point.y)
+                com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Both -> {
+                    seedPoints += point.copy(x = document.width - point.x)
+                    seedPoints += point.copy(y = document.height - point.y)
+                    seedPoints += point.copy(x = document.width - point.x, y = document.height - point.y)
+                }
+            }
+        }
+        seedPoints.forEach { point ->
+            val left = kotlin.math.floor((point.x - margin) / 256f).toInt()
+            val right = kotlin.math.floor((point.x + margin) / 256f).toInt()
+            val top = kotlin.math.floor((point.y - margin) / 256f).toInt()
+            val bottom = kotlin.math.floor((point.y + margin) / 256f).toInt()
+            for (ty in top..bottom) for (tx in left..right) {
+                if (tx < 0 || ty < 0 || tx * 256 >= document.width || ty * 256 >= document.height) continue
+                val key = TileKey(maskId, tx, ty)
+                if (key !in tiles) tiles[key] = whiteMaskTile()
+            }
+        }
+        return TileStore(tiles)
+    }
+
+    private fun whiteMaskTile(): ByteArray =
+        ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE) { 255.toByte() }
 
     fun previewSmudge(
         points: List<DrawPoint>,
@@ -1874,7 +2091,7 @@ class EditorState(
         val layerId = activeLayerId ?: return null
         if (points.size < 2 || tool != Tool.Smudge) return null
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
-        if (activeLayer.payload !is LayerPayload.Raster) return null
+        if (activeLayer.payload !is LayerPayload.Raster || isGroupLocked(activeLayer) || maskEditingLayerId == layerId) return null
         val rasterPoints = points.map {
             RasterPoint(it.x, it.y, normalizedPressure(it.pressure))
         }.let {
@@ -2206,7 +2423,8 @@ class EditorState(
     /** Excludes cached tiles made orphaned by layer deletion; packages require exact tile addresses. */
     fun tilesForDocument(): Map<TileAddress, ByteArray> {
         val valid = document.layers.flatMap { layer ->
-            (layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster)?.tileAddresses.orEmpty()
+            (layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster)?.tileAddresses.orEmpty() +
+                layer.mask?.tileAddresses.orEmpty()
         }.toSet()
         val all = tileStore.snapshot().toMutableMap()
         dormantLayerIds.forEach { layerId ->
@@ -2281,6 +2499,20 @@ class EditorState(
         documentRevision++
         activeLayerId = activeLayerId?.takeIf { id -> document.layers.any { it.id == id } } ?: document.layers.lastOrNull()?.id
     }
+    private fun nextGroupId(): String {
+        var ordinal = document.groups.size + 1
+        while (document.groups.any { it.id == "group-$ordinal" }) ordinal++
+        return "group-$ordinal"
+    }
+
+    private fun nextMaskId(layerId: String): String {
+        var candidate = layerId + "-mask"
+        var ordinal = 2
+        val used = document.layers.mapNotNull { it.mask?.id }.toSet() + document.layers.map { it.id }
+        while (candidate in used) candidate = layerId + "-mask-" + ordinal++
+        return candidate
+    }
+
     private fun nextLayerId(): String {
         var ordinal = document.layers.size + 1
         while (document.layers.any { it.id == "layer-$ordinal" }) ordinal++

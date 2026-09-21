@@ -815,20 +815,26 @@ private fun DrawScope.drawSelectionOutline(selection: CanvasSelection, color: Co
 
 /** Draws persisted tile pixels, so reopening a saved document is visibly identical to the original. */
 private fun DrawScope.drawStoredTiles(state: EditorState, preview: com.neoworksuite.neocanvas.renderer.RasterPatch?, images: TileImageCache) {
+    val groupsById = state.document.groups.associateBy { it.id }
     state.document.layers.forEachIndexed { index, layer ->
-        if (!layer.visible || layer.opacity <= 0f) return@forEachIndexed
+        val group = layer.groupId?.let(groupsById::get)
+        val effectiveOpacity = layer.opacity * (group?.opacity ?: 1f)
+        if (!layer.visible || group?.visible == false || effectiveOpacity <= 0f) return@forEachIndexed
         val raster = layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster ?: return@forEachIndexed
         val clippingBase = if (layer.clipping && index > 0) state.document.layers[index - 1] else null
-        val addresses = raster.tileAddresses + preview?.keys.orEmpty().filter { it.layerId == layer.id }
+        val layerPreview = preview?.takeIf { patch -> patch.keys.any { it.layerId == layer.id } }
+        val addresses = raster.tileAddresses + layerPreview?.keys.orEmpty().filter { it.layerId == layer.id }
         addresses.forEach { address ->
-            val sourcePixels = (if (preview != null) preview.previewTile(address, state.tileStore)
+            val sourcePixels = (if (layerPreview != null) layerPreview.previewTile(address, state.tileStore)
                 else state.tileStore.read(address)) ?: return@forEach
+            val maskedPixels = applyLayerMaskPreview(sourcePixels, layer, address, state, preview)
             val pixels = if (layer.clipping) {
                 val mask = clippingBase?.let { base ->
-                    state.tileStore.read(com.neoworksuite.neocanvas.renderer.TileKey(base.id, address.x, address.y))
+                    val raw = state.tileStore.read(com.neoworksuite.neocanvas.renderer.TileKey(base.id, address.x, address.y))
+                    raw?.let { applyLayerMaskPreview(it, base, address, state, preview) }
                 }
-                clipTileAlpha(sourcePixels, mask)
-            } else sourcePixels
+                clipTileAlpha(maskedPixels, mask)
+            } else maskedPixels
             val blendMode = when (layer.blendMode) {
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Normal -> androidx.compose.ui.graphics.BlendMode.SrcOver
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Multiply -> androidx.compose.ui.graphics.BlendMode.Multiply
@@ -845,9 +851,42 @@ private fun DrawScope.drawStoredTiles(state: EditorState, preview: com.neoworksu
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Add -> androidx.compose.ui.graphics.BlendMode.Plus
                 com.neoworksuite.neocanvas.core.model.LayerBlendMode.Subtract -> androidx.compose.ui.graphics.BlendMode.SrcOver
             }
-            drawImage(images.image(address, pixels), Offset(address.x * 256f, address.y * 256f), alpha = layer.opacity, blendMode = blendMode)
+            drawImage(images.image(address, pixels), Offset(address.x * 256f, address.y * 256f), alpha = effectiveOpacity, blendMode = blendMode)
         }
     }
+}
+
+private fun applyLayerMaskPreview(
+    source: ByteArray,
+    layer: com.neoworksuite.neocanvas.core.model.Layer,
+    address: com.neoworksuite.neocanvas.core.model.TileAddress,
+    state: EditorState,
+    preview: com.neoworksuite.neocanvas.renderer.RasterPatch?,
+): ByteArray {
+    val mask = layer.mask ?: return source
+    if (!mask.enabled) return source
+    val maskAddress = com.neoworksuite.neocanvas.renderer.TileKey(mask.id, address.x, address.y)
+    val maskPreview = preview?.takeIf { patch -> patch.keys.any { it.layerId == mask.id } }
+    val maskPixels = if (maskPreview != null) maskPreview.previewTile(maskAddress, state.tileStore)
+        else state.tileStore.read(maskAddress)
+    if (maskPixels == null && !mask.inverted) return source
+
+    val output = source.copyOf()
+    var offset = 0
+    while (offset < output.size) {
+        val raw = maskPixels?.get(offset)?.toInt()?.and(255) ?: 255
+        val value = if (mask.inverted) 255 - raw else raw
+        val sourceAlpha = output[offset + 3].toInt() and 255
+        val masked = (sourceAlpha * value + 127) / 255
+        output[offset + 3] = masked.toByte()
+        if (masked == 0) {
+            output[offset] = 0
+            output[offset + 1] = 0
+            output[offset + 2] = 0
+        }
+        offset += 4
+    }
+    return output
 }
 
 private fun clipTileAlpha(source: ByteArray, mask: ByteArray?): ByteArray {

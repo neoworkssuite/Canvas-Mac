@@ -29,6 +29,10 @@ class CanvasDocument(
         require(this.layers.all { it.groupId == null || it.groupId in groupIds }) {
             "Every grouped layer must reference a group in the document."
         }
+        val layerIds = this.layers.mapTo(linkedSetOf(), Layer::id)
+        val maskIds = this.layers.mapNotNull { it.mask?.id }
+        require(maskIds.distinct().size == maskIds.size) { "Layer mask ids must be unique." }
+        require(maskIds.none { it in layerIds }) { "Layer mask ids must not collide with layer ids." }
     }
 
     companion object {

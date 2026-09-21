@@ -5,6 +5,7 @@ import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.LayerGroup
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
@@ -232,6 +233,58 @@ class EditorStateTest {
         assertEquals(0f, state.panX, .001f)
         assertEquals(0f, state.panY, .001f)
         assertEquals(0f, state.viewRotationDegrees, .001f)
+    }
+
+    @Test
+    fun mask_editing_changes_mask_pixels_without_changing_layer_pixels() {
+        val paintAddress = TileAddress("layer-1", 0, 0)
+        val paint = ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE).apply {
+            val offset = (12 * 256 + 12) * 4
+            this[offset] = 255.toByte()
+            this[offset + 3] = 255.toByte()
+        }
+        val initial = CanvasDocument(
+            id = "mask-edit",
+            width = 64,
+            height = 64,
+            layers = listOf(
+                Layer("layer-1", "Paint", payload = LayerPayload.Raster(setOf(paintAddress))),
+            ),
+        )
+        val state = EditorState(
+            DocumentHistory(initial),
+            tileStore = com.neoworksuite.neocanvas.renderer.TileStore(mapOf(paintAddress to paint)),
+        )
+        assertTrue(state.addMaskToActiveLayer())
+        state.color = Color.Black
+        state.brushSize = 4f
+        state.recordStroke(listOf(DrawPoint(12f, 12f)))
+
+        assertContentEquals(paint, state.tileStore.read(paintAddress))
+        val mask = state.document.layers.single().mask!!
+        val maskAddress = TileAddress(mask.id, 0, 0)
+        val maskBytes = assertNotNull(state.tileStore.read(maskAddress))
+        val offset = (12 * 256 + 12) * 4
+        assertEquals(0, maskBytes[offset].toInt() and 255)
+        assertTrue(maskAddress in state.tilesForDocument())
+    }
+
+    @Test
+    fun locked_group_blocks_layer_painting() {
+        val initial = CanvasDocument(
+            id = "group-lock",
+            width = 64,
+            height = 64,
+            layers = listOf(
+                Layer("layer-1", "Paint", payload = LayerPayload.Raster(), groupId = "group-1"),
+            ),
+            groups = listOf(LayerGroup("group-1", "Locked", locked = true)),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        state.recordStroke(listOf(DrawPoint(12f, 12f)))
+
+        assertTrue(state.tileStore.keys.isEmpty())
+        assertEquals("Unlock this group before editing its layers", state.statusMessage)
     }
 
     @Test
