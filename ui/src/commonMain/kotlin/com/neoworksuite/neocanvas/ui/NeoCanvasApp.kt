@@ -273,6 +273,29 @@ fun NeoCanvasApp(
                 )
             }
         }
+        if (state.objectEditorVisible) {
+            Box(
+                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                    .padding(
+                        end = if (compact) 10.dp else 16.dp,
+                        start = if (compact) 10.dp else 0.dp,
+                        bottom = 12.dp,
+                    )
+                    .fillMaxWidth(if (compact) .94f else .42f)
+                    .fillMaxHeight(if (compact) .72f else .82f)
+                    .widthIn(max = 460.dp)
+                    .heightIn(max = 700.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(NeoCanvasColors.panel.copy(alpha = .98f))
+                    .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(16.dp)),
+            ) {
+                ObjectPanel(
+                    state = state,
+                    modifier = Modifier.fillMaxSize(),
+                    onClose = state::closeObjectEditor,
+                )
+            }
+        }
         if (state.psdCompatibilityVisible) {
             Box(
                 Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)

@@ -12,6 +12,7 @@ import com.neoworksuite.neocanvas.core.store.SaveResult
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -627,6 +628,64 @@ class EditorStateTest {
         state.newDocument()
         state.discardAndContinue()
         assertEquals(null, state.selection)
+    }
+
+    @Test
+    fun editable_text_and_shape_state_updates_are_metadata_only_and_undoable() {
+        val initial = CanvasDocument(
+            id = "objects-ui",
+            width = 800,
+            height = 600,
+            layers = listOf(Layer("layer-1", "Paint", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial))
+
+        state.addTextObject()
+        val textId = state.activeLayerId!!
+        assertTrue(state.objectEditorVisible)
+        assertIs<LayerPayload.TextObject>(state.document.layers.last().payload)
+        assertTrue(state.tileStore.keys.isEmpty())
+
+        state.setActiveTextContent("NeoCanvas")
+        state.setActiveTextAlignment(com.neoworksuite.neocanvas.core.model.TextAlignment.Right)
+        state.rotateActiveObject(15f)
+        assertEquals("NeoCanvas", state.activeTextObject!!.text)
+        assertEquals(com.neoworksuite.neocanvas.core.model.TextAlignment.Right, state.activeTextObject!!.alignment)
+        assertEquals(15f, state.activeTextObject!!.rotationDegrees)
+
+        state.closeObjectEditor()
+        state.addShapeObject(com.neoworksuite.neocanvas.core.model.ShapeKind.Ellipse)
+        assertIs<LayerPayload.ShapeObject>(state.document.layers.last().payload)
+        assertTrue(state.tileStore.keys.isEmpty())
+
+        state.useCurrentColourForActiveObject(asStroke = true)
+        state.setActiveShapeStrokeWidth(12f)
+        state.scaleActiveObject(1.1f)
+        assertEquals(12f, state.activeShapeObject!!.strokeWidth)
+
+        assertTrue(state.undo())
+        state.selectLayer(textId)
+        assertTrue(state.openObjectEditor(textId))
+    }
+
+    @Test
+    fun raster_tools_ignore_editable_object_layers() {
+        val initial = CanvasDocument(
+            id = "object-raster-guard",
+            width = 400,
+            height = 300,
+            layers = listOf(
+                Layer("text-1", "Text", payload = LayerPayload.TextObject(
+                    "Hello", x = 20f, y = 20f, width = 200f, height = 80f,
+                )),
+            ),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        state.activeLayerId = "text-1"
+        state.tool = Tool.Brush
+        state.recordStroke(listOf(DrawPoint(40f, 40f)))
+        assertTrue(state.tileStore.keys.isEmpty())
+        assertIs<LayerPayload.TextObject>(state.document.layers.single().payload)
     }
 
     @Test

@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Color
 import com.neoworksuite.neocanvas.brushes.BrushDefinition
 import com.neoworksuite.neocanvas.brushes.BuiltInBrushes
 import com.neoworksuite.neocanvas.core.model.AddRasterLayer
+import com.neoworksuite.neocanvas.core.model.AddTextLayer
+import com.neoworksuite.neocanvas.core.model.AddShapeLayer
 import com.neoworksuite.neocanvas.core.model.AddLayerGroup
 import com.neoworksuite.neocanvas.core.model.AddLayerMask
 import com.neoworksuite.neocanvas.core.model.ApplyLayerMaskPatch
@@ -39,6 +41,10 @@ import com.neoworksuite.neocanvas.core.model.SetLayerBlendMode
 import com.neoworksuite.neocanvas.core.model.SetLayerClipping
 import com.neoworksuite.neocanvas.core.model.MergeRasterLayerDown
 import com.neoworksuite.neocanvas.core.model.TileAddress
+import com.neoworksuite.neocanvas.core.model.ShapeKind
+import com.neoworksuite.neocanvas.core.model.TextAlignment
+import com.neoworksuite.neocanvas.core.model.UpdateTextLayer
+import com.neoworksuite.neocanvas.core.model.UpdateShapeLayer
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
 import com.neoworksuite.neocanvas.core.store.LoadResult
@@ -94,6 +100,7 @@ class EditorState(
             .sortedWith(compareBy<String> { it != "Main" }.thenBy(String::lowercase))
 
     fun openVersions() {
+        objectEditorVisible = false
         recentStrokesVisible = false
         psdCompatibilityVisible = false
         workbenchPanelVisible = false
@@ -426,6 +433,7 @@ class EditorState(
         private set
 
     fun openPsdCompatibility() {
+        objectEditorVisible = false
         recentStrokesVisible = false
         if (!supportsPsdExport) {
             statusMessage = "PSD export is unavailable on this device"
@@ -616,6 +624,218 @@ class EditorState(
         private set
     var transformSnapping: Boolean by mutableStateOf(false)
 
+    var objectEditorVisible: Boolean by mutableStateOf(false)
+        private set
+
+    val activeTextObject: LayerPayload.TextObject?
+        get() = document.layers.firstOrNull { it.id == activeLayerId }?.payload as? LayerPayload.TextObject
+
+    val activeShapeObject: LayerPayload.ShapeObject?
+        get() = document.layers.firstOrNull { it.id == activeLayerId }?.payload as? LayerPayload.ShapeObject
+
+    val activeObjectLayer: Layer?
+        get() = document.layers.firstOrNull { layer ->
+            layer.id == activeLayerId &&
+                (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
+        }
+
+    fun openObjectEditor(layerId: String? = activeLayerId): Boolean {
+        val id = layerId ?: return false
+        val layer = document.layers.firstOrNull { it.id == id } ?: return false
+        if (layer.payload !is LayerPayload.TextObject && layer.payload !is LayerPayload.ShapeObject) return false
+        selectLayer(id)
+        if (inspectorVisible) hideInspector()
+        recentStrokesVisible = false
+        psdCompatibilityVisible = false
+        versionsVisible = false
+        workbenchPanelVisible = false
+        settingsVisible = false
+        objectEditorVisible = true
+        return true
+    }
+
+    fun closeObjectEditor() { objectEditorVisible = false }
+
+    fun addTextObject() {
+        val id = nextLayerId()
+        val width = (document.width * .70f).coerceIn(120f, 900f)
+        val height = (document.height * .18f).coerceIn(60f, 260f)
+        val payload = LayerPayload.TextObject(
+            text = "Text",
+            fontSize = minOf(64f, (document.height * .08f).coerceAtLeast(24f)),
+            colorArgb = composeColorArgb(color),
+            x = (document.width - width) / 2f,
+            y = (document.height - height) / 2f,
+            width = width,
+            height = height,
+            alignment = TextAlignment.Center,
+        )
+        execute(AddTextLayer(id, "Text", payload))
+        activeLayerId = id
+        clearSelection()
+        openObjectEditor(id)
+        statusMessage = "Editable text added"
+    }
+
+    fun addShapeObject(kind: ShapeKind) {
+        val id = nextLayerId()
+        val width = (document.width * .30f).coerceIn(80f, 520f)
+        val height = if (kind == ShapeKind.Line) 0f else (document.height * .24f).coerceIn(80f, 420f)
+        val payload = LayerPayload.ShapeObject(
+            kind = kind,
+            x = (document.width - width) / 2f,
+            y = if (kind == ShapeKind.Line) document.height / 2f else (document.height - height) / 2f,
+            width = width,
+            height = height,
+            fillArgb = if (kind == ShapeKind.Line) null else composeColorArgb(color),
+            strokeArgb = if (kind == ShapeKind.Line) composeColorArgb(color) else null,
+            strokeWidth = if (kind == ShapeKind.Line) 6f else 0f,
+        )
+        execute(AddShapeLayer(id, shapeLayerName(kind), payload))
+        activeLayerId = id
+        clearSelection()
+        openObjectEditor(id)
+        statusMessage = "Editable " + shapeLayerName(kind).lowercase() + " added"
+    }
+
+    fun setActiveTextContent(value: String) {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(text = value.take(10_000))))
+    }
+
+    fun setActiveTextSize(value: Float) {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(fontSize = value.coerceIn(6f, 512f))))
+    }
+
+    fun setActiveTextAlignment(value: TextAlignment) {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(alignment = value)))
+    }
+
+    fun setActiveShapeKind(value: ShapeKind) {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.ShapeObject ?: return
+        val next = when (value) {
+            ShapeKind.Line -> payload.copy(
+                kind = value,
+                fillArgb = null,
+                strokeArgb = payload.strokeArgb ?: payload.fillArgb ?: composeColorArgb(color),
+                strokeWidth = payload.strokeWidth.coerceAtLeast(4f),
+            )
+            ShapeKind.Rectangle, ShapeKind.Ellipse -> payload.copy(
+                kind = value,
+                height = if (payload.height == 0f) 180f else kotlin.math.abs(payload.height),
+                fillArgb = payload.fillArgb ?: payload.strokeArgb ?: composeColorArgb(color),
+            )
+        }
+        execute(UpdateShapeLayer(layer.id, next))
+    }
+
+    fun setActiveShapeStrokeWidth(value: Float) {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.ShapeObject ?: return
+        execute(UpdateShapeLayer(layer.id, payload.copy(
+            strokeArgb = payload.strokeArgb ?: composeColorArgb(color),
+            strokeWidth = value.coerceIn(1f, 128f),
+        )))
+    }
+
+    fun removeActiveShapeStroke() {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.ShapeObject ?: return
+        if (payload.kind == ShapeKind.Line || payload.fillArgb == null) return
+        execute(UpdateShapeLayer(layer.id, payload.copy(strokeArgb = null, strokeWidth = 0f)))
+    }
+
+    fun useCurrentColourForActiveObject(asStroke: Boolean = false) {
+        val layer = activeObjectLayer ?: return
+        val argb = composeColorArgb(color)
+        when (val payload = layer.payload) {
+            is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(colorArgb = argb)))
+            is LayerPayload.ShapeObject -> {
+                val next = if (asStroke || payload.kind == ShapeKind.Line) {
+                    payload.copy(strokeArgb = argb, strokeWidth = payload.strokeWidth.coerceAtLeast(4f))
+                } else payload.copy(fillArgb = argb)
+                execute(UpdateShapeLayer(layer.id, next))
+            }
+            is LayerPayload.Raster -> Unit
+        }
+    }
+
+    fun moveActiveObject(dx: Float, dy: Float) {
+        val layer = activeObjectLayer ?: return
+        if (layer.locked || !dx.isFinite() || !dy.isFinite()) return
+        when (val payload = layer.payload) {
+            is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(
+                x = (payload.x + dx).coerceIn(-payload.width, document.width.toFloat()),
+                y = (payload.y + dy).coerceIn(-payload.height, document.height.toFloat()),
+            )))
+            is LayerPayload.ShapeObject -> execute(UpdateShapeLayer(layer.id, payload.copy(
+                x = (payload.x + dx).coerceIn(-kotlin.math.abs(payload.width), document.width.toFloat()),
+                y = (payload.y + dy).coerceIn(-kotlin.math.abs(payload.height), document.height.toFloat()),
+            )))
+            is LayerPayload.Raster -> Unit
+        }
+    }
+
+    fun scaleActiveObject(factor: Float) {
+        val layer = activeObjectLayer ?: return
+        if (layer.locked || !factor.isFinite() || factor <= 0f) return
+        when (val payload = layer.payload) {
+            is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(
+                width = (payload.width * factor).coerceIn(20f, document.width * 2f),
+                height = (payload.height * factor).coerceIn(20f, document.height * 2f),
+                fontSize = (payload.fontSize * factor).coerceIn(6f, 512f),
+            )))
+            is LayerPayload.ShapeObject -> execute(UpdateShapeLayer(layer.id, payload.copy(
+                width = signedScaled(payload.width, factor, 8f, document.width * 2f),
+                height = if (payload.kind == ShapeKind.Line)
+                    signedScaled(payload.height, factor, 0f, document.height * 2f)
+                else signedScaled(payload.height, factor, 8f, document.height * 2f),
+                strokeWidth = (payload.strokeWidth * factor).coerceIn(0f, 128f),
+            )))
+            is LayerPayload.Raster -> Unit
+        }
+    }
+
+    fun rotateActiveObject(deltaDegrees: Float) {
+        val layer = activeObjectLayer ?: return
+        if (layer.locked || !deltaDegrees.isFinite()) return
+        when (val payload = layer.payload) {
+            is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(
+                rotationDegrees = normalizeObjectRotation(payload.rotationDegrees + deltaDegrees),
+            )))
+            is LayerPayload.ShapeObject -> execute(UpdateShapeLayer(layer.id, payload.copy(
+                rotationDegrees = normalizeObjectRotation(payload.rotationDegrees + deltaDegrees),
+            )))
+            is LayerPayload.Raster -> Unit
+        }
+    }
+
+    private fun shapeLayerName(kind: ShapeKind): String = when (kind) {
+        ShapeKind.Rectangle -> "Rectangle"
+        ShapeKind.Ellipse -> "Ellipse"
+        ShapeKind.Line -> "Line"
+    }
+
+    private fun composeColorArgb(value: Color): Int {
+        val a = (value.alpha * 255f + .5f).toInt().coerceIn(0, 255)
+        val r = (value.red * 255f + .5f).toInt().coerceIn(0, 255)
+        val g = (value.green * 255f + .5f).toInt().coerceIn(0, 255)
+        val b = (value.blue * 255f + .5f).toInt().coerceIn(0, 255)
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun signedScaled(value: Float, factor: Float, minMagnitude: Float, maxMagnitude: Float): Float {
+        if (value == 0f && minMagnitude == 0f) return 0f
+        val sign = if (value < 0f) -1f else 1f
+        return sign * (kotlin.math.abs(value) * factor).coerceIn(minMagnitude, maxMagnitude)
+    }
+
     val supportsWorkbench: Boolean get() = fileActions.supportsWorkbench
     var workbenchVisible: Boolean by mutableStateOf(true)
     var workbenchPanelVisible: Boolean by mutableStateOf(false)
@@ -625,6 +845,7 @@ class EditorState(
     private var nextWorkbenchOrdinal: Int = 1
 
     fun openWorkbench() {
+        objectEditorVisible = false
         recentStrokesVisible = false
         psdCompatibilityVisible = false
         if (!supportsWorkbench) {
@@ -1810,6 +2031,7 @@ class EditorState(
     }
 
     fun openSettings() {
+        objectEditorVisible = false
         recentStrokesVisible = false
         psdCompatibilityVisible = false
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
@@ -1819,6 +2041,7 @@ class EditorState(
     }
 
     fun showInspector(panel: InspectorPanel) {
+        objectEditorVisible = false
         recentStrokesVisible = false
         psdCompatibilityVisible = false
         versionsVisible = false
@@ -2054,6 +2277,10 @@ class EditorState(
             statusMessage = "Unlock this group before editing its layers"
             return
         }
+        if (activeLayer.payload !is LayerPayload.Raster && maskEditingLayerId != layerId) {
+            statusMessage = "Raster tools work on raster layers. Use Object controls for text and shapes."
+            return
+        }
 
         if (maskEditingLayerId == layerId) {
             if (tool == Tool.Smudge) {
@@ -2115,6 +2342,7 @@ class EditorState(
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
         if (isGroupLocked(activeLayer)) return null
         val editingMask = maskEditingLayerId == layerId
+        if (!editingMask && activeLayer.payload !is LayerPayload.Raster) return null
         val mask = if (editingMask) activeLayer.mask else null
         val targetStore = if (mask != null) maskPreviewStore(mask.id, points) else tileStore
         val targetLayerId = mask?.id ?: layerId
@@ -2389,6 +2617,10 @@ class EditorState(
         if (tool == Tool.Fill) {
             val layer = activeLayerId ?: return
             val activeLayer = document.layers.firstOrNull { it.id == layer && it.visible && !it.locked } ?: return
+            if (activeLayer.payload !is LayerPayload.Raster) {
+                statusMessage = "Fill works on raster layers. Use Object controls for text and shapes."
+                return
+            }
             val patch = com.neoworksuite.neocanvas.renderer.FloodFill.fill(
                 tileStore, layer, document.width, document.height, x, y,
                 RasterColor((color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()),
@@ -2646,4 +2878,13 @@ internal fun normalizeViewRotation(degrees: Float): Float {
     if (normalized > 180f) normalized -= 360f
     if (normalized <= -180f) normalized += 360f
     return normalized
+}
+
+
+internal fun normalizeObjectRotation(degrees: Float): Float {
+    if (!degrees.isFinite()) return 0f
+    var value = degrees % 360f
+    if (value > 180f) value -= 360f
+    if (value <= -180f) value += 360f
+    return value
 }

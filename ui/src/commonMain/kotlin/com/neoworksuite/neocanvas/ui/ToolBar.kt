@@ -177,6 +177,10 @@ private fun StudioActionsMenu(state: EditorState) {
                 }
                 ActionMenuPage.Add -> {
                     ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem("Add Text") { closeMenu(); state.addTextObject() }
+                    ActionItem("Add Rectangle") { closeMenu(); state.addShapeObject(com.neoworksuite.neocanvas.core.model.ShapeKind.Rectangle) }
+                    ActionItem("Add Ellipse") { closeMenu(); state.addShapeObject(com.neoworksuite.neocanvas.core.model.ShapeKind.Ellipse) }
+                    ActionItem("Add Line") { closeMenu(); state.addShapeObject(com.neoworksuite.neocanvas.core.model.ShapeKind.Line) }
                     ActionItem("Import Image…") { closeMenu(); state.importImage() }
                     if (state.supportsPsdImport) {
                         ActionItem("Import Photoshop PSD…") { closeMenu(); state.importPsd() }
