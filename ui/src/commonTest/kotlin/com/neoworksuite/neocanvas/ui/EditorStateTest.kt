@@ -9,6 +9,7 @@ import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -231,6 +232,91 @@ class EditorStateTest {
         assertEquals(0f, state.panX, .001f)
         assertEquals(0f, state.panY, .001f)
         assertEquals(0f, state.viewRotationDegrees, .001f)
+    }
+
+    @Test
+    fun deep_layers_sleep_hidden_pixels_and_wake_losslessly_on_visibility() {
+        val dormant = mutableMapOf<Pair<String, String>, ByteArray>()
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsDeepLayers = true
+            override fun loadDormantLayer(documentId: String, layerId: String): ByteArray? =
+                dormant[documentId to layerId]
+            override fun saveDormantLayer(documentId: String, layerId: String, bytes: ByteArray): SaveResult {
+                dormant[documentId to layerId] = bytes
+                return SaveResult.Success
+            }
+            override fun deleteDormantLayer(documentId: String, layerId: String): SaveResult {
+                dormant.remove(documentId to layerId)
+                return SaveResult.Success
+            }
+        }
+        val address = TileAddress("hidden", 0, 0)
+        val pixels = ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE).apply {
+            this[0] = 91
+            this[3] = 255.toByte()
+        }
+        val document = CanvasDocument(
+            id = "deep-test",
+            width = 64,
+            height = 64,
+            layers = listOf(
+                Layer("hidden", "Hidden", visible = false, payload = LayerPayload.Raster(setOf(address))),
+                Layer("visible", "Visible", payload = LayerPayload.Raster()),
+            ),
+        )
+        val state = EditorState(
+            DocumentHistory(document),
+            actions,
+            com.neoworksuite.neocanvas.renderer.TileStore(mapOf(address to pixels)),
+        )
+
+        assertEquals(1, state.sleepHiddenLayers())
+        assertTrue(state.isLayerDormant("hidden"))
+        assertEquals(null, state.tileStore.read(address))
+        assertContentEquals(pixels, state.tilesForDocument().getValue(address))
+
+        state.toggleLayerVisibility("hidden")
+
+        assertFalse(state.isLayerDormant("hidden"))
+        assertTrue(state.document.layers.first { it.id == "hidden" }.visible)
+        assertContentEquals(pixels, state.tileStore.read(address))
+        assertTrue(dormant.isEmpty())
+    }
+
+    @Test
+    fun undo_wakes_sleeping_layer_before_sparse_history_moves() {
+        val dormant = mutableMapOf<Pair<String, String>, ByteArray>()
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsDeepLayers = true
+            override fun loadDormantLayer(documentId: String, layerId: String): ByteArray? =
+                dormant[documentId to layerId]
+            override fun saveDormantLayer(documentId: String, layerId: String, bytes: ByteArray): SaveResult {
+                dormant[documentId to layerId] = bytes
+                return SaveResult.Success
+            }
+            override fun deleteDormantLayer(documentId: String, layerId: String): SaveResult {
+                dormant.remove(documentId to layerId)
+                return SaveResult.Success
+            }
+        }
+        val initial = CanvasDocument(
+            id = "deep-undo",
+            width = 64,
+            height = 64,
+            layers = listOf(Layer("layer-1", "Paint", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial), actions)
+        state.brushSize = 2f
+        state.recordStroke(listOf(DrawPoint(12f, 12f)))
+        val painted = state.tileStore.snapshot()
+        state.toggleLayerVisibility("layer-1")
+        assertEquals(1, state.sleepHiddenLayers())
+
+        assertTrue(state.undo())
+
+        assertFalse(state.isLayerDormant("layer-1"))
+        assertTrue(state.document.layers.single().visible)
+        painted.forEach { (key, bytes) -> assertContentEquals(bytes, state.tileStore.read(key)) }
     }
 
     @Test

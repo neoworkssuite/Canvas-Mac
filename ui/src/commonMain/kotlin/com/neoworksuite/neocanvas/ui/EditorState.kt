@@ -134,6 +134,7 @@ class EditorState(
                 resetView()
                 history.reset(result.document)
                 tileStore.restore(result.tiles)
+                resetDormantLayerState()
                 undoTileStates.clear()
                 redoTileStates.clear()
                 markCleanDocument()
@@ -252,6 +253,7 @@ class EditorState(
         resetView()
         history.reset(imported.document)
         tileStore.restore(imported.tiles)
+        resetDormantLayerState()
         undoTileStates.clear()
         redoTileStates.clear()
         fileActions.resetDocumentTarget()
@@ -302,6 +304,7 @@ class EditorState(
         history.reset(recovered.document)
         fileActions.resetDocumentTarget()
         tileStore.restore(recovered.tiles)
+        resetDormantLayerState()
         undoTileStates.clear(); redoTileStates.clear()
         markCleanDocument()
         editVersion = ++nextVersion
@@ -522,6 +525,117 @@ class EditorState(
             emptyList()
         }
         nextWorkbenchOrdinal = workbenchItems.size + 1
+    }
+
+    val supportsDeepLayers: Boolean get() = fileActions.supportsDeepLayers
+    var dormantLayerIds: Set<String> by mutableStateOf(emptySet())
+        private set
+
+    val sleepingLayerCount: Int
+        get() = dormantLayerIds.size
+
+    val residentRasterBytes: Long
+        get() {
+            documentRevision
+            return tileStore.estimatedResidentBytes
+        }
+
+    fun isLayerDormant(layerId: String): Boolean = layerId in dormantLayerIds
+
+    fun sleepHiddenLayers(): Int {
+        if (!supportsDeepLayers) {
+            statusMessage = "Deep Layers storage is unavailable on this device"
+            return 0
+        }
+
+        var slept = 0
+        var releasedBytes = 0L
+        document.layers.forEach { layer ->
+            if (layer.visible || layer.id in dormantLayerIds || layer.payload !is LayerPayload.Raster) return@forEach
+            val snapshot = tileStore.snapshotLayer(layer.id)
+            if (snapshot.isEmpty()) return@forEach
+            val encoded = runCatching {
+                com.neoworksuite.neocanvas.renderer.DormantLayerCodec.encode(layer.id, snapshot)
+            }.getOrElse {
+                statusMessage = "Could not prepare Deep Layer: " + (it.message ?: "unknown error")
+                return@forEach
+            }
+            when (val result = fileActions.saveDormantLayer(document.id, layer.id, encoded)) {
+                SaveResult.Success -> {
+                    tileStore.removeLayer(layer.id)
+                    dormantLayerIds = dormantLayerIds + layer.id
+                    releasedBytes += snapshot.size.toLong() *
+                        com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE
+                    slept++
+                }
+                is SaveResult.Failure -> statusMessage = result.message
+            }
+        }
+
+        if (slept > 0) {
+            val suffix = if (slept == 1) "" else "s"
+            documentRevision++
+            statusMessage = "Deep Layers: slept " + slept + " hidden layer" + suffix +
+                " · freed " + formatMemoryBytes(releasedBytes)
+        } else if (statusMessage == null || statusMessage?.startsWith("Deep Layers") != true) {
+            statusMessage = "No hidden raster layers need sleeping"
+        }
+        return slept
+    }
+
+    fun wakeAllLayers(): Boolean {
+        if (dormantLayerIds.isEmpty()) return true
+        var success = true
+        dormantLayerIds.toList().forEach { layerId ->
+            if (!wakeLayer(layerId, silent = true)) success = false
+        }
+        statusMessage = if (success) "Deep Layers: all layers awake"
+        else "Deep Layers: one or more layers could not be restored"
+        return success
+    }
+
+    private fun wakeLayer(layerId: String, silent: Boolean = false): Boolean {
+        if (layerId !in dormantLayerIds) return true
+        val bytes = try {
+            fileActions.loadDormantLayer(document.id, layerId)
+        } catch (error: Exception) {
+            if (!silent) statusMessage = "Could not wake layer: " + (error.message ?: "storage error")
+            return false
+        } ?: run {
+            if (!silent) statusMessage = "Could not wake layer: dormant pixels were not found"
+            return false
+        }
+
+        val snapshot = runCatching {
+            com.neoworksuite.neocanvas.renderer.DormantLayerCodec.decode(bytes)
+        }.getOrElse {
+            if (!silent) statusMessage = "Could not wake layer: " + (it.message ?: "corrupt dormant data")
+            return false
+        }
+        if (snapshot.layerId != layerId) {
+            if (!silent) statusMessage = "Could not wake layer: dormant data belongs to another layer"
+            return false
+        }
+
+        tileStore.restoreLayer(layerId, snapshot.tiles)
+        dormantLayerIds = dormantLayerIds - layerId
+        fileActions.deleteDormantLayer(document.id, layerId)
+        documentRevision++
+        if (!silent) statusMessage = "Deep Layer awake"
+        return true
+    }
+
+    private fun dormantSnapshot(layerId: String): Map<TileKey, ByteArray> {
+        if (layerId !in dormantLayerIds) return emptyMap()
+        val bytes = fileActions.loadDormantLayer(document.id, layerId)
+            ?: error("Dormant pixels for layer '" + layerId + "' are missing.")
+        val decoded = com.neoworksuite.neocanvas.renderer.DormantLayerCodec.decode(bytes)
+        require(decoded.layerId == layerId) { "Dormant layer id mismatch." }
+        return decoded.tiles
+    }
+
+    private fun resetDormantLayerState() {
+        dormantLayerIds = emptySet()
     }
 
     var effectPreviewPatch: com.neoworksuite.neocanvas.renderer.RasterPatch? by mutableStateOf(null)
@@ -951,6 +1065,7 @@ class EditorState(
     }
 
     fun cropCanvasToSelection(): Boolean {
+        if (!wakeAllLayers()) return false
         val bounds = selection ?: run {
             statusMessage = "Make a selection before cropping the canvas"
             return false
@@ -1185,6 +1300,7 @@ class EditorState(
     }
     fun deleteActiveLayer() {
         val id = activeLayerId ?: return
+        if (!wakeLayer(id)) return
         if (document.layers.any { it.id == id && it.locked }) { statusMessage = "Unlock this layer before deleting it"; return }
         if (document.layers.size <= 1) { statusMessage = "Keep at least one drawing layer."; return }
         execute(DeleteLayer(id))
@@ -1192,6 +1308,7 @@ class EditorState(
     }
     fun duplicateActiveLayer() {
         val source = activeLayerId ?: return
+        if (!wakeLayer(source)) return
         val original = document.layers.firstOrNull { it.id == source } ?: return
         val id = nextLayerId()
         val command = DuplicateLayer(source, id, "${original.name} copy")
@@ -1200,7 +1317,11 @@ class EditorState(
         execute(command, before)
         activeLayerId = id
     }
-    fun toggleLayerVisibility(id: String) { document.layers.find { it.id == id }?.let { execute(SetLayerVisibility(id, !it.visible)) } }
+    fun toggleLayerVisibility(id: String) {
+        val layer = document.layers.find { it.id == id } ?: return
+        if (!layer.visible && !wakeLayer(id)) return
+        execute(SetLayerVisibility(id, !layer.visible))
+    }
     fun toggleLayerLock(id: String) {
         document.layers.find { it.id == id }?.let {
             execute(com.neoworksuite.neocanvas.core.model.SetLayerLocked(id, !it.locked))
@@ -1231,10 +1352,12 @@ class EditorState(
     }
     fun mergeActiveLayerDown() {
         val sourceId = activeLayerId ?: return
+        if (!wakeLayer(sourceId)) return
         val sourceIndex = document.layers.indexOfFirst { it.id == sourceId }
         if (sourceIndex <= 0) { statusMessage = "There is no layer below to merge into"; return }
         val source = document.layers[sourceIndex]
         val destination = document.layers[sourceIndex - 1]
+        if (!wakeLayer(destination.id)) return
         if (source.locked || destination.locked) { statusMessage = "Unlock both layers before merging"; return }
         val before = tileStore.snapshot()
         tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterLayerMerge.mergeDown(tileStore, destination, source))
@@ -1324,6 +1447,7 @@ class EditorState(
     }
 
     fun undo(): Boolean {
+        if (!wakeAllLayers()) return false
         if (!history.undo()) return false
         redoVersions += editVersion
         editVersion = undoVersions.removeLastOrNull() ?: 0
@@ -1335,6 +1459,7 @@ class EditorState(
     }
 
     fun redo(): Boolean {
+        if (!wakeAllLayers()) return false
         if (!history.redo()) return false
         undoVersions += editVersion
         editVersion = redoVersions.removeLastOrNull() ?: 0
@@ -1584,6 +1709,7 @@ class EditorState(
             layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
         ))
         tileStore.restore(emptyMap())
+        resetDormantLayerState()
         undoTileStates.clear(); redoTileStates.clear()
         markCleanDocument()
         activeLayerId = "layer-1"
@@ -1613,6 +1739,7 @@ class EditorState(
                 resetView()
                 history.reset(result.document)
                 tileStore.restore(result.tiles)
+                resetDormantLayerState()
                 undoTileStates.clear(); redoTileStates.clear()
                 markCleanDocument()
                 activeLayerId = document.layers.lastOrNull()?.id
@@ -1631,7 +1758,15 @@ class EditorState(
         val valid = document.layers.flatMap { layer ->
             (layer.payload as? com.neoworksuite.neocanvas.core.model.LayerPayload.Raster)?.tileAddresses.orEmpty()
         }.toSet()
-        return tileStore.snapshot().filterKeys { it in valid }
+        val all = tileStore.snapshot().toMutableMap()
+        dormantLayerIds.forEach { layerId ->
+            dormantSnapshot(layerId).forEach { (key, pixels) -> all[key] = pixels }
+        }
+        val filtered = all.filterKeys { it in valid }
+        require(filtered.keys == valid) {
+            "Some document raster tiles are unavailable. Wake Deep Layers before saving."
+        }
+        return filtered
     }
 
     private fun applySaveResult(result: SaveResult, success: String) {
@@ -1696,6 +1831,12 @@ class EditorState(
         while (document.layers.any { it.id == "layer-$ordinal" }) ordinal++
         return "layer-$ordinal"
     }
+}
+
+internal fun formatMemoryBytes(bytes: Long): String {
+    val mb = bytes / (1024f * 1024f)
+    return if (mb >= 10f) mb.toInt().toString() + " MB"
+    else ((mb * 10f).toInt() / 10f).toString() + " MB"
 }
 
 fun normalizedPressure(reported: Float?): Float = reported?.takeIf { it in 0f..1f } ?: 1f

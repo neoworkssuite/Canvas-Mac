@@ -70,7 +70,14 @@ fun LayersPanel(state: EditorState, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("LAYERS", color = NeoCanvasColors.paper, fontSize = 11.sp, letterSpacing = 1.2.sp)
             Spacer(Modifier.weight(1f))
-            Text("${state.document.layers.size} LOCAL", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .5.sp)
+            Text(
+                state.document.layers.size.toString() + " LOCAL" +
+                    if (state.sleepingLayerCount > 0) " · " + state.sleepingLayerCount + " SLEEPING" else "",
+                color = NeoCanvasColors.faint,
+                fontSize = 9.sp,
+                letterSpacing = .5.sp,
+            )
+            LayerMemoryMenu(state)
             Text("＋", color = NeoCanvasColors.ink, fontSize = 20.sp,
                 modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(9.dp)).background(NeoCanvasColors.accent)
                     .clickable { state.addLayer() }.padding(horizontal = 10.dp, vertical = 3.dp)
@@ -193,6 +200,7 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                             if (layer.locked) append(" · Locked")
                             if (layer.alphaLocked) append(" · α")
                             if (layer.clipping) append(" · Clip")
+                            if (state.isLayerDormant(layer.id)) append(" · Sleeping")
                         },
                         color = NeoCanvasColors.faint,
                         fontSize = 9.sp,
@@ -301,6 +309,54 @@ private fun LayerOptionsPanel(
                 state.deleteActiveLayer()
                 onClose()
             }
+        }
+    }
+}
+
+@Composable
+private fun LayerMemoryMenu(state: EditorState) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Text(
+            "•••",
+            color = NeoCanvasColors.muted,
+            fontSize = 17.sp,
+            modifier = Modifier.clickable { expanded = true }
+                .padding(horizontal = 7.dp, vertical = 4.dp)
+                .semantics { contentDescription = "Layer memory options" },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = NeoCanvasColors.panelRaised,
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        "Resident · " + formatMemoryBytes(state.residentRasterBytes),
+                        color = NeoCanvasColors.faint,
+                        fontSize = 10.sp,
+                    )
+                },
+                enabled = false,
+                onClick = {},
+            )
+            DropdownMenuItem(
+                text = { Text("Sleep hidden layers", color = NeoCanvasColors.paper, fontSize = 11.sp) },
+                enabled = state.supportsDeepLayers,
+                onClick = {
+                    expanded = false
+                    state.sleepHiddenLayers()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Wake all layers", color = NeoCanvasColors.paper, fontSize = 11.sp) },
+                enabled = state.sleepingLayerCount > 0,
+                onClick = {
+                    expanded = false
+                    state.wakeAllLayers()
+                },
+            )
         }
     }
 }

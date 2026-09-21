@@ -64,6 +64,7 @@ internal class IosEditorFileActions(
     private val recoveryDirectory: String get() = join(libraryDirectory, "Recovery")
     private val versionsDirectory: String get() = join(libraryDirectory, "Versions")
     private val workbenchDirectory: String get() = join(libraryDirectory, "Workbench")
+    private val deepLayersDirectory: String get() = join(libraryDirectory, "DeepLayers")
     private val exportDirectory: String get() = join(libraryDirectory, "Exports")
     private val palettePath: String get() = join(libraryDirectory, "palette.txt")
     private val brushLibraryPath: String get() = join(libraryDirectory, "brush-library.txt")
@@ -75,6 +76,7 @@ internal class IosEditorFileActions(
     override val supportsRecovery: Boolean = true
     override val supportsVersions: Boolean = true
     override val supportsWorkbench: Boolean = true
+    override val supportsDeepLayers: Boolean = true
     override val supportsPsdImport: Boolean = true
     override val supportsPsdExport: Boolean = true
 
@@ -83,6 +85,7 @@ internal class IosEditorFileActions(
         ensureDirectory(recoveryDirectory)
         ensureDirectory(versionsDirectory)
         ensureDirectory(workbenchDirectory)
+        ensureDirectory(deepLayersDirectory)
         ensureDirectory(exportDirectory)
     }
 
@@ -265,6 +268,23 @@ internal class IosEditorFileActions(
         else SaveResult.Failure("Could not save Workbench on this iPad.")
     }
 
+    override fun loadDormantLayer(documentId: String, layerId: String): ByteArray? =
+        NSData.dataWithContentsOfFile(dormantLayerPath(documentId, layerId))?.toByteArray()
+
+    override fun saveDormantLayer(documentId: String, layerId: String, bytes: ByteArray): SaveResult {
+        val directory = join(deepLayersDirectory, safeDocumentId(documentId))
+        ensureDirectory(directory)
+        return if (writeBytes(dormantLayerPath(documentId, layerId), bytes)) SaveResult.Success
+        else SaveResult.Failure("Could not hibernate layer on this iPad.")
+    }
+
+    override fun deleteDormantLayer(documentId: String, layerId: String): SaveResult {
+        val path = dormantLayerPath(documentId, layerId)
+        if (!fm.fileExistsAtPath(path)) return SaveResult.Success
+        return if (fm.removeItemAtPath(path, null)) SaveResult.Success
+        else SaveResult.Failure("Could not remove dormant layer cache.")
+    }
+
     override fun loadPalette(): List<String> {
         val data = NSData.dataWithContentsOfFile(palettePath)?.toByteArray() ?: return emptyList()
         return runCatching { data.decodeToString().lineSequence().map(String::trim).filter(String::isNotBlank).toList() }
@@ -431,6 +451,11 @@ internal class IosEditorFileActions(
 
     private fun versionDirectory(documentId: String): String =
         join(versionsDirectory, safeDocumentId(documentId))
+
+    private fun dormantLayerPath(documentId: String, layerId: String): String {
+        val directory = join(deepLayersDirectory, safeDocumentId(documentId))
+        return join(directory, safeDocumentId(layerId) + ".ncdormant")
+    }
 
     private fun safeDocumentId(value: String): String =
         value.map { character ->

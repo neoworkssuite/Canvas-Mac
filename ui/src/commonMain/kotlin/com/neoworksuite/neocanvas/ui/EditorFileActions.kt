@@ -40,6 +40,13 @@ interface EditorFileActions {
     fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult =
         SaveResult.Failure("Workbench storage is unavailable in this host.")
 
+    val supportsDeepLayers: Boolean get() = false
+    fun loadDormantLayer(documentId: String, layerId: String): ByteArray? = null
+    fun saveDormantLayer(documentId: String, layerId: String, bytes: ByteArray): SaveResult =
+        SaveResult.Failure("Deep Layers storage is unavailable in this host.")
+    fun deleteDormantLayer(documentId: String, layerId: String): SaveResult =
+        SaveResult.Failure("Deep Layers storage is unavailable in this host.")
+
     fun saveRecovery(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         SaveResult.Failure("Recovery storage is unavailable.")
     fun importImage(onResult: (Result<ImportedImage?>) -> Unit) {

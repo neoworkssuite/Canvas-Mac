@@ -98,6 +98,7 @@ class WindowsEditorFileActions(
     override val supportsRecovery = true
     override val supportsVersions = true
     override val supportsWorkbench = true
+    override val supportsDeepLayers = true
     private val recoveryFile get() = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/recovery/last-session.neocanvas",
@@ -164,6 +165,29 @@ class WindowsEditorFileActions(
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not save Workbench: " + (error.message ?: "unknown error"))
+    }
+
+    private val deepLayersDirectory get() = File(libraryDirectory.parentFile, "DeepLayers")
+
+    private fun dormantLayerFile(documentId: String, layerId: String): File =
+        File(File(deepLayersDirectory, safeDocumentId(documentId)), safeDocumentId(layerId) + ".ncdormant")
+
+    override fun loadDormantLayer(documentId: String, layerId: String): ByteArray? =
+        dormantLayerFile(documentId, layerId).takeIf(File::isFile)?.readBytes()
+
+    override fun saveDormantLayer(documentId: String, layerId: String, bytes: ByteArray): SaveResult = try {
+        val target = dormantLayerFile(documentId, layerId)
+        target.parentFile.mkdirs()
+        target.writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not hibernate layer: " + (error.message ?: "unknown error"))
+    }
+
+    override fun deleteDormantLayer(documentId: String, layerId: String): SaveResult {
+        val target = dormantLayerFile(documentId, layerId)
+        return if (!target.exists() || target.delete()) SaveResult.Success
+        else SaveResult.Failure("Could not remove dormant layer cache.")
     }
 
     override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
