@@ -71,6 +71,7 @@ class EditorState(
         private set
 
     fun openVersions() {
+        psdCompatibilityVisible = false
         workbenchPanelVisible = false
         if (!supportsVersions) {
             statusMessage = "Local version history is unavailable on this device"
@@ -227,6 +228,42 @@ class EditorState(
     val supportsPsdImport: Boolean get() = fileActions.supportsPsdImport
     val supportsPsdExport: Boolean get() = fileActions.supportsPsdExport
 
+    var psdCompatibilityVisible by mutableStateOf(false)
+        private set
+    var psdCompatibilityReport: com.neoworksuite.neocanvas.renderer.PsdCompatibilityReport? by mutableStateOf(null)
+        private set
+    var lastPsdImportNotices: List<String> by mutableStateOf(emptyList())
+        private set
+
+    fun openPsdCompatibility() {
+        if (!supportsPsdExport) {
+            statusMessage = "PSD export is unavailable on this device"
+            return
+        }
+        if (inspectorVisible) hideInspector()
+        versionsVisible = false
+        workbenchPanelVisible = false
+        settingsVisible = false
+        psdCompatibilityReport = try {
+            com.neoworksuite.neocanvas.renderer.PsdCodec.analyzeExport(document, tilesForDocument())
+        } catch (error: Exception) {
+            statusMessage = "Could not inspect PSD compatibility: " + (error.message ?: "unknown error")
+            null
+        }
+        if (psdCompatibilityReport != null) psdCompatibilityVisible = true
+    }
+
+    fun closePsdCompatibility() {
+        psdCompatibilityVisible = false
+        psdCompatibilityReport = null
+    }
+
+    fun exportPsdFromCompatibility(): Boolean {
+        val exported = exportPsd()
+        if (exported) closePsdCompatibility()
+        return exported
+    }
+
     fun importPsd() {
         val targetDocument = document.id
         fileActions.importPsd { result ->
@@ -262,6 +299,7 @@ class EditorState(
         activeLayerId = document.layers.lastOrNull()?.id
         documentRevision++
         loadWorkbench()
+        lastPsdImportNotices = imported.warnings
         statusMessage = if (imported.warnings.isEmpty()) {
             "Imported layered PSD — save as NeoCanvas to keep editing"
         } else {
@@ -390,6 +428,7 @@ class EditorState(
     private var nextWorkbenchOrdinal: Int = 1
 
     fun openWorkbench() {
+        psdCompatibilityVisible = false
         if (!supportsWorkbench) {
             statusMessage = "Workbench storage is unavailable on this device"
             return
@@ -1263,6 +1302,7 @@ class EditorState(
     }
 
     fun openSettings() {
+        psdCompatibilityVisible = false
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
         versionsVisible = false
         workbenchPanelVisible = false
@@ -1270,6 +1310,7 @@ class EditorState(
     }
 
     fun showInspector(panel: InspectorPanel) {
+        psdCompatibilityVisible = false
         versionsVisible = false
         workbenchPanelVisible = false
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects && panel != InspectorPanel.Effects) {
@@ -1714,6 +1755,7 @@ class EditorState(
         markCleanDocument()
         activeLayerId = "layer-1"
         documentRevision++
+        lastPsdImportNotices = emptyList()
         loadWorkbench()
         statusMessage = "New local canvas"
     }
@@ -1744,6 +1786,7 @@ class EditorState(
                 markCleanDocument()
                 activeLayerId = document.layers.lastOrNull()?.id
                 documentRevision++
+                lastPsdImportNotices = emptyList()
                 loadWorkbench()
                 statusMessage = "Opened local NeoCanvas document"
             }

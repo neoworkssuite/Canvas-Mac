@@ -13,6 +13,43 @@ import kotlin.test.assertFailsWith
 
 class PsdCodecTest {
     @Test
+    fun compatibility_report_describes_preserved_raster_document_and_lock_notice_inputs() {
+        val address = TileAddress("paint", 0, 0)
+        val tile = ByteArray(TileFormat.BYTES_PER_TILE).apply {
+            this[0] = 100
+            this[3] = 255.toByte()
+        }
+        val document = CanvasDocument(
+            id = "preflight",
+            width = 64,
+            height = 32,
+            layers = listOf(
+                Layer(
+                    id = "paint",
+                    name = "Paint",
+                    visible = false,
+                    payload = LayerPayload.Raster(setOf(address)),
+                    locked = true,
+                    alphaLocked = true,
+                    clipping = true,
+                    blendMode = LayerBlendMode.Multiply,
+                ),
+            ),
+        )
+
+        val report = PsdCodec.analyzeExport(document, mapOf(address to tile))
+
+        assertTrue(report.canExport)
+        assertEquals(1, report.layerCount)
+        assertEquals(1, report.hiddenLayerCount)
+        assertEquals(1, report.clippingLayerCount)
+        assertEquals(1, report.alphaLockedLayerCount)
+        assertEquals(1, report.lockedLayerCount)
+        assertTrue(report.estimatedRawPixelBytes > 0)
+        assertTrue(report.blockingIssues.isEmpty())
+    }
+
+    @Test
     fun layered_round_trip_preserves_raster_layers_and_supported_metadata() {
         val baseId = "base"
         val topId = "top"

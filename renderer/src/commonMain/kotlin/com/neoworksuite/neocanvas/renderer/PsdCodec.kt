@@ -12,6 +12,19 @@ data class PsdImportResult(
     val warnings: List<String> = emptyList(),
 )
 
+data class PsdCompatibilityReport(
+    val width: Int,
+    val height: Int,
+    val layerCount: Int,
+    val hiddenLayerCount: Int,
+    val clippingLayerCount: Int,
+    val alphaLockedLayerCount: Int,
+    val lockedLayerCount: Int,
+    val estimatedRawPixelBytes: Long,
+    val canExport: Boolean,
+    val blockingIssues: List<String>,
+)
+
 /**
  * Photoshop PSD v1 interoperability for NeoCanvas.
  *
@@ -26,6 +39,43 @@ object PsdCodec {
     private const val DEPTH_8 = 8
     private const val SIGNATURE = "8BPS"
     private const val BLEND_SIGNATURE = "8BIM"
+
+    fun analyzeExport(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): PsdCompatibilityReport {
+        val issues = mutableListOf<String>()
+        if (document.width !in 1..30_000 || document.height !in 1..30_000) {
+            issues += "PSD dimensions must be between 1 and 30,000 pixels."
+        }
+        if (document.layers.size > MAX_LAYERS) {
+            issues += "PSD export supports up to " + MAX_LAYERS + " layers."
+        }
+        if (document.layers.any { it.payload !is LayerPayload.Raster }) {
+            issues += "PSD V1 export currently supports raster layers only."
+        }
+
+        var layerPixels = 0L
+        document.layers.forEach { layer ->
+            val bounds = findBounds(document, layer, tiles)
+            layerPixels += bounds.width.toLong() * bounds.height.toLong()
+        }
+        val mergedPixels = document.width.toLong() * document.height.toLong()
+        val estimated = layerPixels * 4L + mergedPixels * 4L
+
+        return PsdCompatibilityReport(
+            width = document.width,
+            height = document.height,
+            layerCount = document.layers.size,
+            hiddenLayerCount = document.layers.count { !it.visible },
+            clippingLayerCount = document.layers.count { it.clipping },
+            alphaLockedLayerCount = document.layers.count { it.alphaLocked },
+            lockedLayerCount = document.layers.count { it.locked },
+            estimatedRawPixelBytes = estimated,
+            canExport = issues.isEmpty(),
+            blockingIssues = issues,
+        )
+    }
 
     fun encode(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): ByteArray {
         require(document.width in 1..30_000 && document.height in 1..30_000) {
