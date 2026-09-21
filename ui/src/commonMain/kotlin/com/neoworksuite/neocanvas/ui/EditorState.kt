@@ -684,8 +684,39 @@ class EditorState(
         updateWorkbench(workbenchItems.filterNot { it.id == id }, "Removed Workbench item")
     }
 
+    fun toggleWorkbenchItemLocked(id: String) {
+        val item = workbenchItems.firstOrNull { it.id == id } ?: return
+        updateWorkbench(
+            workbenchItems.map { if (it.id == id) it.withLocked(!item.locked) else it },
+            if (item.locked) "Workbench item unlocked" else "Workbench item pinned",
+        )
+    }
+
+    fun resizeWorkbenchItem(id: String, factor: Float) {
+        if (!factor.isFinite() || factor <= 0f) return
+        val item = workbenchItems.firstOrNull { it.id == id } ?: return
+        if (item.locked) {
+            statusMessage = "Unlock this Workbench item before resizing it"
+            return
+        }
+        updateWorkbench(
+            workbenchItems.map { if (it.id == id) it.resized(factor) else it },
+            "Workbench item resized",
+        )
+    }
+
+    fun useWorkbenchColour(id: String): Boolean {
+        val card = workbenchItems.firstOrNull { it.id == id } as? WorkbenchItem.ColourCard ?: return false
+        val parsed = parseColorHex(card.hex) ?: return false
+        color = parsed
+        statusMessage = "Sampled " + card.hex + " from Workbench"
+        return true
+    }
+
     fun moveWorkbenchItem(id: String, dx: Float, dy: Float) {
         if (!dx.isFinite() || !dy.isFinite()) return
+        val selected = workbenchItems.firstOrNull { it.id == id } ?: return
+        if (selected.locked) return
         val next = workbenchItems.map { if (it.id == id) it.moved(dx, dy) else it }
         if (next != workbenchItems) workbenchItems = next
     }

@@ -689,6 +689,46 @@ class EditorStateTest {
     }
 
     @Test
+    fun workbench_pro_lock_resize_and_colour_sampling_persist() {
+        var snapshot: ByteArray? = null
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsWorkbench = true
+            override fun loadWorkbench(documentId: String): ByteArray? = snapshot
+            override fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult {
+                snapshot = bytes
+                return SaveResult.Success
+            }
+        }
+        val initial = CanvasDocument(
+            id = "desk-pro",
+            width = 64,
+            height = 64,
+            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial), actions)
+        state.color = Color.Red
+        state.addWorkbenchColourCard()
+        val id = state.workbenchItems.single().id
+        val originalWidth = state.workbenchItems.single().width
+
+        state.resizeWorkbenchItem(id, 1.25f)
+        assertTrue(state.workbenchItems.single().width > originalWidth)
+        state.toggleWorkbenchItemLocked(id)
+        assertTrue(state.workbenchItems.single().locked)
+        val lockedX = state.workbenchItems.single().x
+        state.moveWorkbenchItem(id, 100f, 100f)
+        assertEquals(lockedX, state.workbenchItems.single().x)
+
+        state.color = Color.Blue
+        assertTrue(state.useWorkbenchColour(id))
+        assertEquals(Color.Red, state.color)
+
+        val reopened = EditorState(DocumentHistory(initial), actions)
+        assertTrue(reopened.workbenchItems.single().locked)
+        assertTrue(reopened.workbenchItems.single().width > originalWidth)
+    }
+
+    @Test
     fun local_versions_create_and_restore_with_a_safety_snapshot() {
         val saved = mutableListOf<Pair<LocalVersionEntry, LoadResult.Success>>()
         var clock = 1000L

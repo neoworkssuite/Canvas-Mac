@@ -48,10 +48,13 @@ internal fun WorkbenchOverlay(
             val widthDp = with(density) { (item.width * scale).toDp() }
             val heightDp = with(density) { (item.height * scale).toDp() }
 
-            val dragModifier = Modifier
+            val baseModifier = Modifier
                 .offset { IntOffset(screenX.roundToInt(), screenY.roundToInt()) }
                 .size(widthDp, heightDp)
-                .pointerInput(item.id, scale) {
+            val dragModifier = if (item.locked) {
+                baseModifier
+            } else {
+                baseModifier.pointerInput(item.id, scale) {
                     detectDragGestures(
                         onDragStart = { state.bringWorkbenchItemToFront(item.id) },
                         onDragEnd = state::commitWorkbenchPositions,
@@ -61,6 +64,7 @@ internal fun WorkbenchOverlay(
                         change.consume()
                     }
                 }
+            }
 
             when (item) {
                 is WorkbenchItem.Reference -> {

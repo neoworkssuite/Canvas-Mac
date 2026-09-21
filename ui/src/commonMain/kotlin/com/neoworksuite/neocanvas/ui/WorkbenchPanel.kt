@@ -145,14 +145,36 @@ fun WorkbenchPanel(state: EditorState, modifier: Modifier = Modifier, onClose: (
                                 is WorkbenchItem.Reference -> "REFERENCE"
                                 is WorkbenchItem.Note -> "NOTE"
                                 is WorkbenchItem.ColourCard -> "COLOUR CARD"
-                            },
+                            } + if (item.locked) " · PINNED" else "",
                             color = NeoCanvasColors.faint,
                             fontSize = 8.sp,
                             letterSpacing = .6.sp,
                         )
                     }
-                    TextButton(onClick = { state.deleteWorkbenchItem(item.id) }) {
-                        Text("Delete", color = NeoCanvasColors.muted, fontSize = 9.sp)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                            TextButton(onClick = { state.toggleWorkbenchItemLocked(item.id) }) {
+                                Text(if (item.locked) "Unlock" else "Pin", color = NeoCanvasColors.accent, fontSize = 8.sp)
+                            }
+                            if (!item.locked) {
+                                TextButton(onClick = { state.resizeWorkbenchItem(item.id, .85f) }) {
+                                    Text("−", color = NeoCanvasColors.muted, fontSize = 10.sp)
+                                }
+                                TextButton(onClick = { state.resizeWorkbenchItem(item.id, 1.15f) }) {
+                                    Text("+", color = NeoCanvasColors.muted, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                            if (item is WorkbenchItem.ColourCard) {
+                                TextButton(onClick = { state.useWorkbenchColour(item.id) }) {
+                                    Text("Use", color = NeoCanvasColors.accent, fontSize = 8.sp)
+                                }
+                            }
+                            TextButton(onClick = { state.deleteWorkbenchItem(item.id) }) {
+                                Text("Delete", color = NeoCanvasColors.muted, fontSize = 8.sp)
+                            }
+                        }
                     }
                 }
             }
