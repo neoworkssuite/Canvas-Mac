@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -333,7 +334,8 @@ private fun LayerOptionsPanel(
 
         LayerGroupPicker(layer, state)
 
-        if (layer.mask == null) {
+        val mask = layer.mask
+        if (mask == null) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 LayerTrayAction("Add Mask", Modifier.weight(1f)) {
                     state.addMaskToActiveLayer()
@@ -348,10 +350,10 @@ private fun LayerOptionsPanel(
                     if (state.maskEditingLayerId == layer.id) state.editLayerArtwork()
                     else state.editLayerMask(layer.id)
                 }
-                LayerTrayAction(if (layer.mask.enabled) "Mask ✓" else "Mask Off", Modifier.weight(1f)) {
+                LayerTrayAction(if (mask.enabled) "Mask ✓" else "Mask Off", Modifier.weight(1f)) {
                     state.toggleActiveMaskEnabled()
                 }
-                LayerTrayAction(if (layer.mask.inverted) "Invert ✓" else "Invert", Modifier.weight(1f)) {
+                LayerTrayAction(if (mask.inverted) "Invert ✓" else "Invert", Modifier.weight(1f)) {
                     state.toggleActiveMaskInverted()
                 }
             }
