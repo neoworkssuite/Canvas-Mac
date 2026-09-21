@@ -143,6 +143,21 @@ private fun ObjectArrangeBar(state: EditorState) {
                 LayerTrayAction("Space V", Modifier.weight(1f)) { state.distributeSelectedObjects(horizontal = false) }
             }
         }
+        if (state.selectedObjectCount >= 2) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("←", Modifier.weight(1f)) { state.transformSelectedObjects(translationX = -10f) }
+                LayerTrayAction("↑", Modifier.weight(1f)) { state.transformSelectedObjects(translationY = -10f) }
+                LayerTrayAction("↓", Modifier.weight(1f)) { state.transformSelectedObjects(translationY = 10f) }
+                LayerTrayAction("→", Modifier.weight(1f)) { state.transformSelectedObjects(translationX = 10f) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("−10%", Modifier.weight(1f)) { state.transformSelectedObjects(scale = .9f) }
+                LayerTrayAction("+10%", Modifier.weight(1f)) { state.transformSelectedObjects(scale = 1.1f) }
+                LayerTrayAction("−15°", Modifier.weight(1f)) { state.transformSelectedObjects(rotationDelta = -15f) }
+                LayerTrayAction("+15°", Modifier.weight(1f)) { state.transformSelectedObjects(rotationDelta = 15f) }
+            }
+        }
+
     }
 }
 

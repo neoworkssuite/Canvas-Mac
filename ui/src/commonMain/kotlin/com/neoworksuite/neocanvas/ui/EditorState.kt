@@ -908,6 +908,83 @@ class EditorState(
         return true
     }
 
+    fun transformSelectedObjects(
+        translationX: Float = 0f,
+        translationY: Float = 0f,
+        scale: Float = 1f,
+        rotationDelta: Float = 0f,
+    ): Boolean {
+        if (!translationX.isFinite() || !translationY.isFinite() ||
+            !scale.isFinite() || scale <= 0f || !rotationDelta.isFinite()) return false
+        val layers = mutableArrangeLayers(minimum = 2) ?: return false
+        val bounds = layers.map { editableObjectVisualBounds(it.payload) }
+        val centerX = (bounds.minOf { it.left } + bounds.maxOf { it.right }) / 2f
+        val centerY = (bounds.minOf { it.top } + bounds.maxOf { it.bottom }) / 2f
+        val angle = rotationDelta * kotlin.math.PI.toFloat() / 180f
+        val cosA = kotlin.math.cos(angle)
+        val sinA = kotlin.math.sin(angle)
+
+        val updates = layers.associate { layer ->
+            val payload = layer.payload
+            val objectCenterX = when (payload) {
+                is LayerPayload.TextObject -> payload.x + payload.width / 2f
+                is LayerPayload.ShapeObject -> payload.x + payload.width / 2f
+                is LayerPayload.Raster -> centerX
+            }
+            val objectCenterY = when (payload) {
+                is LayerPayload.TextObject -> payload.y + payload.height / 2f
+                is LayerPayload.ShapeObject -> payload.y + payload.height / 2f
+                is LayerPayload.Raster -> centerY
+            }
+            val relativeX = (objectCenterX - centerX) * scale
+            val relativeY = (objectCenterY - centerY) * scale
+            val transformedCenterX = centerX + relativeX * cosA - relativeY * sinA + translationX
+            val transformedCenterY = centerY + relativeX * sinA + relativeY * cosA + translationY
+
+            val next = when (payload) {
+                is LayerPayload.TextObject -> {
+                    val width = (payload.width * scale).coerceIn(20f, document.width * 2f)
+                    val height = (payload.height * scale).coerceIn(20f, document.height * 2f)
+                    payload.copy(
+                        x = transformedCenterX - width / 2f,
+                        y = transformedCenterY - height / 2f,
+                        width = width,
+                        height = height,
+                        fontSize = (payload.fontSize * scale).coerceIn(6f, 512f),
+                        rotationDegrees = normalizeObjectRotation(payload.rotationDegrees + rotationDelta),
+                    )
+                }
+                is LayerPayload.ShapeObject -> {
+                    val width = signedScaled(payload.width, scale, 8f, document.width * 2f)
+                    val height = if (payload.kind == ShapeKind.Line) {
+                        signedScaled(payload.height, scale, 0f, document.height * 2f)
+                    } else {
+                        signedScaled(payload.height, scale, 8f, document.height * 2f)
+                    }
+                    payload.copy(
+                        x = transformedCenterX - width / 2f,
+                        y = transformedCenterY - height / 2f,
+                        width = width,
+                        height = height,
+                        strokeWidth = (payload.strokeWidth * scale).coerceIn(0f, 128f),
+                        cornerRadius = (payload.cornerRadius * scale).coerceAtLeast(0f),
+                        rotationDegrees = normalizeObjectRotation(payload.rotationDegrees + rotationDelta),
+                    )
+                }
+                is LayerPayload.Raster -> payload
+            }
+            layer.id to next
+        }
+        execute(UpdateEditableObjects(updates))
+        statusMessage = when {
+            rotationDelta != 0f -> "Rotated marked objects as a group"
+            scale != 1f -> "Scaled marked objects as a group"
+            translationX != 0f || translationY != 0f -> "Moved marked objects as a group"
+            else -> "Marked objects unchanged"
+        }
+        return true
+    }
+
     fun distributeSelectedObjects(horizontal: Boolean): Boolean {
         val layers = mutableArrangeLayers(minimum = 3) ?: return false
         val bounds = layers.associate { it.id to editableObjectVisualBounds(it.payload) }

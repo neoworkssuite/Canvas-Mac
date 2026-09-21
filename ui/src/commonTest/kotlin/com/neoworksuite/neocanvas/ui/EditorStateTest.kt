@@ -996,6 +996,88 @@ class EditorStateTest {
     }
 
     @Test
+    fun marked_objects_move_and_rotate_as_one_undoable_group() {
+        val a = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 20f,
+            y = 40f,
+            width = 20f,
+            height = 20f,
+        )
+        val b = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 160f,
+            y = 40f,
+            width = 20f,
+            height = 20f,
+        )
+        val initial = CanvasDocument(
+            id = "group-transform",
+            width = 240,
+            height = 140,
+            layers = listOf(
+                Layer("a", "A", payload = a),
+                Layer("b", "B", payload = b),
+            ),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        assertTrue(state.toggleObjectArrangeSelection("a"))
+        assertTrue(state.toggleObjectArrangeSelection("b"))
+
+        assertTrue(state.transformSelectedObjects(translationX = 10f, translationY = 5f))
+        assertEquals(30f, (state.document.layers[0].payload as LayerPayload.ShapeObject).x, .001f)
+        assertEquals(170f, (state.document.layers[1].payload as LayerPayload.ShapeObject).x, .001f)
+        assertTrue(state.undo())
+        assertEquals(initial, state.document)
+
+        assertTrue(state.transformSelectedObjects(rotationDelta = 180f))
+        assertEquals(160f, (state.document.layers[0].payload as LayerPayload.ShapeObject).x, .01f)
+        assertEquals(20f, (state.document.layers[1].payload as LayerPayload.ShapeObject).x, .01f)
+        assertEquals("Rotated marked objects as a group", state.statusMessage)
+    }
+
+    @Test
+    fun marked_text_and_shapes_scale_style_with_group_geometry() {
+        val text = LayerPayload.TextObject(
+            text = "Scale",
+            x = 20f,
+            y = 20f,
+            width = 100f,
+            height = 40f,
+            fontSize = 20f,
+        )
+        val shape = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 180f,
+            y = 20f,
+            width = 80f,
+            height = 40f,
+            strokeArgb = 0xff000000.toInt(),
+            strokeWidth = 4f,
+            cornerRadius = 8f,
+        )
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "group-scale",
+            width = 320,
+            height = 200,
+            layers = listOf(
+                Layer("text", "Text", payload = text),
+                Layer("shape", "Shape", payload = shape),
+            ),
+        )))
+        assertTrue(state.toggleObjectArrangeSelection("text"))
+        assertTrue(state.toggleObjectArrangeSelection("shape"))
+
+        assertTrue(state.transformSelectedObjects(scale = 1.5f))
+
+        val scaledText = state.document.layers[0].payload as LayerPayload.TextObject
+        val scaledShape = state.document.layers[1].payload as LayerPayload.ShapeObject
+        assertEquals(30f, scaledText.fontSize, .001f)
+        assertEquals(6f, scaledShape.strokeWidth, .001f)
+        assertEquals(12f, scaledShape.cornerRadius, .001f)
+    }
+
+    @Test
     fun arrange_mark_refuses_locked_objects() {
         val shape = LayerPayload.ShapeObject(
             kind = ShapeKind.Ellipse,
