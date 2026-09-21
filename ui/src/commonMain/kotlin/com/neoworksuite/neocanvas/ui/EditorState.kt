@@ -71,6 +71,7 @@ class EditorState(
         private set
 
     fun openVersions() {
+        workbenchPanelVisible = false
         if (!supportsVersions) {
             statusMessage = "Local version history is unavailable on this device"
             return
@@ -429,10 +430,11 @@ class EditorState(
     fun moveWorkbenchItem(id: String, dx: Float, dy: Float) {
         if (!dx.isFinite() || !dy.isFinite()) return
         val next = workbenchItems.map { if (it.id == id) it.moved(dx, dy) else it }
-        if (next != workbenchItems) {
-            workbenchItems = next
-            persistWorkbench(silent = true)
-        }
+        if (next != workbenchItems) workbenchItems = next
+    }
+
+    fun commitWorkbenchPositions() {
+        persistWorkbench(silent = true)
     }
 
     fun bringWorkbenchItemToFront(id: String) {
@@ -1132,11 +1134,13 @@ class EditorState(
     fun openSettings() {
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
         versionsVisible = false
+        workbenchPanelVisible = false
         settingsVisible = true
     }
 
     fun showInspector(panel: InspectorPanel) {
         versionsVisible = false
+        workbenchPanelVisible = false
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects && panel != InspectorPanel.Effects) {
             commitEffectPreview()
         }

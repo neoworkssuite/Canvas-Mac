@@ -495,6 +495,13 @@ fun CanvasWorkspace(
                 }
             }
         }
+        WorkbenchOverlay(
+            state = state,
+            origin = origin,
+            scale = scale,
+            modifier = Modifier.fillMaxSize(),
+        )
+
         if (state.effectPreviewType != null) {
             Box(
                 Modifier.fillMaxSize().pointerInput(state.effectPreviewType) {

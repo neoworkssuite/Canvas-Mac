@@ -167,6 +167,9 @@ private fun StudioActionsMenu(state: EditorState) {
                     if (state.supportsVersions) {
                         ActionItem("Versions…") { closeMenu(); state.openVersions() }
                     }
+                    if (state.supportsWorkbench) {
+                        ActionItem("Workbench…") { closeMenu(); state.openWorkbench() }
+                    }
                     ActionSubmenuItem("File / Export") { page = ActionMenuPage.File }
                 }
                 ActionMenuPage.Add -> {
