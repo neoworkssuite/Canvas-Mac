@@ -170,6 +170,9 @@ private fun StudioActionsMenu(state: EditorState) {
                     if (state.supportsWorkbench) {
                         ActionItem("Workbench…") { closeMenu(); state.openWorkbench() }
                     }
+                    if (state.recentEditableStrokes.isNotEmpty()) {
+                        ActionItem("Recent Strokes…") { closeMenu(); state.openRecentStrokes() }
+                    }
                     ActionSubmenuItem("File / Export") { page = ActionMenuPage.File }
                 }
                 ActionMenuPage.Add -> {

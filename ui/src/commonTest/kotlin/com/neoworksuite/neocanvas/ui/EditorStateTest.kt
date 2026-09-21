@@ -348,6 +348,56 @@ class EditorStateTest {
         )
     }
 
+    @Test
+    fun editable_recent_strokes_replay_later_strokes_after_an_earlier_edit() {
+        val initial = CanvasDocument(
+            id = "editable-strokes",
+            width = 64,
+            height = 64,
+            layers = listOf(Layer("layer-1", "Paint", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        state.selectBrush(com.neoworksuite.neocanvas.brushes.BuiltInBrushes.ink)
+        state.brushSize = 4f
+
+        state.color = Color.Red
+        state.recordStroke(listOf(DrawPoint(10f, 10f)))
+        state.color = Color.Blue
+        state.recordStroke(listOf(DrawPoint(50f, 50f)))
+
+        assertEquals(2, state.recentEditableStrokes.size)
+        val firstId = state.recentEditableStrokes.first().id
+        val key = com.neoworksuite.neocanvas.renderer.TileKey("layer-1", 0, 0)
+        val beforeEdit = state.tileStore.read(key)!!.copyOf()
+        val secondPixel = (50 * 256 + 50) * 4
+        val laterStrokePixel = beforeEdit.copyOfRange(secondPixel, secondPixel + 4)
+
+        state.color = Color.Green
+        assertTrue(state.useCurrentColourForEditableStroke(firstId))
+
+        val after = state.tileStore.read(key)!!
+        assertContentEquals(laterStrokePixel, after.copyOfRange(secondPixel, secondPixel + 4))
+        val firstPixel = (10 * 256 + 10) * 4
+        assertTrue((after[firstPixel + 1].toInt() and 255) > (after[firstPixel].toInt() and 255))
+    }
+
+    @Test
+    fun non_stroke_edit_closes_the_recent_stroke_chain() {
+        val initial = CanvasDocument(
+            id = "editable-reset",
+            width = 64,
+            height = 64,
+            layers = listOf(Layer("layer-1", "Paint", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        state.recordStroke(listOf(DrawPoint(12f, 12f)))
+        assertEquals(1, state.recentEditableStrokes.size)
+
+        state.addLayer()
+
+        assertTrue(state.recentEditableStrokes.isEmpty())
+    }
+
     @Test fun live_brush_preview_matches_commit_without_mutating_document() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(64, 64)))
         state.addLayer()

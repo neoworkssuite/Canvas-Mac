@@ -71,6 +71,7 @@ class EditorState(
         private set
 
     fun openVersions() {
+        recentStrokesVisible = false
         psdCompatibilityVisible = false
         workbenchPanelVisible = false
         if (!supportsVersions) {
@@ -236,6 +237,7 @@ class EditorState(
         private set
 
     fun openPsdCompatibility() {
+        recentStrokesVisible = false
         if (!supportsPsdExport) {
             statusMessage = "PSD export is unavailable on this device"
             return
@@ -428,6 +430,7 @@ class EditorState(
     private var nextWorkbenchOrdinal: Int = 1
 
     fun openWorkbench() {
+        recentStrokesVisible = false
         psdCompatibilityVisible = false
         if (!supportsWorkbench) {
             statusMessage = "Workbench storage is unavailable on this device"
@@ -675,6 +678,212 @@ class EditorState(
 
     private fun resetDormantLayerState() {
         dormantLayerIds = emptySet()
+        resetEditableStrokes()
+    }
+
+    private var editableStrokeLayerId: String? = null
+    private var editableStrokeBase: Map<TileKey, ByteArray> = emptyMap()
+    private var editableStrokeRecords: List<EditableStroke> by mutableStateOf(emptyList())
+    private var nextEditableStrokeId: Int = 1
+    var recentStrokesVisible: Boolean by mutableStateOf(false)
+        private set
+    var selectedEditableStrokeId: Int? by mutableStateOf(null)
+        private set
+
+    val recentEditableStrokes: List<EditableStrokeSummary>
+        get() = editableStrokeRecords.map { stroke ->
+            EditableStrokeSummary(
+                id = stroke.id,
+                brushName = stroke.brush.name,
+                size = stroke.size,
+                opacity = stroke.opacity,
+                isEraser = stroke.mode == com.neoworksuite.neocanvas.brushes.BrushMode.ERASE,
+                pointCount = stroke.points.size,
+            )
+        }
+
+    val selectedEditableStroke: EditableStrokeSummary?
+        get() = recentEditableStrokes.firstOrNull { it.id == selectedEditableStrokeId }
+
+    fun openRecentStrokes() {
+        if (editableStrokeRecords.isEmpty()) {
+            statusMessage = "Draw a paint or eraser stroke first"
+            return
+        }
+        if (inspectorVisible) hideInspector()
+        versionsVisible = false
+        workbenchPanelVisible = false
+        psdCompatibilityVisible = false
+        settingsVisible = false
+        selectedEditableStrokeId = selectedEditableStrokeId
+            ?.takeIf { id -> editableStrokeRecords.any { it.id == id } }
+            ?: editableStrokeRecords.last().id
+        recentStrokesVisible = true
+    }
+
+    fun closeRecentStrokes() { recentStrokesVisible = false }
+
+    fun selectEditableStroke(id: Int) {
+        if (editableStrokeRecords.any { it.id == id }) selectedEditableStrokeId = id
+    }
+
+    fun scaleEditableStroke(id: Int, factor: Float): Boolean {
+        if (!factor.isFinite() || factor <= 0f) return false
+        return updateEditableStroke(id, "Stroke size updated") { stroke ->
+            stroke.copy(size = (stroke.size * factor).coerceIn(.5f, 1024f))
+        }
+    }
+
+    fun adjustEditableStrokeOpacity(id: Int, delta: Float): Boolean =
+        updateEditableStroke(id, "Stroke opacity updated") { stroke ->
+            stroke.copy(opacity = (stroke.opacity + delta).coerceIn(.01f, 1f))
+        }
+
+    fun useCurrentColourForEditableStroke(id: Int): Boolean =
+        updateEditableStroke(id, "Stroke colour updated") { stroke ->
+            if (stroke.mode == com.neoworksuite.neocanvas.brushes.BrushMode.ERASE) stroke
+            else stroke.copy(
+                color = RasterColor(
+                    (color.red * 255).toInt().coerceIn(0, 255),
+                    (color.green * 255).toInt().coerceIn(0, 255),
+                    (color.blue * 255).toInt().coerceIn(0, 255),
+                ),
+            )
+        }
+
+    fun useCurrentBrushForEditableStroke(id: Int): Boolean =
+        updateEditableStroke(id, "Stroke brush updated") { stroke ->
+            if (stroke.mode == com.neoworksuite.neocanvas.brushes.BrushMode.ERASE) stroke
+            else stroke.copy(
+                brush = brush.takeIf { it.mode == com.neoworksuite.neocanvas.brushes.BrushMode.PAINT }
+                    ?: BuiltInBrushes.pencil,
+            )
+        }
+
+    fun deleteEditableStroke(id: Int): Boolean {
+        if (editableStrokeRecords.none { it.id == id }) return false
+        editableStrokeRecords = editableStrokeRecords.filterNot { it.id == id }
+        selectedEditableStrokeId = editableStrokeRecords.lastOrNull()?.id
+        val changed = replayEditableStrokes("Deleted editable stroke")
+        if (editableStrokeRecords.isEmpty()) recentStrokesVisible = false
+        return changed
+    }
+
+    private fun updateEditableStroke(
+        id: Int,
+        message: String,
+        transform: (EditableStroke) -> EditableStroke,
+    ): Boolean {
+        val index = editableStrokeRecords.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        val updated = transform(editableStrokeRecords[index])
+        if (updated == editableStrokeRecords[index]) return false
+        editableStrokeRecords = editableStrokeRecords.toMutableList().also { it[index] = updated }
+        selectedEditableStrokeId = id
+        return replayEditableStrokes(message)
+    }
+
+    private fun replayEditableStrokes(message: String): Boolean {
+        val layerId = editableStrokeLayerId ?: return false
+        if (!wakeLayer(layerId)) return false
+        if (document.layers.none { it.id == layerId && it.payload is LayerPayload.Raster }) {
+            resetEditableStrokes()
+            return false
+        }
+
+        val before = tileStore.snapshot()
+        tileStore.restoreLayer(layerId, editableStrokeBase)
+        editableStrokeRecords.forEach { stroke ->
+            tileStore.applyPatch(renderEditableStroke(tileStore, stroke))
+        }
+        val currentKeys = tileStore.keys
+        execute(
+            ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys),
+            before,
+            preserveEditableStrokes = true,
+        )
+        statusMessage = message
+        return true
+    }
+
+    private fun renderEditableStroke(
+        store: TileStore,
+        stroke: EditableStroke,
+    ): com.neoworksuite.neocanvas.renderer.RasterPatch {
+        val rasterPoints = stroke.points.map {
+            RasterPoint(it.x, it.y, normalizedPressure(it.pressure))
+        }.let { points ->
+            if (stroke.stabilize) com.neoworksuite.neocanvas.renderer.smoothStroke(points, stroke.stabilization)
+            else points
+        }
+        return Rasterizer.stroke(
+            existing = store,
+            layerId = stroke.layerId,
+            points = rasterPoints,
+            color = stroke.color,
+            size = stroke.size,
+            opacity = stroke.opacity,
+            mode = stroke.mode,
+            canvasWidth = document.width,
+            canvasHeight = document.height,
+            acceptsPixel = { x, y -> stroke.selection?.contains(x, y) ?: true },
+            brush = stroke.brush,
+            symmetry = stroke.symmetry,
+            alphaLocked = stroke.alphaLocked,
+        )
+    }
+
+    private fun appendEditableStroke(
+        layerId: String,
+        layerBefore: Map<TileKey, ByteArray>,
+        points: List<DrawPoint>,
+        stabilize: Boolean,
+        activeLayer: Layer,
+        effectiveBrush: BrushDefinition,
+        mode: com.neoworksuite.neocanvas.brushes.BrushMode,
+    ) {
+        if (editableStrokeLayerId != layerId || editableStrokeRecords.isEmpty()) {
+            editableStrokeLayerId = layerId
+            editableStrokeBase = layerBefore.mapValues { (_, pixels) -> pixels.copyOf() }
+            editableStrokeRecords = emptyList()
+        }
+
+        if (editableStrokeRecords.size >= 20) {
+            val temporary = TileStore(editableStrokeBase)
+            temporary.applyPatch(renderEditableStroke(temporary, editableStrokeRecords.first()))
+            editableStrokeBase = temporary.snapshotLayer(layerId)
+            editableStrokeRecords = editableStrokeRecords.drop(1)
+        }
+
+        val stroke = EditableStroke(
+            id = nextEditableStrokeId++,
+            layerId = layerId,
+            points = points.toList(),
+            stabilize = stabilize,
+            stabilization = stabilization,
+            brush = effectiveBrush,
+            size = brushSize,
+            opacity = brushOpacity,
+            mode = mode,
+            color = RasterColor(
+                (color.red * 255).toInt().coerceIn(0, 255),
+                (color.green * 255).toInt().coerceIn(0, 255),
+                (color.blue * 255).toInt().coerceIn(0, 255),
+            ),
+            symmetry = symmetry,
+            selection = selection,
+            alphaLocked = activeLayer.alphaLocked,
+        )
+        editableStrokeRecords = editableStrokeRecords + stroke
+        selectedEditableStrokeId = stroke.id
+    }
+
+    private fun resetEditableStrokes() {
+        editableStrokeLayerId = null
+        editableStrokeBase = emptyMap()
+        editableStrokeRecords = emptyList()
+        selectedEditableStrokeId = null
+        recentStrokesVisible = false
     }
 
     var effectPreviewPatch: com.neoworksuite.neocanvas.renderer.RasterPatch? by mutableStateOf(null)
@@ -1302,6 +1511,7 @@ class EditorState(
     }
 
     fun openSettings() {
+        recentStrokesVisible = false
         psdCompatibilityVisible = false
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
         versionsVisible = false
@@ -1310,6 +1520,7 @@ class EditorState(
     }
 
     fun showInspector(panel: InspectorPanel) {
+        recentStrokesVisible = false
         psdCompatibilityVisible = false
         versionsVisible = false
         workbenchPanelVisible = false
@@ -1427,12 +1638,30 @@ class EditorState(
     fun recordStroke(points: List<DrawPoint>, stabilize: Boolean = true) {
         val layerId = activeLayerId ?: return
         if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge)) return
+        if (!wakeLayer(layerId)) return
+        val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return
         val patch = if (tool == Tool.Smudge) previewSmudge(points, stabilize) else previewStroke(points, stabilize)
         if (patch == null) return
         val before = tileStore.snapshot()
+        val layerBefore = tileStore.snapshotLayer(layerId)
         if (tileStore.applyPatch(patch).isEmpty()) return
         val currentKeys = tileStore.keys
-        execute(ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys), before)
+        val editable = tool == Tool.Brush || tool == Tool.Eraser
+        execute(
+            ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys),
+            before,
+            preserveEditableStrokes = editable,
+        )
+        if (editable) {
+            val mode = if (tool == Tool.Eraser)
+                com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
+            else com.neoworksuite.neocanvas.brushes.BrushMode.PAINT
+            val effectiveBrush = if (
+                mode == com.neoworksuite.neocanvas.brushes.BrushMode.ERASE &&
+                brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
+            ) BuiltInBrushes.eraser else brush
+            appendEditableStroke(layerId, layerBefore, points, stabilize, activeLayer, effectiveBrush, mode)
+        }
     }
 
     fun previewStroke(
@@ -1489,6 +1718,7 @@ class EditorState(
 
     fun undo(): Boolean {
         if (!wakeAllLayers()) return false
+        resetEditableStrokes()
         if (!history.undo()) return false
         redoVersions += editVersion
         editVersion = undoVersions.removeLastOrNull() ?: 0
@@ -1501,6 +1731,7 @@ class EditorState(
 
     fun redo(): Boolean {
         if (!wakeAllLayers()) return false
+        resetEditableStrokes()
         if (!history.redo()) return false
         undoVersions += editVersion
         editVersion = redoVersions.removeLastOrNull() ?: 0
@@ -1818,7 +2049,12 @@ class EditorState(
             is SaveResult.Failure -> buildString { append(result.message); result.recoveryPath?.let { append(" Recovery copy: $it") } }
         }
     }
-    private fun execute(command: DocumentCommand, tilesBefore: Map<TileKey, ByteArray>? = null) {
+    private fun execute(
+        command: DocumentCommand,
+        tilesBefore: Map<TileKey, ByteArray>? = null,
+        preserveEditableStrokes: Boolean = false,
+    ) {
+        if (!preserveEditableStrokes) resetEditableStrokes()
         history.execute(command)
         undoVersions += editVersion
         redoVersions.clear()

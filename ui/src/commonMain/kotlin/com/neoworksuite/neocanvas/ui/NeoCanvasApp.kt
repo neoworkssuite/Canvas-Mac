@@ -296,6 +296,29 @@ fun NeoCanvasApp(
                 )
             }
         }
+        if (state.recentStrokesVisible) {
+            Box(
+                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                    .padding(
+                        end = if (compact) 10.dp else 16.dp,
+                        start = if (compact) 10.dp else 0.dp,
+                        bottom = 12.dp,
+                    )
+                    .fillMaxWidth(if (compact) .94f else .44f)
+                    .fillMaxHeight(if (compact) .72f else .82f)
+                    .widthIn(max = 470.dp)
+                    .heightIn(max = 700.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(NeoCanvasColors.panel.copy(alpha = .98f))
+                    .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(16.dp)),
+            ) {
+                RecentStrokesPanel(
+                    state = state,
+                    modifier = Modifier.fillMaxSize(),
+                    onClose = state::closeRecentStrokes,
+                )
+            }
+        }
         if (state.workbenchPanelVisible) {
             Box(
                 Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
