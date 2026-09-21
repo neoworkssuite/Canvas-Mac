@@ -441,6 +441,7 @@ class EditorState(
 
     val supportsPsdImport: Boolean get() = fileActions.supportsPsdImport
     val supportsPsdExport: Boolean get() = fileActions.supportsPsdExport
+    val supportsJpegExport: Boolean get() = fileActions.supportsJpegExport
 
     var psdCompatibilityVisible by mutableStateOf(false)
         private set
@@ -3577,6 +3578,21 @@ class EditorState(
         return result == SaveResult.Success
     }
     fun exportPng() = applySaveResult(fileActions.exportPng(document, tilesForDocument()), "Exported PNG locally")
+
+    fun exportJpeg(quality: Int = 92): Boolean {
+        if (!supportsJpegExport) {
+            statusMessage = "JPEG export is unavailable on this device"
+            return false
+        }
+        val result = try {
+            fileActions.exportJpeg(document, tilesForDocument(), quality.coerceIn(1, 100))
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not export JPEG")
+        }
+        applySaveResult(result, "Exported JPEG locally")
+        return result == SaveResult.Success
+    }
+
     fun newDocument(width: Int = document.width, height: Int = document.height): Boolean {
         if (width !in 1..8192 || height !in 1..8192 || width.toLong() * height > 16_000_000) {
             statusMessage = "Choose dimensions from 1–8192 pixels, up to 16 million pixels total"

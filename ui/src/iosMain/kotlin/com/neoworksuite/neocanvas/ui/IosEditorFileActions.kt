@@ -10,6 +10,7 @@ import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.EditableObjectRasterizer
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
+import com.neoworksuite.neocanvas.renderer.PngImage
 import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.renderer.TextRasterizer
 import kotlinx.cinterop.addressOf
@@ -43,6 +44,7 @@ import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
+import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePNGRepresentation
 import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UINavigationControllerDelegateProtocol
@@ -89,6 +91,7 @@ internal class IosEditorFileActions(
     override val supportsDeepLayers: Boolean = true
     override val supportsPsdImport: Boolean = true
     override val supportsPsdExport: Boolean = true
+    override val supportsJpegExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
 
     init {
@@ -360,6 +363,45 @@ internal class IosEditorFileActions(
         ) { bytes ->
             check(writeBytes(target, bytes)) { "Could not write PNG to iPad Documents." }
         }
+    }
+
+    override fun exportJpeg(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+        quality: Int,
+    ): SaveResult = try {
+        ensureDirectory(exportDirectory)
+        val base = currentDocumentName?.removeSuffix(".neocanvas") ?: "NeoCanvas"
+        val target = join(exportDirectory, "$base.jpg")
+        val flattened = PngExporter.render(
+            document,
+            tiles,
+            textRasterizer = ipadTextRasterizer,
+        )
+        val opaque = flattened.rgba.copyOf()
+        var offset = 0
+        while (offset < opaque.size) {
+            val alpha = opaque[offset + 3].toInt() and 255
+            if (alpha < 255) {
+                val inverse = 255 - alpha
+                val red = opaque[offset].toInt() and 255
+                val green = opaque[offset + 1].toInt() and 255
+                val blue = opaque[offset + 2].toInt() and 255
+                opaque[offset] = ((red * alpha + 255 * inverse + 127) / 255).toByte()
+                opaque[offset + 1] = ((green * alpha + 255 * inverse + 127) / 255).toByte()
+                opaque[offset + 2] = ((blue * alpha + 255 * inverse + 127) / 255).toByte()
+                opaque[offset + 3] = 255.toByte()
+            }
+            offset += 4
+        }
+        val pngData = PngImage(flattened.width, flattened.height, opaque).encode().toNSData()
+        val image = UIImage(data = pngData)
+        val jpegData = UIImageJPEGRepresentation(image, quality.coerceIn(1, 100) / 100.0)
+            ?: return SaveResult.Failure("iPadOS could not encode the JPEG.")
+        if (writeBytes(target, jpegData.toByteArray())) SaveResult.Success
+        else SaveResult.Failure("Could not write JPEG to iPad Documents.")
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
     }
 
     override fun exportPsd(

@@ -223,6 +223,9 @@ private fun StudioActionsMenu(state: EditorState) {
                         ActionItem("Save As…") { closeMenu(); state.saveAs() }
                     }
                     ActionItem("Export PNG…") { closeMenu(); state.exportPng() }
+                    if (state.supportsJpegExport) {
+                        ActionItem("Export JPEG…") { closeMenu(); state.exportJpeg() }
+                    }
                     if (state.supportsPsdExport) {
                         ActionItem("PSD Compatibility…") { closeMenu(); state.openPsdCompatibility() }
                         ActionItem("Export Photoshop PSD…") { closeMenu(); state.exportPsd() }
