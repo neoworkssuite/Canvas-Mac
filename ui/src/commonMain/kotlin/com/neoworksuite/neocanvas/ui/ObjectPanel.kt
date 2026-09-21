@@ -60,6 +60,21 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 modifier = Modifier.fillMaxWidth(),
             )
             ObjectSlider("Size", text.fontSize, 6f..256f, text.fontSize.toInt().toString() + " px", state::setActiveTextSize)
+            Text("FONT", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                ObjectAction("System", Modifier.weight(1f), text.fontFamily.equals("System", ignoreCase = true)) {
+                    state.setActiveTextFontFamily("System")
+                }
+                ObjectAction("Sans", Modifier.weight(1f), text.fontFamily.equals("Sans", ignoreCase = true)) {
+                    state.setActiveTextFontFamily("Sans")
+                }
+                ObjectAction("Serif", Modifier.weight(1f), text.fontFamily.equals("Serif", ignoreCase = true)) {
+                    state.setActiveTextFontFamily("Serif")
+                }
+                ObjectAction("Mono", Modifier.weight(1f), text.fontFamily.equals("Mono", ignoreCase = true)) {
+                    state.setActiveTextFontFamily("Mono")
+                }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 ObjectAction("Left", Modifier.weight(1f), text.alignment == TextAlignment.Left) {
                     state.setActiveTextAlignment(TextAlignment.Left)

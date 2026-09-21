@@ -647,9 +647,11 @@ class EditorStateTest {
         assertTrue(state.tileStore.keys.isEmpty())
 
         state.setActiveTextContent("NeoCanvas")
+        state.setActiveTextFontFamily("Serif")
         state.setActiveTextAlignment(com.neoworksuite.neocanvas.core.model.TextAlignment.Right)
         state.rotateActiveObject(15f)
         assertEquals("NeoCanvas", state.activeTextObject!!.text)
+        assertEquals("Serif", state.activeTextObject!!.fontFamily)
         assertEquals(com.neoworksuite.neocanvas.core.model.TextAlignment.Right, state.activeTextObject!!.alignment)
         assertEquals(15f, state.activeTextObject!!.rotationDegrees)
 

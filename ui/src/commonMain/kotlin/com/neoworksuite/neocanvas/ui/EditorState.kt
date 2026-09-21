@@ -710,6 +710,14 @@ class EditorState(
         execute(UpdateTextLayer(layer.id, payload.copy(fontSize = value.coerceIn(6f, 512f))))
     }
 
+    fun setActiveTextFontFamily(value: String) {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        val clean = value.trim()
+        if (clean.isEmpty() || clean == payload.fontFamily) return
+        execute(UpdateTextLayer(layer.id, payload.copy(fontFamily = clean)))
+    }
+
     fun setActiveTextAlignment(value: TextAlignment) {
         val layer = activeObjectLayer ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return

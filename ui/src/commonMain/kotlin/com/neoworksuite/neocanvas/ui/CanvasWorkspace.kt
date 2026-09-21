@@ -981,7 +981,7 @@ private fun DrawScope.drawStoredTiles(
                                 alpha = Color(payload.colorArgb).alpha * effectiveOpacity,
                             ),
                             fontSize = payload.fontSize.toSp(),
-                            fontFamily = FontFamily.Default,
+                            fontFamily = editableTextFontFamily(payload.fontFamily),
                             textAlign = when (payload.alignment) {
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> TextAlign.Left
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> TextAlign.Center
@@ -998,6 +998,13 @@ private fun DrawScope.drawStoredTiles(
                 drawEditableShape(payload, effectiveOpacity, blendMode)
         }
     }
+}
+
+private fun editableTextFontFamily(name: String): FontFamily = when (name.trim().lowercase()) {
+    "sans", "sans-serif", "sans serif" -> FontFamily.SansSerif
+    "serif" -> FontFamily.Serif
+    "mono", "monospace" -> FontFamily.Monospace
+    else -> FontFamily.Default
 }
 
 private fun DrawScope.drawEditableShape(
