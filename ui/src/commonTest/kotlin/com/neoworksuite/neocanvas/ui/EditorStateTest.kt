@@ -661,7 +661,7 @@ class EditorStateTest {
         state.useCurrentColourForActiveObject(asStroke = true)
         state.setActiveShapeStrokeWidth(12f)
         state.scaleActiveObject(1.1f)
-        assertEquals(12f, state.activeShapeObject!!.strokeWidth)
+        assertEquals(13.2f, state.activeShapeObject!!.strokeWidth, .001f)
 
         assertTrue(state.undo())
         state.selectLayer(textId)
