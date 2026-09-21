@@ -1061,7 +1061,6 @@ class EditorState(
         try {
             palette = fileActions.loadPalette().mapNotNull { parseColorHex(it)?.let(::colorHex) }.distinct().take(32)
         } catch (error: Exception) { statusMessage = "Could not load local palette: ${error.message}" }
-    }
         loadWorkbench()
     }
     fun loadBrushLibrarySnapshot(): ByteArray? =
