@@ -142,6 +142,38 @@ class DocumentHistoryTest {
     }
 
     @Test
+    fun editable_text_and_shape_layers_are_undoable_and_duplicate_without_raster_copies() {
+        val history = DocumentHistory(CanvasDocument.blank(800, 600))
+        val text = LayerPayload.TextObject(
+            text = "NeoCanvas",
+            fontSize = 64f,
+            colorArgb = 0xff336699.toInt(),
+            x = 120f, y = 80f, width = 420f, height = 120f,
+            alignment = TextAlignment.Center,
+        )
+        history.execute(AddTextLayer("text-1", "Title", text))
+        history.execute(UpdateTextLayer("text-1", text.copy(text = "NeoCanvas Pro", rotationDegrees = 12f)))
+        val shape = LayerPayload.ShapeObject(
+            kind = ShapeKind.Ellipse,
+            x = 40f, y = 220f, width = 260f, height = 180f,
+            fillArgb = 0xffff6600.toInt(),
+            strokeArgb = 0xff202020.toInt(),
+            strokeWidth = 6f,
+        )
+        history.execute(AddShapeLayer("shape-1", "Badge", shape))
+
+        assertEquals("NeoCanvas Pro", (history.current.layers[0].payload as LayerPayload.TextObject).text)
+        assertEquals(ShapeKind.Ellipse, (history.current.layers[1].payload as LayerPayload.ShapeObject).kind)
+
+        val duplicate = DuplicateLayer("text-1", "text-2", "Title copy")
+        assertTrue(duplicate.rasterTileCopies(history.current).isEmpty())
+        history.execute(duplicate)
+        assertEquals(text.copy(text = "NeoCanvas Pro", rotationDegrees = 12f), history.current.layers[1].payload)
+        assertTrue(history.undo())
+        assertEquals(2, history.current.layers.size)
+    }
+
+    @Test
     fun duplicate_creates_an_independent_raster_layer_after_source() {
         val history = DocumentHistory(
             CanvasDocument.blank(100, 100).copy(

@@ -11,6 +11,10 @@ data class TileAddress(
     }
 }
 
+enum class TextAlignment { Left, Center, Right }
+
+enum class ShapeKind { Rectangle, Ellipse, Line }
+
 sealed interface LayerPayload {
     class Raster(tileAddresses: Set<TileAddress> = emptySet()) : LayerPayload {
         /** A collection snapshot, isolated from caller-owned mutable tile sets. */
@@ -25,6 +29,52 @@ sealed interface LayerPayload {
         override fun hashCode(): Int = tileAddresses.hashCode()
 
         override fun toString(): String = "Raster(tileAddresses=$tileAddresses)"
+    }
+
+    data class TextObject(
+        val text: String,
+        val fontFamily: String = "System",
+        val fontSize: Float = 48f,
+        val colorArgb: Int = 0xff000000.toInt(),
+        val x: Float = 0f,
+        val y: Float = 0f,
+        val width: Float = 640f,
+        val height: Float = 160f,
+        val rotationDegrees: Float = 0f,
+        val alignment: TextAlignment = TextAlignment.Left,
+    ) : LayerPayload {
+        init {
+            require(text.length <= 10_000)
+            require(fontFamily.isNotBlank())
+            require(fontSize.isFinite() && fontSize > 0f)
+            require(x.isFinite() && y.isFinite())
+            require(width.isFinite() && height.isFinite() && width > 0f && height > 0f)
+            require(rotationDegrees.isFinite())
+        }
+    }
+
+    data class ShapeObject(
+        val kind: ShapeKind,
+        val x: Float = 0f,
+        val y: Float = 0f,
+        val width: Float = 240f,
+        val height: Float = 240f,
+        val fillArgb: Int? = 0xff000000.toInt(),
+        val strokeArgb: Int? = null,
+        val strokeWidth: Float = 0f,
+        val rotationDegrees: Float = 0f,
+    ) : LayerPayload {
+        init {
+            require(x.isFinite() && y.isFinite() && width.isFinite() && height.isFinite())
+            when (kind) {
+                ShapeKind.Rectangle, ShapeKind.Ellipse -> require(width > 0f && height > 0f)
+                ShapeKind.Line -> require(width != 0f || height != 0f)
+            }
+            require(fillArgb != null || strokeArgb != null)
+            require(strokeWidth.isFinite() && strokeWidth >= 0f)
+            if (strokeArgb != null) require(strokeWidth > 0f)
+            require(rotationDegrees.isFinite())
+        }
     }
 }
 
@@ -100,6 +150,8 @@ data class Layer(
             require(payload.tileAddresses.all { it.layerId == id }) {
                 "Raster tile addresses must belong to their layer."
             }
+        } else {
+            require(!alphaLocked) { "Alpha lock currently applies only to raster layers." }
         }
     }
 }

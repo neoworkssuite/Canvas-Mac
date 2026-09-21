@@ -6,20 +6,21 @@ import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.LayerGroup
 import com.neoworksuite.neocanvas.core.model.LayerMask
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.ShapeKind
+import com.neoworksuite.neocanvas.core.model.TextAlignment
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import kotlin.math.min
 
 /** Version-one, local-only ZIP package codec. It uses store-only ZIP and PNG entries for portability. */
 object NeoCanvasPackage {
-    const val FORMAT_VERSION = 1
+    const val FORMAT_VERSION = 2
     const val TILE_SIZE_PIXELS = 256
     const val RGBA_TILE_BYTES = TILE_SIZE_PIXELS * TILE_SIZE_PIXELS * 4
 
     fun write(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>, thumbnailPng: ByteArray = transparentThumbnail()): ByteArray {
         val expectedTiles = document.layers.flatMap { layer ->
-            val raster = layer.payload as? LayerPayload.Raster
-                ?: throw IllegalArgumentException("Unsupported layer payload in v1 package.")
-            raster.tileAddresses + layer.mask?.tileAddresses.orEmpty()
+            (layer.payload as? LayerPayload.Raster)?.tileAddresses.orEmpty() +
+                layer.mask?.tileAddresses.orEmpty()
         }.toSet()
         require(tiles.keys == expectedTiles) { "Package tile buffers must exactly match the document tile addresses." }
         tiles.forEach { (_, pixels) -> require(pixels.size == RGBA_TILE_BYTES) { "Every tile must be 256×256 RGBA pixels." } }
@@ -27,8 +28,8 @@ object NeoCanvasPackage {
         val members = linkedMapOf<String, ByteArray>()
         members["manifest.json"] = manifest(document).encodeToByteArray()
         document.layers.forEach { layer ->
-            val raster = layer.payload as LayerPayload.Raster
-            raster.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEach { address ->
+            val raster = layer.payload as? LayerPayload.Raster
+            raster?.tileAddresses.orEmpty().sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEach { address ->
                 members[tileMember(address)] = encodePng(TILE_SIZE_PIXELS, TILE_SIZE_PIXELS, tiles.getValue(address))
             }
             layer.mask?.tileAddresses
@@ -61,7 +62,7 @@ object NeoCanvasPackage {
         if ("assets/" !in members) throw PackageCorruptException("assets/ is missing.")
         val root = JsonParser(manifestBytes.decodeToString()).parseObject()
         val version = root.int("formatVersion")
-        if (version != FORMAT_VERSION) {
+        if (version !in 1..FORMAT_VERSION) {
             throw PackageIncompatibleException("NeoCanvas format version $version is not supported.")
         }
         val documentObject = root.objectValue("document")
@@ -88,14 +89,50 @@ object NeoCanvasPackage {
             val name = layerObject.string("name")
             val visible = layerObject.boolean("visible")
             val opacity = layerObject.float("opacity")
-            if (layerObject.string("type") != "raster") throw PackageIncompatibleException("Unsupported layer type.")
-            val addresses = linkedSetOf<TileAddress>()
-            layerObject.array("tiles").forEach { tileValue ->
-                val memberName = tileValue.asString()
-                val address = addressForMember(id, memberName)
-                if (!addresses.add(address)) throw PackageCorruptException("Duplicate tile address '$memberName'.")
-                val png = members[memberName] ?: throw PackageCorruptException("Tile '$memberName' is missing.")
-                memberTiles[address] = decodeTilePng(png)
+            val payload = when (layerObject.string("type")) {
+                "raster" -> {
+                    val addresses = linkedSetOf<TileAddress>()
+                    layerObject.array("tiles").forEach { tileValue ->
+                        val memberName = tileValue.asString()
+                        val address = addressForMember(id, memberName)
+                        if (!addresses.add(address)) throw PackageCorruptException("Duplicate tile address '$memberName'.")
+                        val png = members[memberName] ?: throw PackageCorruptException("Tile '$memberName' is missing.")
+                        memberTiles[address] = decodeTilePng(png)
+                    }
+                    LayerPayload.Raster(addresses)
+                }
+                "text" -> {
+                    if (version < 2) throw PackageIncompatibleException("Editable text needs NeoCanvas format v2.")
+                    LayerPayload.TextObject(
+                        text = layerObject.string("text"),
+                        fontFamily = layerObject.string("fontFamily"),
+                        fontSize = layerObject.float("fontSize"),
+                        colorArgb = layerObject.int("colorArgb"),
+                        x = layerObject.float("x"),
+                        y = layerObject.float("y"),
+                        width = layerObject.float("width"),
+                        height = layerObject.float("height"),
+                        rotationDegrees = layerObject.float("rotationDegrees"),
+                        alignment = TextAlignment.valueOf(layerObject.string("alignment")),
+                    )
+                }
+                "shape" -> {
+                    if (version < 2) throw PackageIncompatibleException("Editable shapes need NeoCanvas format v2.")
+                    val fillEnabled = layerObject.boolean("fillEnabled")
+                    val strokeEnabled = layerObject.boolean("strokeEnabled")
+                    LayerPayload.ShapeObject(
+                        kind = ShapeKind.valueOf(layerObject.string("shapeKind")),
+                        x = layerObject.float("x"),
+                        y = layerObject.float("y"),
+                        width = layerObject.float("width"),
+                        height = layerObject.float("height"),
+                        fillArgb = if (fillEnabled) layerObject.int("fillArgb") else null,
+                        strokeArgb = if (strokeEnabled) layerObject.int("strokeArgb") else null,
+                        strokeWidth = layerObject.float("strokeWidth"),
+                        rotationDegrees = layerObject.float("rotationDegrees"),
+                    )
+                }
+                else -> throw PackageIncompatibleException("Unsupported layer type.")
             }
             val mask = layerObject.fields["mask"]?.asObject()?.let { maskObject ->
                 val maskId = maskObject.string("id")
@@ -114,7 +151,7 @@ object NeoCanvasPackage {
                     inverted = if ("inverted" in maskObject.fields) maskObject.boolean("inverted") else false,
                 )
             }
-            Layer(id, name, visible, opacity, LayerPayload.Raster(addresses),
+            Layer(id, name, visible, opacity, payload,
                 locked = if ("locked" in layerObject.fields) layerObject.boolean("locked") else false,
                 alphaLocked = if ("alphaLocked" in layerObject.fields) layerObject.boolean("alphaLocked") else false,
                 clipping = if ("clipping" in layerObject.fields) layerObject.boolean("clipping") else false,
@@ -128,8 +165,8 @@ object NeoCanvasPackage {
         if (layers.map(Layer::id).distinct().size != layers.size) throw PackageCorruptException("Layer ids must be unique.")
         val declaredMembers = linkedSetOf<String>().apply {
             layers.forEach { layer ->
-                val raster = layer.payload as LayerPayload.Raster
-                raster.tileAddresses.mapTo(this, ::tileMember)
+                val raster = layer.payload as? LayerPayload.Raster
+                raster?.tileAddresses.orEmpty().mapTo(this, ::tileMember)
                 layer.mask?.tileAddresses.orEmpty().mapTo(this, ::maskTileMember)
             }
         }
@@ -163,7 +200,6 @@ object NeoCanvasPackage {
         append("],\"layers\":[")
         document.layers.forEachIndexed { index, layer ->
             if (index > 0) append(',')
-            val raster = layer.payload as LayerPayload.Raster
             append("{\"id\":\"").append(json(layer.id)).append("\",\"name\":\"").append(json(layer.name))
             append("\",\"visible\":").append(layer.visible).append(",\"opacity\":").append(layer.opacity)
             append(",\"locked\":").append(layer.locked)
@@ -182,12 +218,40 @@ object NeoCanvasPackage {
                 }
                 append("]}")
             }
-            append(",\"type\":\"raster\",\"tiles\":[")
-            raster.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEachIndexed { tileIndex, address ->
-                if (tileIndex > 0) append(',')
-                append('\"').append(tileMember(address)).append('\"')
+            when (val payload = layer.payload) {
+                is LayerPayload.Raster -> {
+                    append(",\"type\":\"raster\",\"tiles\":[")
+                    payload.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEachIndexed { tileIndex, address ->
+                        if (tileIndex > 0) append(',')
+                        append('\"').append(tileMember(address)).append('\"')
+                    }
+                    append(']')
+                }
+                is LayerPayload.TextObject -> {
+                    append(",\"type\":\"text\"")
+                    append(",\"text\":\"").append(json(payload.text)).append('"')
+                    append(",\"fontFamily\":\"").append(json(payload.fontFamily)).append('"')
+                    append(",\"fontSize\":").append(payload.fontSize)
+                    append(",\"colorArgb\":").append(payload.colorArgb)
+                    append(",\"x\":").append(payload.x).append(",\"y\":").append(payload.y)
+                    append(",\"width\":").append(payload.width).append(",\"height\":").append(payload.height)
+                    append(",\"rotationDegrees\":").append(payload.rotationDegrees)
+                    append(",\"alignment\":\"").append(payload.alignment.name).append('"')
+                }
+                is LayerPayload.ShapeObject -> {
+                    append(",\"type\":\"shape\"")
+                    append(",\"shapeKind\":\"").append(payload.kind.name).append('"')
+                    append(",\"x\":").append(payload.x).append(",\"y\":").append(payload.y)
+                    append(",\"width\":").append(payload.width).append(",\"height\":").append(payload.height)
+                    append(",\"fillEnabled\":").append(payload.fillArgb != null)
+                    append(",\"fillArgb\":").append(payload.fillArgb ?: 0)
+                    append(",\"strokeEnabled\":").append(payload.strokeArgb != null)
+                    append(",\"strokeArgb\":").append(payload.strokeArgb ?: 0)
+                    append(",\"strokeWidth\":").append(payload.strokeWidth)
+                    append(",\"rotationDegrees\":").append(payload.rotationDegrees)
+                }
             }
-            append("]}")
+            append('}')
         }
         append("]}")
     }

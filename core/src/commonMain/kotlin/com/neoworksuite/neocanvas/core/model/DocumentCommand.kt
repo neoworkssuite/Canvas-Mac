@@ -32,6 +32,8 @@ class CropCanvas(
                     is LayerPayload.Raster -> layer.copy(
                         payload = LayerPayload.Raster(layerAddresses[layer.id].orEmpty()),
                     )
+                    is LayerPayload.TextObject,
+                    is LayerPayload.ShapeObject -> layer
                 }
             },
         )
@@ -49,6 +51,38 @@ data class AddRasterLayer(
         return document.copy(layers = document.layers.toMutableList().apply {
             add(index, Layer(layerId, name, payload = LayerPayload.Raster()))
         })
+    }
+}
+
+data class AddTextLayer(val layerId: String, val name: String, val text: LayerPayload.TextObject, val insertionIndex: Int? = null) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        require(document.layers.none { it.id == layerId })
+        val index = insertionIndex ?: document.layers.size
+        require(index in 0..document.layers.size)
+        return document.copy(layers = document.layers.toMutableList().apply { add(index, Layer(layerId, name, payload = text)) })
+    }
+}
+
+data class UpdateTextLayer(val layerId: String, val text: LayerPayload.TextObject) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument = document.replaceLayer(layerId) {
+        require(it.payload is LayerPayload.TextObject)
+        it.copy(payload = text)
+    }
+}
+
+data class AddShapeLayer(val layerId: String, val name: String, val shape: LayerPayload.ShapeObject, val insertionIndex: Int? = null) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        require(document.layers.none { it.id == layerId })
+        val index = insertionIndex ?: document.layers.size
+        require(index in 0..document.layers.size)
+        return document.copy(layers = document.layers.toMutableList().apply { add(index, Layer(layerId, name, payload = shape)) })
+    }
+}
+
+data class UpdateShapeLayer(val layerId: String, val shape: LayerPayload.ShapeObject) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument = document.replaceLayer(layerId) {
+        require(it.payload is LayerPayload.ShapeObject)
+        it.copy(payload = shape)
     }
 }
 
@@ -326,11 +360,13 @@ data class DuplicateLayer(
         val plan = plan(document)
         val source = document.layers[plan.sourceIndex]
         val duplicateMaskId = source.mask?.let { duplicateLayerId + "-mask" }
-        val payload = when (source.payload) {
+        val payload = when (val sourcePayload = source.payload) {
             is LayerPayload.Raster -> LayerPayload.Raster(
                 plan.tileCopies.filter { it.destination.layerId == duplicateLayerId }
                     .mapTo(linkedSetOf()) { it.destination },
             )
+            is LayerPayload.TextObject -> sourcePayload.copy()
+            is LayerPayload.ShapeObject -> sourcePayload.copy()
         }
         val duplicateMask = source.mask?.let { mask ->
             val maskId = requireNotNull(duplicateMaskId)
@@ -368,6 +404,8 @@ data class DuplicateLayer(
                 }
                 immutableSetSnapshot(copies)
             }
+            is LayerPayload.TextObject,
+            is LayerPayload.ShapeObject -> emptySet()
         }
         return DuplicateLayerPlan(sourceIndex, tileCopies)
     }

@@ -9,6 +9,8 @@ import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.LayerGroup
 import com.neoworksuite.neocanvas.core.model.LayerMask
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.ShapeKind
+import com.neoworksuite.neocanvas.core.model.TextAlignment
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -124,6 +126,47 @@ class NeoCanvasPackageTest {
         )))
         assertEquals(false, legacy.document.layers.single().alphaLocked)
         assertEquals(LayerBlendMode.Normal, legacy.document.layers.single().blendMode)
+    }
+
+    @Test
+    fun format_v2_round_trips_editable_text_and_shapes_while_v1_raster_stays_readable() {
+        val document = CanvasDocument(
+            "objects-v2", 1024, 768,
+            layers = listOf(
+                Layer("text-1", "Headline", payload = LayerPayload.TextObject(
+                    text = "Own your software again.",
+                    fontSize = 72f,
+                    colorArgb = 0xff112233.toInt(),
+                    x = 100f, y = 90f, width = 720f, height = 160f,
+                    rotationDegrees = -4f,
+                    alignment = TextAlignment.Center,
+                )),
+                Layer("shape-1", "Frame", payload = LayerPayload.ShapeObject(
+                    kind = ShapeKind.Rectangle,
+                    x = 80f, y = 70f, width = 760f, height = 220f,
+                    fillArgb = null,
+                    strokeArgb = 0xff00aaff.toInt(),
+                    strokeWidth = 8f,
+                    rotationDegrees = 2f,
+                )),
+            ),
+        )
+        val loaded = assertIs<LoadResult.Success>(NeoCanvasPackage.read(NeoCanvasPackage.write(document, emptyMap())))
+        assertEquals(2, NeoCanvasPackage.FORMAT_VERSION)
+        val text = assertIs<LayerPayload.TextObject>(loaded.document.layers[0].payload)
+        assertEquals("Own your software again.", text.text)
+        assertEquals(TextAlignment.Center, text.alignment)
+        val shape = assertIs<LayerPayload.ShapeObject>(loaded.document.layers[1].payload)
+        assertEquals(ShapeKind.Rectangle, shape.kind)
+        assertEquals(null, shape.fillArgb)
+        assertEquals(8f, shape.strokeWidth)
+
+        val legacy = assertIs<LoadResult.Success>(NeoCanvasPackage.readMembers(mapOf(
+            "manifest.json" to manifest(formatVersion = 1).encodeToByteArray(),
+            "thumb.png" to transparentThumbnail(),
+            "assets/" to ByteArray(0),
+        )))
+        assertIs<LayerPayload.Raster>(legacy.document.layers.single().payload)
     }
 
     @Test
