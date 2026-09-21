@@ -477,23 +477,20 @@ data class DuplicateLayer(
         require(document.layers.none { it.id == duplicateLayerId }) { "A layer with id '$duplicateLayerId' already exists." }
         val sourceIndex = document.layers.indexOfLayer(sourceLayerId)
         val source = document.layers[sourceIndex]
-        val tileCopies = when (val sourcePayload = source.payload) {
-            is LayerPayload.Raster -> {
-                val copies = sourcePayload.tileAddresses.mapTo(linkedSetOf()) { address ->
-                    RasterTileCopy(address, address.copy(layerId = duplicateLayerId))
-                }
-                source.mask?.let { mask ->
-                    val duplicateMaskId = duplicateLayerId + "-mask"
-                    mask.tileAddresses.mapTo(copies) { address ->
-                        RasterTileCopy(address, address.copy(layerId = duplicateMaskId))
-                    }
-                }
-                immutableSetSnapshot(copies)
+        val copies = linkedSetOf<RasterTileCopy>()
+        val sourcePayload = source.payload
+        if (sourcePayload is LayerPayload.Raster) {
+            sourcePayload.tileAddresses.mapTo(copies) { address ->
+                RasterTileCopy(address, address.copy(layerId = duplicateLayerId))
             }
-            is LayerPayload.TextObject,
-            is LayerPayload.ShapeObject -> emptySet()
         }
-        return DuplicateLayerPlan(sourceIndex, tileCopies)
+        source.mask?.let { mask ->
+            val duplicateMaskId = duplicateLayerId + "-mask"
+            mask.tileAddresses.mapTo(copies) { address ->
+                RasterTileCopy(address, address.copy(layerId = duplicateMaskId))
+            }
+        }
+        return DuplicateLayerPlan(sourceIndex, immutableSetSnapshot(copies))
     }
 }
 
@@ -516,17 +513,17 @@ class DuplicateEditableLayers(
         require(this.duplicateIdsBySource.values.toSet().size == this.duplicateIdsBySource.size) {
             "Duplicate layer ids must be unique."
         }
+        require(this.duplicateIdsBySource.none { (sourceId, duplicateId) -> sourceId == duplicateId }) {
+            "A duplicate layer must use a new id."
+        }
         require(offsetX.isFinite() && offsetY.isFinite())
     }
 
     override fun rasterTileCopies(document: CanvasDocument): Set<RasterTileCopy> {
+        validate(document)
         val copies = linkedSetOf<RasterTileCopy>()
         duplicateIdsBySource.forEach { (sourceId, duplicateId) ->
-            val source = document.layers.firstOrNull { it.id == sourceId }
-                ?: throw IllegalArgumentException("No layer with id '$sourceId' exists.")
-            require(source.payload is LayerPayload.TextObject || source.payload is LayerPayload.ShapeObject) {
-                "Only editable Text and Shape layers can be duplicated together."
-            }
+            val source = document.layers.first { it.id == sourceId }
             source.mask?.let { mask ->
                 val duplicateMaskId = duplicateId + "-mask"
                 mask.tileAddresses.mapTo(copies) { address ->
@@ -538,10 +535,7 @@ class DuplicateEditableLayers(
     }
 
     override fun apply(document: CanvasDocument): CanvasDocument {
-        val existingIds = document.layers.mapTo(linkedSetOf(), Layer::id)
-        require(duplicateIdsBySource.values.none { it in existingIds }) { "Duplicate layer id already exists." }
-        require(duplicateIdsBySource.keys.all { it in existingIds }) { "Every duplicated layer must exist." }
-
+        validate(document)
         val tileCopies = rasterTileCopies(document)
         val result = mutableListOf<Layer>()
         document.layers.forEach { source ->
@@ -574,6 +568,32 @@ class DuplicateEditableLayers(
             )
         }
         return document.copy(layers = result)
+    }
+
+    private fun validate(document: CanvasDocument) {
+        val layersById = document.layers.associateBy(Layer::id)
+        val existingLayerIds = layersById.keys
+        val existingMaskIds = document.layers.mapNotNullTo(linkedSetOf()) { it.mask?.id }
+        val duplicateIds = duplicateIdsBySource.values.toSet()
+        require(duplicateIds.none { it in existingLayerIds || it in existingMaskIds }) {
+            "Duplicate layer id collides with an existing layer or mask id."
+        }
+
+        val duplicateMaskIds = linkedSetOf<String>()
+        duplicateIdsBySource.forEach { (sourceId, duplicateId) ->
+            val source = layersById[sourceId]
+                ?: throw IllegalArgumentException("No layer with id '$sourceId' exists.")
+            require(source.payload is LayerPayload.TextObject || source.payload is LayerPayload.ShapeObject) {
+                "Only editable Text and Shape layers can be duplicated together."
+            }
+            if (source.mask != null) {
+                val maskId = duplicateId + "-mask"
+                require(maskId !in existingLayerIds && maskId !in existingMaskIds && maskId !in duplicateIds) {
+                    "Duplicate mask id collides with an existing document id."
+                }
+                require(duplicateMaskIds.add(maskId)) { "Duplicate mask ids must be unique." }
+            }
+        }
     }
 }
 

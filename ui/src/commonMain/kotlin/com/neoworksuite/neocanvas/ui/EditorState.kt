@@ -909,7 +909,7 @@ class EditorState(
 
     fun duplicateSelectedObjects(): Boolean {
         val layers = mutableArrangeLayers(minimum = 1) ?: return false
-        val duplicateIds = nextLayerIds(layers.size)
+        val duplicateIds = nextLayerIds(layers)
         val mapping = layers.zip(duplicateIds).associate { (layer, duplicateId) -> layer.id to duplicateId }
         val command = DuplicateEditableLayers(mapping)
         val before = tileStore.snapshot()
@@ -3417,19 +3417,19 @@ class EditorState(
         return "layer-$ordinal"
     }
 
-    private fun nextLayerIds(count: Int): List<String> {
-        require(count >= 0)
-        val used = document.layers.mapTo(linkedSetOf(), Layer::id)
+    private fun nextLayerIds(layers: List<Layer>): List<String> {
+        val used = (document.layers.map { it.id } + document.layers.mapNotNull { it.mask?.id }).toMutableSet()
         val output = mutableListOf<String>()
         var ordinal = document.layers.size + 1
-        repeat(count) {
+        layers.forEach { layer ->
             var candidate = "layer-$ordinal"
-            while (candidate in used) {
+            while (candidate in used || (layer.mask != null && candidate + "-mask" in used)) {
                 ordinal++
                 candidate = "layer-$ordinal"
             }
             output += candidate
             used += candidate
+            if (layer.mask != null) used += candidate + "-mask"
             ordinal++
         }
         return output
