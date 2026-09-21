@@ -125,6 +125,39 @@ class PngExporterTest {
     }
 
     @Test
+    fun text_placeholders_are_available_only_for_thumbnail_rendering() {
+        val document = CanvasDocument(
+            "text-thumb",
+            120,
+            80,
+            layers = listOf(
+                Layer(
+                    "text",
+                    "Text",
+                    payload = LayerPayload.TextObject(
+                        "NeoCanvas",
+                        fontSize = 28f,
+                        colorArgb = 0xffff0000.toInt(),
+                        x = 20f,
+                        y = 20f,
+                        width = 80f,
+                        height = 40f,
+                    ),
+                ),
+            ),
+        )
+
+        assertFailsWith<IllegalStateException> {
+            PngExporter.render(document, emptyMap())
+        }
+
+        val preview = PngExporter.render(document, emptyMap(), allowTextPlaceholder = true)
+        assertEquals(120, preview.width)
+        assertEquals(80, preview.height)
+        kotlin.test.assertTrue((3 until preview.rgba.size step 4).any { (preview.rgba[it].toInt() and 255) > 0 })
+    }
+
+    @Test
     fun editable_shapes_flatten_into_png_and_text_never_disappears_silently() {
         val shapeDocument = CanvasDocument(
             "shape-png",

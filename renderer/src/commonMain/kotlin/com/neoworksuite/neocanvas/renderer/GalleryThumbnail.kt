@@ -7,7 +7,7 @@ import kotlin.math.min
 object GalleryThumbnail {
     fun render(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>, maxWidth: Int = 480, maxHeight: Int = 360): PngImage {
         require(maxWidth > 0 && maxHeight > 0)
-        val source = PngExporter.render(document, tiles)
+        val source = PngExporter.render(document, tiles, allowTextPlaceholder = true)
         val scale = min(1.0, min(maxWidth.toDouble() / source.width, maxHeight.toDouble() / source.height))
         val width = (source.width * scale).toInt().coerceAtLeast(1)
         val height = (source.height * scale).toInt().coerceAtLeast(1)

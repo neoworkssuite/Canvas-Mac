@@ -40,7 +40,11 @@ object PngExporter {
         SaveResult.Failure("Could not export PNG: ${error.message ?: "unknown output error"}")
     }
 
-    fun render(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): PngImage {
+    fun render(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+        allowTextPlaceholder: Boolean = false,
+    ): PngImage {
         val output = ByteArray(document.width * document.height * 4)
         val groupsById = document.groups.associateBy { it.id }
         document.layers.forEachIndexed { index, layer ->
@@ -80,9 +84,21 @@ object PngExporter {
                     )
                 }
 
-                is LayerPayload.TextObject -> error(
-                    "Editable text needs font-aware rasterization before PNG export. Keep the NeoCanvas file or rasterize the text layer.",
-                )
+                is LayerPayload.TextObject -> {
+                    if (!allowTextPlaceholder) {
+                        error(
+                            "Editable text needs font-aware rasterization before PNG export. Keep the NeoCanvas file or rasterize the text layer.",
+                        )
+                    }
+                    compositeTextPlaceholder(
+                        output,
+                        document.width,
+                        document.height,
+                        payload,
+                        effectiveOpacity,
+                        layer.blendMode,
+                    )
+                }
             }
         }
         return PngImage(document.width, document.height, output)
@@ -132,6 +148,71 @@ object PngExporter {
             offset += 4
         }
         return output
+    }
+
+    private fun compositeTextPlaceholder(
+        output: ByteArray,
+        outputWidth: Int,
+        outputHeight: Int,
+        text: LayerPayload.TextObject,
+        opacity: Float,
+        blendMode: com.neoworksuite.neocanvas.core.model.LayerBlendMode,
+    ) {
+        val centerX = text.x + text.width / 2f
+        val centerY = text.y + text.height / 2f
+        val angle = text.rotationDegrees * kotlin.math.PI.toFloat() / 180f
+        val cosA = kotlin.math.cos(angle)
+        val sinA = kotlin.math.sin(angle)
+        val source = ByteArray(4)
+        val argb = text.colorArgb
+        source[0] = (argb ushr 16).toByte()
+        source[1] = (argb ushr 8).toByte()
+        source[2] = argb.toByte()
+
+        fun inverseLocal(px: Float, py: Float): Pair<Float, Float> {
+            val dx = px - centerX
+            val dy = py - centerY
+            val lx = centerX + dx * cosA + dy * sinA - text.x
+            val ly = centerY - dx * sinA + dy * cosA - text.y
+            return lx to ly
+        }
+
+        val radius = kotlin.math.sqrt(text.width * text.width + text.height * text.height) / 2f + 2f
+        val fromX = kotlin.math.floor(centerX - radius).toInt().coerceIn(0, outputWidth)
+        val fromY = kotlin.math.floor(centerY - radius).toInt().coerceIn(0, outputHeight)
+        val toX = kotlin.math.ceil(centerX + radius).toInt().coerceIn(0, outputWidth)
+        val toY = kotlin.math.ceil(centerY + radius).toInt().coerceIn(0, outputHeight)
+        val lineCount = (text.text.lineSequence().count().coerceIn(1, 4))
+        val lineHeight = text.height / (lineCount + 2f)
+        val strokeThickness = maxOf(1f, minOf(text.fontSize * .08f, lineHeight * .18f))
+        val alphaBase = ((argb ushr 24) and 255) / 255f
+
+        for (y in fromY until toY) {
+            for (x in fromX until toX) {
+                val (lx, ly) = inverseLocal(x + .5f, y + .5f)
+                if (lx !in 0f..text.width || ly !in 0f..text.height) continue
+                var covered = false
+                for (line in 0 until lineCount) {
+                    val lineY = lineHeight * (line + 1.5f)
+                    val left = text.width * .08f
+                    val right = text.width * if (line == lineCount - 1) .68f else .92f
+                    if (lx in left..right && kotlin.math.abs(ly - lineY) <= strokeThickness / 2f) {
+                        covered = true
+                        break
+                    }
+                }
+                if (!covered) continue
+                source[3] = (255f * alphaBase * .48f + .5f).toInt().coerceIn(0, 255).toByte()
+                LayerCompositor.compositePixel(
+                    output,
+                    (y * outputWidth + x) * 4,
+                    source,
+                    0,
+                    opacity,
+                    blendMode,
+                )
+            }
+        }
     }
 
     private fun compositeShape(
