@@ -5,6 +5,7 @@ import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.LayerGroup
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
