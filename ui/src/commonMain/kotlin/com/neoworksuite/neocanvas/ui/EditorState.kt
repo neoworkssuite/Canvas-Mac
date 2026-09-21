@@ -752,6 +752,13 @@ class EditorState(
         )))
     }
 
+    fun removeActiveShapeFill() {
+        val layer = activeObjectLayer ?: return
+        val payload = layer.payload as? LayerPayload.ShapeObject ?: return
+        if (payload.kind == ShapeKind.Line || payload.fillArgb == null || payload.strokeArgb == null) return
+        execute(UpdateShapeLayer(layer.id, payload.copy(fillArgb = null)))
+    }
+
     fun removeActiveShapeStroke() {
         val layer = activeObjectLayer ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return

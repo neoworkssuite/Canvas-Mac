@@ -108,7 +108,10 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 ObjectAction("Outline Current", Modifier.weight(1f)) {
                     state.useCurrentColourForActiveObject(asStroke = true)
                 }
-                if (shape.kind != ShapeKind.Line && shape.strokeArgb != null) {
+            }
+            if (shape.kind != ShapeKind.Line && shape.strokeArgb != null && shape.fillArgb != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    ObjectAction("No Fill", Modifier.weight(1f)) { state.removeActiveShapeFill() }
                     ObjectAction("No Outline", Modifier.weight(1f)) { state.removeActiveShapeStroke() }
                 }
             }

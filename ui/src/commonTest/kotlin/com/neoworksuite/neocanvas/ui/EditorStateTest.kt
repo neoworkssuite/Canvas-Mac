@@ -661,6 +661,8 @@ class EditorStateTest {
         assertTrue(state.tileStore.keys.isEmpty())
 
         state.useCurrentColourForActiveObject(asStroke = true)
+        state.removeActiveShapeFill()
+        assertNull(state.activeShapeObject!!.fillArgb)
         state.setActiveShapeStrokeWidth(12f)
         state.scaleActiveObject(1.1f)
         assertEquals(13.2f, state.activeShapeObject!!.strokeWidth, .001f)
