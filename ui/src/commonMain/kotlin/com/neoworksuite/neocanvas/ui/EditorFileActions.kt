@@ -24,6 +24,7 @@ interface EditorFileActions {
     fun loadRecovery(): LoadResult? = null
 
     val supportsVersions: Boolean get() = false
+    val supportsVersionBranches: Boolean get() = false
     fun listVersions(documentId: String): List<LocalVersionEntry> = emptyList()
     fun createVersion(
         label: String,
