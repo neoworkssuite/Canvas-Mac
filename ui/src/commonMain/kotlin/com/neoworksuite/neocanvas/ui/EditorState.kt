@@ -59,12 +59,14 @@ import com.neoworksuite.neocanvas.renderer.RasterColor
 import com.neoworksuite.neocanvas.renderer.RasterPoint
 import com.neoworksuite.neocanvas.renderer.Rasterizer
 import com.neoworksuite.neocanvas.renderer.RasterSelection
+import com.neoworksuite.neocanvas.renderer.RasterLiquify
+import com.neoworksuite.neocanvas.renderer.LiquifyMode
 import com.neoworksuite.neocanvas.renderer.TileKey
 import com.neoworksuite.neocanvas.renderer.TileStore
 
-enum class Tool { Brush, Eraser, Smudge, Pan, Fill, Eyedropper, Select, MoveSelection }
+enum class Tool { Brush, Eraser, Smudge, Liquify, Pan, Fill, Eyedropper, Select, MoveSelection }
 enum class ObjectCanvasAlignment { Left, CenterHorizontal, Right, Top, CenterVertical, Bottom, CenterBoth }
-enum class InspectorPanel { Layers, Brushes, Colors, Effects }
+enum class InspectorPanel { Layers, Brushes, Colors, Effects, Liquify }
 enum class PendingDocumentAction { New, Open, Close }
 data class DrawPoint(val x: Float, val y: Float, val pressure: Float = 1f)
 
@@ -624,6 +626,9 @@ class EditorState(
     var automaticSelectionTolerancePercent: Int by mutableIntStateOf(12)
     var brushOpacity: Float by mutableFloatStateOf(1f)
     var smudgeStrength: Float by mutableFloatStateOf(.65f)
+    var liquifySize: Float by mutableFloatStateOf(120f)
+    var liquifyStrength: Float by mutableFloatStateOf(.65f)
+    var liquifyMode: LiquifyMode by mutableStateOf(LiquifyMode.Push)
     var stabilization: Float by mutableFloatStateOf(0f)
     var symmetry: com.neoworksuite.neocanvas.renderer.DrawingSymmetry by mutableStateOf(com.neoworksuite.neocanvas.renderer.DrawingSymmetry.None)
     var tool: Tool by mutableStateOf(Tool.Brush)
@@ -2581,7 +2586,26 @@ class EditorState(
     }
     fun activateTool(next: Tool) {
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Liquify && next != Tool.Liquify) hideInspector()
         tool = next
+    }
+
+    fun activateLiquifyTool(): Boolean {
+        val layer = activeLayerId?.let { id -> document.layers.firstOrNull { it.id == id } }
+        if (layer == null || !layer.visible || layer.locked || isGroupLocked(layer) || layer.payload !is LayerPayload.Raster) {
+            statusMessage = "Select an unlocked visible raster layer before using Liquify"
+            return false
+        }
+        if (maskEditingLayerId == layer.id) {
+            statusMessage = "Liquify is unavailable while editing a layer mask"
+            return false
+        }
+        selectedObjectLayerIds = emptySet()
+        objectArrangePicking = false
+        activateTool(Tool.Liquify)
+        showInspector(InspectorPanel.Liquify)
+        statusMessage = "Liquify " + liquifyMode.name.lowercase() + " — drag on canvas"
+        return true
     }
 
     fun openSettings() {
@@ -2825,7 +2849,7 @@ class EditorState(
     /** Rasterizes one completed gesture into sparse tiles and commits its address patch to history. */
     fun recordStroke(points: List<DrawPoint>, stabilize: Boolean = true) {
         val layerId = activeLayerId ?: return
-        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge)) return
+        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge, Tool.Liquify)) return
         if (!wakeLayer(layerId)) return
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return
         if (isGroupLocked(activeLayer)) {
@@ -2838,8 +2862,11 @@ class EditorState(
         }
 
         if (maskEditingLayerId == layerId) {
-            if (tool == Tool.Smudge) {
-                statusMessage = "Smudge is unavailable while editing a mask"
+            if (tool == Tool.Smudge || tool == Tool.Liquify) {
+                statusMessage = if (tool == Tool.Liquify)
+                    "Liquify is unavailable while editing a mask"
+                else
+                    "Smudge is unavailable while editing a mask"
                 return
             }
             val mask = activeLayer.mask ?: run {
@@ -2864,7 +2891,11 @@ class EditorState(
             return
         }
 
-        val patch = if (tool == Tool.Smudge) previewSmudge(points, stabilize) else previewStroke(points, stabilize)
+        val patch = when (tool) {
+            Tool.Smudge -> previewSmudge(points, stabilize)
+            Tool.Liquify -> previewLiquify(points, stabilize)
+            else -> previewStroke(points, stabilize)
+        }
         if (patch == null) return
         val before = tileStore.snapshot()
         val layerBefore = tileStore.snapshotLayer(layerId)
@@ -2885,6 +2916,8 @@ class EditorState(
                 brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
             ) BuiltInBrushes.eraser else brush
             appendEditableStroke(layerId, layerBefore, points, stabilize, activeLayer, effectiveBrush, mode)
+        } else if (tool == Tool.Liquify) {
+            statusMessage = "Liquify " + liquifyMode.name.lowercase() + " applied"
         }
     }
 
@@ -2977,6 +3010,32 @@ class EditorState(
 
     private fun whiteMaskTile(): ByteArray =
         ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE) { 255.toByte() }
+
+    fun previewLiquify(
+        points: List<DrawPoint>,
+        stabilize: Boolean = true,
+    ): com.neoworksuite.neocanvas.renderer.RasterPatch? {
+        val layerId = activeLayerId ?: return null
+        if (points.isEmpty() || tool != Tool.Liquify) return null
+        val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
+        if (activeLayer.payload !is LayerPayload.Raster || isGroupLocked(activeLayer) || maskEditingLayerId == layerId) return null
+        val rasterPoints = points.map {
+            RasterPoint(it.x, it.y, normalizedPressure(it.pressure))
+        }.let {
+            if (stabilize && it.size > 2) com.neoworksuite.neocanvas.renderer.smoothStroke(it, stabilization) else it
+        }
+        return RasterLiquify.stroke(
+            existing = tileStore,
+            layerId = layerId,
+            points = rasterPoints,
+            size = liquifySize.coerceIn(8f, 320f),
+            strength = liquifyStrength.coerceIn(0f, 1f),
+            mode = liquifyMode,
+            canvasWidth = document.width,
+            canvasHeight = document.height,
+            acceptsPixel = { x, y -> selection?.contains(x, y) ?: true },
+        )
+    }
 
     fun previewSmudge(
         points: List<DrawPoint>,

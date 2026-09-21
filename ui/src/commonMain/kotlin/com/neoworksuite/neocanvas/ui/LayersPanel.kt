@@ -61,6 +61,7 @@ fun StudioInspector(state: EditorState, compact: Boolean, modifier: Modifier = M
             InspectorPanel.Brushes -> BrushPanel(state, Modifier.fillMaxSize())
             InspectorPanel.Colors -> ColorPanel(state, Modifier.fillMaxSize())
             InspectorPanel.Effects -> EffectsPanel(state, Modifier.fillMaxSize())
+            InspectorPanel.Liquify -> LiquifyPanel(state, Modifier.fillMaxSize())
         }
     }
 }

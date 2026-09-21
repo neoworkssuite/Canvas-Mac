@@ -210,6 +210,7 @@ private fun StudioActionsMenu(state: EditorState) {
                 }
                 ActionMenuPage.Tools -> {
                     ActionBackItem { page = ActionMenuPage.Root }
+                    ActionItem("Liquify…") { closeMenu(); state.activateLiquifyTool() }
                     ActionItem("Fill") { closeMenu(); state.activateTool(Tool.Fill) }
                     ActionItem("Eyedropper") { closeMenu(); state.activateTool(Tool.Eyedropper) }
                     ActionItem("Pan / Move Canvas") { closeMenu(); state.activateTool(Tool.Pan) }
@@ -367,22 +368,26 @@ fun StudioRail(state: EditorState, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.tool == Tool.Fill) {
-            VerticalRailControl("TOL", state.fillTolerance.toFloat(), 0f..255f, { it.toInt().toString() }) {
+        when (state.tool) {
+            Tool.Fill -> VerticalRailControl("TOL", state.fillTolerance.toFloat(), 0f..255f, { it.toInt().toString() }) {
                 state.fillTolerance = it.toInt()
             }
-        } else {
-            VerticalRailControl("SIZE", state.brushSize, 1f..192f, { it.toInt().toString() }) {
+            Tool.Liquify -> VerticalRailControl("SIZE", state.liquifySize, 8f..320f, { it.toInt().toString() }) {
+                state.liquifySize = it
+            }
+            else -> VerticalRailControl("SIZE", state.brushSize, 1f..192f, { it.toInt().toString() }) {
                 state.brushSize = it
             }
         }
 
-        if (state.tool == Tool.Smudge) {
-            VerticalRailControl("POWER", state.smudgeStrength, 0.01f..1f, { ((it * 100).toInt()).toString() }) {
+        when (state.tool) {
+            Tool.Smudge -> VerticalRailControl("POWER", state.smudgeStrength, 0.01f..1f, { ((it * 100).toInt()).toString() }) {
                 state.smudgeStrength = it
             }
-        } else {
-            VerticalRailControl("OPACITY", state.brushOpacity, 0.05f..1f, { ((it * 100).toInt()).toString() }) {
+            Tool.Liquify -> VerticalRailControl("POWER", state.liquifyStrength, 0.01f..1f, { ((it * 100).toInt()).toString() }) {
+                state.liquifyStrength = it
+            }
+            else -> VerticalRailControl("OPACITY", state.brushOpacity, 0.05f..1f, { ((it * 100).toInt()).toString() }) {
                 state.brushOpacity = it
             }
         }

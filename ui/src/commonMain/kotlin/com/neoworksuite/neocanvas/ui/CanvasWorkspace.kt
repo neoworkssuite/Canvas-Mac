@@ -137,10 +137,14 @@ fun CanvasWorkspace(
         val currentRotation by rememberUpdatedState(state.viewRotationDegrees)
         val previewPoints = inProgress.toList()
         val strokePreview = remember(previewPoints, document, state.tool, state.activeLayerId,
-            state.brush, state.brushSize, state.brushOpacity, state.smudgeStrength, state.color, state.selection, state.stabilization,
+            state.brush, state.brushSize, state.brushOpacity, state.smudgeStrength,
+            state.liquifySize, state.liquifyStrength, state.liquifyMode, state.color, state.selection, state.stabilization,
             state.symmetry, quickShapeSnapped) {
-            if (state.tool == Tool.Smudge) state.previewSmudge(previewPoints, stabilize = true)
-            else state.previewStroke(previewPoints, stabilize = !quickShapeSnapped)
+            when (state.tool) {
+                Tool.Smudge -> state.previewSmudge(previewPoints, stabilize = true)
+                Tool.Liquify -> state.previewLiquify(previewPoints, stabilize = true)
+                else -> state.previewStroke(previewPoints, stabilize = !quickShapeSnapped)
+            }
         }
         val movePreview = remember(moveDelta, movingSelection, state.selection, state.activeLayerId, document) {
             if (movingSelection) state.previewSelectionMove(moveDelta.x.toInt(), moveDelta.y.toInt()) else null
@@ -264,6 +268,9 @@ fun CanvasWorkspace(
                     state.brushSize,
                     state.brushOpacity,
                     state.smudgeStrength,
+                    state.liquifySize,
+                    state.liquifyStrength,
+                    state.liquifyMode,
                     state.fingerPaintingEnabled,
                     state.quickShapeEnabled,
                     state.objectEditorVisible,
@@ -276,7 +283,7 @@ fun CanvasWorkspace(
                     if (
                         down.type != PointerType.Stylus &&
                         !state.fingerPaintingEnabled &&
-                        state.tool in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge)
+                        state.tool in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge, Tool.Liquify)
                     ) {
                         return@awaitEachGesture
                     }

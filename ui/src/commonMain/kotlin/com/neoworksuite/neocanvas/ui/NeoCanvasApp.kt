@@ -254,6 +254,18 @@ fun NeoCanvasApp(
                         .fillMaxHeight(if (compact) .66f else .78f)
                         .widthIn(max = 420.dp)
                         .heightIn(max = 640.dp)
+
+                InspectorPanel.Liquify ->
+                    Modifier.align(overlayAlignment)
+                        .padding(
+                            end = if (compact) 10.dp else 16.dp,
+                            start = if (compact) 10.dp else 0.dp,
+                            bottom = 12.dp,
+                        )
+                        .fillMaxWidth(if (compact) .94f else .38f)
+                        .fillMaxHeight(if (compact) .58f else .62f)
+                        .widthIn(max = 400.dp)
+                        .heightIn(max = 520.dp)
             }
 
             Box(
