@@ -382,13 +382,18 @@ fun CanvasWorkspace(
                             val currentObjectPoint = Offset(currentPoint.x, currentPoint.y)
                             if (startingObjectPayload != null && objectCenter != null && objectDrag != ObjectDrag.None) {
                                 objectGesturePreview = when (objectDrag) {
-                                    ObjectDrag.Move -> transformEditableObject(
-                                        startingObjectPayload,
-                                        translation = currentObjectPoint - initialOffset,
-                                        scale = 1f,
-                                        rotationDelta = 0f,
-                                        documentWidth = document.width,
-                                        documentHeight = document.height,
+                                    ObjectDrag.Move -> state.snapEditableObjectPreview(
+                                        transformEditableObject(
+                                            startingObjectPayload,
+                                            translation = currentObjectPoint - initialOffset,
+                                            scale = 1f,
+                                            rotationDelta = 0f,
+                                            documentWidth = document.width,
+                                            documentHeight = document.height,
+                                        ),
+                                        positionThreshold = 10f / gestureScale,
+                                        snapPosition = true,
+                                        snapRotation = false,
                                     )
                                     ObjectDrag.Scale -> transformEditableObject(
                                         startingObjectPayload,
@@ -399,13 +404,18 @@ fun CanvasWorkspace(
                                         documentWidth = document.width,
                                         documentHeight = document.height,
                                     )
-                                    ObjectDrag.Rotate -> transformEditableObject(
-                                        startingObjectPayload,
-                                        translation = Offset.Zero,
-                                        scale = 1f,
-                                        rotationDelta = angleDeltaDegrees(initialOffset - objectCenter, currentObjectPoint - objectCenter),
-                                        documentWidth = document.width,
-                                        documentHeight = document.height,
+                                    ObjectDrag.Rotate -> state.snapEditableObjectPreview(
+                                        transformEditableObject(
+                                            startingObjectPayload,
+                                            translation = Offset.Zero,
+                                            scale = 1f,
+                                            rotationDelta = angleDeltaDegrees(initialOffset - objectCenter, currentObjectPoint - objectCenter),
+                                            documentWidth = document.width,
+                                            documentHeight = document.height,
+                                        ),
+                                        positionThreshold = 0f,
+                                        snapPosition = false,
+                                        snapRotation = true,
                                     )
                                     ObjectDrag.None -> startingObjectPayload
                                 }

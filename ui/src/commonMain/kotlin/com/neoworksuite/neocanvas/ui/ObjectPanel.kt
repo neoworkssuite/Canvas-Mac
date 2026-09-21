@@ -181,6 +181,19 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 color = NeoCanvasColors.muted,
                 fontSize = 9.sp,
             )
+            ObjectAction(
+                if (state.objectSnapping) "Canvas Snap ✓" else "Canvas Snap",
+                Modifier.fillMaxWidth(),
+                selected = state.objectSnapping,
+                enabled = !locked,
+            ) {
+                state.objectSnapping = !state.objectSnapping
+            }
+            Text(
+                "Snap catches nearby canvas edges and centres; rotation catches nearby 15° guides.",
+                color = NeoCanvasColors.faint,
+                fontSize = 9.sp,
+            )
             Text("ALIGN TO CANVAS", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 ObjectAction("Left", Modifier.weight(1f), enabled = !locked) {

@@ -628,6 +628,7 @@ class EditorState(
     var transformSession: TransformSession? by mutableStateOf(null)
         private set
     var transformSnapping: Boolean by mutableStateOf(false)
+    var objectSnapping: Boolean by mutableStateOf(false)
 
     var objectEditorVisible: Boolean by mutableStateOf(false)
         private set
@@ -916,6 +917,58 @@ class EditorState(
             right = corners.maxOf { it.first },
             bottom = corners.maxOf { it.second },
         )
+    }
+
+    fun snapEditableObjectPreview(
+        payload: LayerPayload,
+        positionThreshold: Float,
+        snapPosition: Boolean = true,
+        snapRotation: Boolean = true,
+    ): LayerPayload {
+        if (!objectSnapping || !positionThreshold.isFinite() || positionThreshold < 0f) return payload
+        if (payload !is LayerPayload.TextObject && payload !is LayerPayload.ShapeObject) return payload
+
+        var next = payload
+        if (snapRotation) {
+            val rotation = when (next) {
+                is LayerPayload.TextObject -> next.rotationDegrees
+                is LayerPayload.ShapeObject -> next.rotationDegrees
+                is LayerPayload.Raster -> 0f
+            }
+            val guide = kotlin.math.round(rotation / 15f) * 15f
+            val delta = normalizeObjectRotation(rotation - guide)
+            if (kotlin.math.abs(delta) <= 3f) {
+                next = when (next) {
+                    is LayerPayload.TextObject -> next.copy(rotationDegrees = normalizeObjectRotation(guide))
+                    is LayerPayload.ShapeObject -> next.copy(rotationDegrees = normalizeObjectRotation(guide))
+                    is LayerPayload.Raster -> next
+                }
+            }
+        }
+
+        if (!snapPosition) return next
+        val bounds = editableObjectVisualBounds(next)
+        val horizontalCandidates = listOf(
+            -bounds.left,
+            document.width / 2f - (bounds.left + bounds.right) / 2f,
+            document.width - bounds.right,
+        )
+        val verticalCandidates = listOf(
+            -bounds.top,
+            document.height / 2f - (bounds.top + bounds.bottom) / 2f,
+            document.height - bounds.bottom,
+        )
+        val dx = horizontalCandidates.filter { kotlin.math.abs(it) <= positionThreshold }
+            .minByOrNull { kotlin.math.abs(it) } ?: 0f
+        val dy = verticalCandidates.filter { kotlin.math.abs(it) <= positionThreshold }
+            .minByOrNull { kotlin.math.abs(it) } ?: 0f
+        if (dx == 0f && dy == 0f) return next
+
+        return when (next) {
+            is LayerPayload.TextObject -> next.copy(x = next.x + dx, y = next.y + dy)
+            is LayerPayload.ShapeObject -> next.copy(x = next.x + dx, y = next.y + dy)
+            is LayerPayload.Raster -> next
+        }
     }
 
     fun moveActiveObject(dx: Float, dy: Float) {

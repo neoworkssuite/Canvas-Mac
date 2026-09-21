@@ -841,6 +841,67 @@ class EditorStateTest {
     }
 
     @Test
+    fun editable_object_canvas_snap_catches_nearby_edges_centres_and_angles() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(400, 300, id = "snap-object")))
+        state.objectSnapping = true
+
+        val nearLeft = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 5f,
+            y = 70f,
+            width = 100f,
+            height = 60f,
+        )
+        val leftSnapped = state.snapEditableObjectPreview(
+            nearLeft,
+            positionThreshold = 8f,
+            snapRotation = false,
+        ) as LayerPayload.ShapeObject
+        assertEquals(0f, leftSnapped.x, .001f)
+        assertEquals(70f, leftSnapped.y, .001f)
+
+        val nearCentre = nearLeft.copy(x = 151f, y = 121f)
+        val centreSnapped = state.snapEditableObjectPreview(
+            nearCentre,
+            positionThreshold = 4f,
+            snapRotation = false,
+        ) as LayerPayload.ShapeObject
+        assertEquals(150f, centreSnapped.x, .001f)
+        assertEquals(120f, centreSnapped.y, .001f)
+
+        val nearAngle = nearLeft.copy(rotationDegrees = 14f)
+        val angleSnapped = state.snapEditableObjectPreview(
+            nearAngle,
+            positionThreshold = 0f,
+            snapPosition = false,
+        ) as LayerPayload.ShapeObject
+        assertEquals(15f, angleSnapped.rotationDegrees, .001f)
+
+        val freeAngle = nearLeft.copy(rotationDegrees = 10f)
+        val unsnappedAngle = state.snapEditableObjectPreview(
+            freeAngle,
+            positionThreshold = 0f,
+            snapPosition = false,
+        ) as LayerPayload.ShapeObject
+        assertEquals(10f, unsnappedAngle.rotationDegrees, .001f)
+    }
+
+    @Test
+    fun editable_object_canvas_snap_can_be_disabled() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(400, 300, id = "snap-off")))
+        val payload = LayerPayload.TextObject(
+            text = "Free",
+            x = 3f,
+            y = 3f,
+            width = 120f,
+            height = 60f,
+            rotationDegrees = 14f,
+        )
+        assertFalse(state.objectSnapping)
+        assertEquals(payload, state.snapEditableObjectPreview(payload, positionThreshold = 10f))
+    }
+
+    @Test
     fun editable_object_alignment_respects_group_lock() {
         val shape = LayerPayload.ShapeObject(
             kind = ShapeKind.Rectangle,
