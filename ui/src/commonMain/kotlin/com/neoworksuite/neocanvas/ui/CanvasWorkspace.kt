@@ -438,7 +438,17 @@ fun CanvasWorkspace(
                             if (groupDrag != ObjectDrag.None && groupCenter != null) {
                                 when (groupDrag) {
                                     ObjectDrag.Move -> {
-                                        groupTranslation = currentObjectPoint - initialOffset
+                                        val rawTranslation = currentObjectPoint - initialOffset
+                                        groupTranslation = if (state.objectSnapping) {
+                                            snapEditableObjectGroupTranslation(
+                                                payloads = startingGroupPayloads.values,
+                                                groupCenter = groupCenter,
+                                                translation = rawTranslation,
+                                                documentWidth = document.width,
+                                                documentHeight = document.height,
+                                                threshold = 10f / gestureScale,
+                                            )
+                                        } else rawTranslation
                                         groupScale = 1f
                                         groupRotationDelta = 0f
                                     }
@@ -451,10 +461,13 @@ fun CanvasWorkspace(
                                     ObjectDrag.Rotate -> {
                                         groupTranslation = Offset.Zero
                                         groupScale = 1f
-                                        groupRotationDelta = angleDeltaDegrees(
+                                        val rawRotationDelta = angleDeltaDegrees(
                                             initialOffset - groupCenter,
                                             currentObjectPoint - groupCenter,
                                         )
+                                        groupRotationDelta = if (state.objectSnapping) {
+                                            snapEditableObjectGroupRotation(rawRotationDelta)
+                                        } else rawRotationDelta
                                     }
                                     ObjectDrag.None -> Unit
                                 }
@@ -615,15 +628,24 @@ fun CanvasWorkspace(
                 )
 
                 if (state.objectSnapping) {
-                    objectGesturePreview?.let { preview ->
-                        val guides = editableObjectSmartGuides(
-                            preview,
+                    val guides = when {
+                        objectGroupGesturePreview.isNotEmpty() -> editableObjectGroupSmartGuides(
+                            objectGroupGesturePreview.values.toList(),
                             document.width,
                             document.height,
                             tolerance = 1.5f / scale,
                         )
+                        objectGesturePreview != null -> editableObjectSmartGuides(
+                            objectGesturePreview!!,
+                            document.width,
+                            document.height,
+                            tolerance = 1.5f / scale,
+                        )
+                        else -> null
+                    }
+                    guides?.let {
                         val guideColor = NeoCanvasColors.accent.copy(alpha = .9f)
-                        guides.verticalX?.let { x ->
+                        it.verticalX?.let { x ->
                             drawLine(
                                 guideColor,
                                 Offset(x, 0f),
@@ -631,7 +653,7 @@ fun CanvasWorkspace(
                                 1.5f / scale,
                             )
                         }
-                        guides.horizontalY?.let { y ->
+                        it.horizontalY?.let { y ->
                             drawLine(
                                 guideColor,
                                 Offset(0f, y),
@@ -1384,27 +1406,40 @@ internal fun editableObjectSmartGuides(
     documentHeight: Int,
     tolerance: Float,
 ): EditableObjectSmartGuides {
+    val bounds = editableObjectArrangeBounds(listOf(payload)) ?: return EditableObjectSmartGuides()
+    return editableObjectSmartGuidesForBounds(bounds, documentWidth, documentHeight, tolerance)
+}
+
+internal fun editableObjectGroupSmartGuides(
+    payloads: List<LayerPayload>,
+    documentWidth: Int,
+    documentHeight: Int,
+    tolerance: Float,
+): EditableObjectSmartGuides {
+    val bounds = editableObjectArrangeBounds(payloads) ?: return EditableObjectSmartGuides()
+    return editableObjectSmartGuidesForBounds(bounds, documentWidth, documentHeight, tolerance)
+}
+
+private fun editableObjectSmartGuidesForBounds(
+    bounds: EditableObjectArrangeBounds,
+    documentWidth: Int,
+    documentHeight: Int,
+    tolerance: Float,
+): EditableObjectSmartGuides {
     if (tolerance < 0f || !tolerance.isFinite()) return EditableObjectSmartGuides()
-    val geometry = payload.editableObjectGeometry() ?: return EditableObjectSmartGuides()
-    val corners = geometry.outlineCorners()
-    if (corners.isEmpty()) return EditableObjectSmartGuides()
-    val left = corners.minOf { it.x }
-    val right = corners.maxOf { it.x }
-    val top = corners.minOf { it.y }
-    val bottom = corners.maxOf { it.y }
-    val centerX = (left + right) / 2f
-    val centerY = (top + bottom) / 2f
+    val centerX = (bounds.left + bounds.right) / 2f
+    val centerY = (bounds.top + bounds.bottom) / 2f
 
     val vertical = listOf(
-        kotlin.math.abs(left) to 0f,
+        kotlin.math.abs(bounds.left) to 0f,
         kotlin.math.abs(centerX - documentWidth / 2f) to documentWidth / 2f,
-        kotlin.math.abs(right - documentWidth) to documentWidth.toFloat(),
+        kotlin.math.abs(bounds.right - documentWidth) to documentWidth.toFloat(),
     ).filter { it.first <= tolerance }.minByOrNull { it.first }?.second
 
     val horizontal = listOf(
-        kotlin.math.abs(top) to 0f,
+        kotlin.math.abs(bounds.top) to 0f,
         kotlin.math.abs(centerY - documentHeight / 2f) to documentHeight / 2f,
-        kotlin.math.abs(bottom - documentHeight) to documentHeight.toFloat(),
+        kotlin.math.abs(bounds.bottom - documentHeight) to documentHeight.toFloat(),
     ).filter { it.first <= tolerance }.minByOrNull { it.first }?.second
 
     return EditableObjectSmartGuides(vertical, horizontal)
@@ -1564,6 +1599,51 @@ private fun transformEditableObjectAsGroup(
 
         is LayerPayload.Raster -> payload
     }
+}
+
+private fun snapEditableObjectGroupTranslation(
+    payloads: Collection<LayerPayload>,
+    groupCenter: Offset,
+    translation: Offset,
+    documentWidth: Int,
+    documentHeight: Int,
+    threshold: Float,
+): Offset {
+    if (!threshold.isFinite() || threshold < 0f) return translation
+    val preview = payloads.map { payload ->
+        transformEditableObjectAsGroup(
+            payload = payload,
+            groupCenter = groupCenter,
+            translation = translation,
+            scale = 1f,
+            rotationDelta = 0f,
+            documentWidth = documentWidth,
+            documentHeight = documentHeight,
+        )
+    }
+    val bounds = editableObjectArrangeBounds(preview) ?: return translation
+    val horizontalCandidates = listOf(
+        -bounds.left,
+        documentWidth / 2f - (bounds.left + bounds.right) / 2f,
+        documentWidth - bounds.right,
+    )
+    val verticalCandidates = listOf(
+        -bounds.top,
+        documentHeight / 2f - (bounds.top + bounds.bottom) / 2f,
+        documentHeight - bounds.bottom,
+    )
+    val dx = horizontalCandidates.filter { kotlin.math.abs(it) <= threshold }
+        .minByOrNull { kotlin.math.abs(it) } ?: 0f
+    val dy = verticalCandidates.filter { kotlin.math.abs(it) <= threshold }
+        .minByOrNull { kotlin.math.abs(it) } ?: 0f
+    return translation + Offset(dx, dy)
+}
+
+private fun snapEditableObjectGroupRotation(rotationDelta: Float): Float {
+    if (!rotationDelta.isFinite()) return 0f
+    val guide = kotlin.math.round(rotationDelta / 15f) * 15f
+    val delta = normalizeViewRotation(rotationDelta - guide)
+    return if (kotlin.math.abs(delta) <= 3f) guide else rotationDelta
 }
 
 private fun signedObjectScale(value: Float, factor: Float, minMagnitude: Float, maxMagnitude: Float): Float {
