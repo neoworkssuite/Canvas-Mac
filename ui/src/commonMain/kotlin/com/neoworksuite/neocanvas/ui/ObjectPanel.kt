@@ -168,7 +168,7 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 ObjectAction("+15°", Modifier.weight(1f), enabled = !locked) { state.rotateActiveObject(15f) }
             }
             Text(
-                "Objects stay editable in NeoCanvas format v2. Rasterize only when a target format requires it.",
+                "Objects stay editable in NeoCanvas format v2. PNG and PSD export a flattened copy while the NeoCanvas source stays editable.",
                 color = NeoCanvasColors.faint,
                 fontSize = 9.sp,
             )
