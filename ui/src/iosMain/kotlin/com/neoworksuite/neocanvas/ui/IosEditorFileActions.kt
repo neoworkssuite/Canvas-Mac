@@ -10,12 +10,20 @@ import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
+import com.neoworksuite.neocanvas.renderer.TextRasterizer
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.allocArrayOf
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.usePinned
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import org.jetbrains.skia.Font
+import org.jetbrains.skia.FontMgr
+import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.Paint
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.Surface
+import org.jetbrains.skia.TextLine
 import platform.Foundation.NSURL
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
@@ -343,7 +351,11 @@ internal class IosEditorFileActions(
         ensureDirectory(exportDirectory)
         val base = currentDocumentName?.removeSuffix(".neocanvas") ?: "NeoCanvas"
         val target = join(exportDirectory, "$base.png")
-        return PngExporter.export(document, tiles) { bytes ->
+        return PngExporter.export(
+            document,
+            tiles,
+            textRasterizer = ipadTextRasterizer,
+        ) { bytes ->
             check(writeBytes(target, bytes)) { "Could not write PNG to iPad Documents." }
         }
     }
@@ -526,6 +538,95 @@ internal class IosEditorFileActions(
     private fun writeBytes(path: String, bytes: ByteArray): Boolean = bytes.toNSData().writeToFile(path, true)
 
     private fun join(directory: String, name: String): String = "${directory.trimEnd('/')}/$name"
+}
+
+private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeight ->
+    val surface = Surface.makeRasterN32Premul(outputWidth, outputHeight)
+    val canvas = surface.canvas
+    canvas.clear(0x00000000)
+
+    val requestedFamily = when (text.fontFamily.trim().lowercase()) {
+        "sans", "sans-serif", "sans serif" -> "Helvetica"
+        "serif" -> "Times New Roman"
+        "mono", "monospace" -> "Menlo"
+        else -> "Helvetica Neue"
+    }
+    val typeface = FontMgr.default.matchFamilyStyle(requestedFamily, FontStyle.NORMAL)
+        ?: FontMgr.default.matchFamilyStyle("Helvetica", FontStyle.NORMAL)
+    val font = Font(typeface, text.fontSize)
+    val paint = Paint().apply {
+        color = text.colorArgb
+        isAntiAlias = true
+    }
+
+    val centerX = text.x + text.width / 2f
+    val centerY = text.y + text.height / 2f
+    canvas.save()
+    canvas.translate(centerX, centerY)
+    canvas.rotate(text.rotationDegrees)
+    canvas.translate(-centerX, -centerY)
+    canvas.clipRect(Rect.makeXYWH(text.x, text.y, text.width, text.height))
+
+    val lines = wrapEditableText(text.text, font, text.width)
+    val lineHeight = text.fontSize * 1.2f
+    var baseline = text.y + text.fontSize
+    for (line in lines) {
+        if (baseline - text.fontSize > text.y + text.height) break
+        val textLine = TextLine.make(line, font)
+        val drawX = when (text.alignment) {
+            com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> text.x
+            com.neoworksuite.neocanvas.core.model.TextAlignment.Center ->
+                text.x + (text.width - textLine.width) / 2f
+            com.neoworksuite.neocanvas.core.model.TextAlignment.Right ->
+                text.x + text.width - textLine.width
+        }
+        canvas.drawTextLine(textLine, drawX, baseline, paint)
+        baseline += lineHeight
+    }
+    canvas.restore()
+
+    val pixels = IntArray(outputWidth * outputHeight)
+    surface.makeImageSnapshot().toComposeImageBitmap().readPixels(
+        buffer = pixels,
+        startX = 0,
+        startY = 0,
+        width = outputWidth,
+        height = outputHeight,
+        bufferOffset = 0,
+        stride = outputWidth,
+    )
+    ByteArray(pixels.size * 4).also { rgba ->
+        pixels.forEachIndexed { index, argb ->
+            val offset = index * 4
+            rgba[offset] = (argb ushr 16).toByte()
+            rgba[offset + 1] = (argb ushr 8).toByte()
+            rgba[offset + 2] = argb.toByte()
+            rgba[offset + 3] = (argb ushr 24).toByte()
+        }
+    }
+}
+
+private fun wrapEditableText(value: String, font: Font, maxWidth: Float): List<String> {
+    if (value.isEmpty()) return listOf("")
+    val output = mutableListOf<String>()
+    value.split('\n').forEach { paragraph ->
+        if (paragraph.isEmpty()) {
+            output += ""
+            return@forEach
+        }
+        var current = ""
+        paragraph.split(Regex("\\s+")).filter(String::isNotEmpty).forEach { word ->
+            val candidate = if (current.isEmpty()) word else "$current $word"
+            if (current.isNotEmpty() && TextLine.make(candidate, font).width > maxWidth) {
+                output += current
+                current = word
+            } else {
+                current = candidate
+            }
+        }
+        output += current
+    }
+    return output
 }
 
 private class PsdPickerDelegate(
