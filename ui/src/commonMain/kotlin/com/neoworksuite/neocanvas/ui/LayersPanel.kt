@@ -131,6 +131,12 @@ private fun ObjectArrangeBar(state: EditorState) {
             )
             LayerTrayAction("Clear") { state.clearObjectArrangeSelection() }
         }
+        if (state.selectedObjectCount >= 1) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("Duplicate", Modifier.weight(1f)) { state.duplicateSelectedObjects() }
+                LayerTrayAction("Delete", Modifier.weight(1f), destructive = true) { state.deleteSelectedObjects() }
+            }
+        }
         if (state.selectedObjectCount >= 2) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 LayerTrayAction("Group", Modifier.weight(1f)) { state.groupSelectedObjects() }

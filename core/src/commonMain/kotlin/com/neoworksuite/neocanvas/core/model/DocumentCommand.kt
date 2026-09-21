@@ -502,6 +502,100 @@ private data class DuplicateLayerPlan(
     val tileCopies: Set<RasterTileCopy>,
 )
 
+class DuplicateEditableLayers(
+    duplicateIdsBySource: Map<String, String>,
+    val offsetX: Float = 20f,
+    val offsetY: Float = 20f,
+) : DocumentCommand {
+    val duplicateIdsBySource: Map<String, String> = duplicateIdsBySource.toMap()
+
+    init {
+        require(this.duplicateIdsBySource.isNotEmpty()) { "At least one editable layer is required to duplicate." }
+        require(this.duplicateIdsBySource.keys.all(String::isNotBlank))
+        require(this.duplicateIdsBySource.values.all(String::isNotBlank))
+        require(this.duplicateIdsBySource.values.toSet().size == this.duplicateIdsBySource.size) {
+            "Duplicate layer ids must be unique."
+        }
+        require(offsetX.isFinite() && offsetY.isFinite())
+    }
+
+    override fun rasterTileCopies(document: CanvasDocument): Set<RasterTileCopy> {
+        val copies = linkedSetOf<RasterTileCopy>()
+        duplicateIdsBySource.forEach { (sourceId, duplicateId) ->
+            val source = document.layers.firstOrNull { it.id == sourceId }
+                ?: throw IllegalArgumentException("No layer with id '$sourceId' exists.")
+            require(source.payload is LayerPayload.TextObject || source.payload is LayerPayload.ShapeObject) {
+                "Only editable Text and Shape layers can be duplicated together."
+            }
+            source.mask?.let { mask ->
+                val duplicateMaskId = duplicateId + "-mask"
+                mask.tileAddresses.mapTo(copies) { address ->
+                    RasterTileCopy(address, address.copy(layerId = duplicateMaskId))
+                }
+            }
+        }
+        return immutableSetSnapshot(copies)
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        val existingIds = document.layers.mapTo(linkedSetOf(), Layer::id)
+        require(duplicateIdsBySource.values.none { it in existingIds }) { "Duplicate layer id already exists." }
+        require(duplicateIdsBySource.keys.all { it in existingIds }) { "Every duplicated layer must exist." }
+
+        val tileCopies = rasterTileCopies(document)
+        val result = mutableListOf<Layer>()
+        document.layers.forEach { source ->
+            result += source
+            val duplicateId = duplicateIdsBySource[source.id] ?: return@forEach
+            val payload = when (val sourcePayload = source.payload) {
+                is LayerPayload.TextObject -> sourcePayload.copy(
+                    x = sourcePayload.x + offsetX,
+                    y = sourcePayload.y + offsetY,
+                )
+                is LayerPayload.ShapeObject -> sourcePayload.copy(
+                    x = sourcePayload.x + offsetX,
+                    y = sourcePayload.y + offsetY,
+                )
+                is LayerPayload.Raster -> error("Only editable layers can be duplicated together.")
+            }
+            val duplicateMask = source.mask?.let { mask ->
+                val duplicateMaskId = duplicateId + "-mask"
+                mask.copy(
+                    id = duplicateMaskId,
+                    tileAddresses = tileCopies.filter { it.destination.layerId == duplicateMaskId }
+                        .mapTo(linkedSetOf()) { it.destination },
+                )
+            }
+            result += source.copy(
+                id = duplicateId,
+                name = source.name + " copy",
+                payload = payload,
+                mask = duplicateMask,
+            )
+        }
+        return document.copy(layers = result)
+    }
+}
+
+class DeleteLayers(layerIds: Set<String>) : DocumentCommand {
+    val layerIds: Set<String> = layerIds.toSet()
+
+    init {
+        require(this.layerIds.isNotEmpty()) { "At least one layer is required to delete." }
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        val existingIds = document.layers.mapTo(linkedSetOf(), Layer::id)
+        require(layerIds.all { it in existingIds }) { "Every deleted layer must exist." }
+        require(document.layers.size > layerIds.size) { "Keep at least one drawing layer." }
+        val remainingLayers = document.layers.filterNot { it.id in layerIds }
+        val remainingGroups = document.groups.filter { group ->
+            remainingLayers.any { it.groupId == group.id }
+        }
+        return document.copy(layers = remainingLayers, groups = remainingGroups)
+    }
+}
+
 data class DeleteLayer(val layerId: String) : DocumentCommand {
     override fun apply(document: CanvasDocument): CanvasDocument {
         val index = document.layers.indexOfLayer(layerId)

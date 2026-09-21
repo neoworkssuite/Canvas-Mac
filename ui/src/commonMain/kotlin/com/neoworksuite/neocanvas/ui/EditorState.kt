@@ -22,6 +22,8 @@ import com.neoworksuite.neocanvas.core.model.CropCanvas
 import com.neoworksuite.neocanvas.core.model.DocumentCommand
 import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import com.neoworksuite.neocanvas.core.model.DuplicateLayer
+import com.neoworksuite.neocanvas.core.model.DuplicateEditableLayers
+import com.neoworksuite.neocanvas.core.model.DeleteLayers
 import com.neoworksuite.neocanvas.core.model.MoveLayer
 import com.neoworksuite.neocanvas.core.model.RenameLayer
 import com.neoworksuite.neocanvas.core.model.SetLayerOpacity
@@ -902,6 +904,37 @@ class EditorState(
             }
             is LayerPayload.Raster -> Unit
         }
+    }
+
+    fun duplicateSelectedObjects(): Boolean {
+        val layers = mutableArrangeLayers(minimum = 1) ?: return false
+        val duplicateIds = nextLayerIds(layers.size)
+        val mapping = layers.zip(duplicateIds).associate { (layer, duplicateId) -> layer.id to duplicateId }
+        val command = DuplicateEditableLayers(mapping)
+        val before = tileStore.snapshot()
+        tileStore.copyTiles(command.rasterTileCopies(document))
+        execute(command, before)
+        selectedObjectLayerIds = duplicateIds.toSet()
+        activeLayerId = duplicateIds.lastOrNull()
+        statusMessage = "Duplicated " + layers.size + " marked object" +
+            if (layers.size == 1) "" else "s"
+        return true
+    }
+
+    fun deleteSelectedObjects(): Boolean {
+        val layers = mutableArrangeLayers(minimum = 1) ?: return false
+        if (document.layers.size <= layers.size) {
+            statusMessage = "Keep at least one drawing layer."
+            return false
+        }
+        val before = tileStore.snapshot()
+        layers.mapNotNull { it.mask?.id }.forEach(tileStore::removeLayer)
+        execute(DeleteLayers(layers.mapTo(linkedSetOf(), Layer::id)), before)
+        selectedObjectLayerIds = emptySet()
+        activeLayerId = document.layers.lastOrNull()?.id
+        statusMessage = "Deleted " + layers.size + " marked object" +
+            if (layers.size == 1) "" else "s"
+        return true
     }
 
     fun groupSelectedObjects(): Boolean {
@@ -3370,6 +3403,24 @@ class EditorState(
         var ordinal = document.layers.size + 1
         while (document.layers.any { it.id == "layer-$ordinal" }) ordinal++
         return "layer-$ordinal"
+    }
+
+    private fun nextLayerIds(count: Int): List<String> {
+        require(count >= 0)
+        val used = document.layers.mapTo(linkedSetOf(), Layer::id)
+        val output = mutableListOf<String>()
+        var ordinal = document.layers.size + 1
+        repeat(count) {
+            var candidate = "layer-$ordinal"
+            while (candidate in used) {
+                ordinal++
+                candidate = "layer-$ordinal"
+            }
+            output += candidate
+            used += candidate
+            ordinal++
+        }
+        return output
     }
 }
 
