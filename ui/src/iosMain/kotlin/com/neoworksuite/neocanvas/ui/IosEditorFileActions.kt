@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.jetbrains.skia.Image
 import platform.Foundation.NSURL
 import platform.Foundation.NSData
-import platform.Foundation.NSDate
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -41,6 +40,7 @@ import platform.UIKit.UINavigationControllerDelegateProtocol
 import platform.UIKit.UIViewController
 import platform.darwin.NSObject
 import platform.posix.memcpy
+import platform.posix.time
 
 /**
  * Native iPad local storage and image-picker bridge.
@@ -224,7 +224,7 @@ internal class IosEditorFileActions(
             ?: return SaveResult.Failure("Use a version name from 1–60 letters, numbers, spaces, hyphens or parentheses.")
         val directory = versionDirectory(document.id)
         ensureDirectory(directory)
-        var createdAt = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
+        var createdAt = time(null) * 1000L
         var filename = versionFilename(createdAt, clean)
         while (fm.fileExistsAtPath(join(directory, filename))) {
             createdAt++
