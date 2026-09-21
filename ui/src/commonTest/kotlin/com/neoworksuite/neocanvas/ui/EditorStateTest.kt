@@ -705,9 +705,8 @@ class EditorStateTest {
         state.setActiveTextContent("Unlocked")
         assertEquals("Unlocked", state.activeTextObject!!.text)
 
-        state.addGroup()
+        assertTrue(state.addGroupFromActive())
         val groupId = state.document.groups.single().id
-        state.setActiveLayerGroup(groupId)
         state.toggleGroupLocked(groupId)
         val beforeGroupedEdit = state.activeTextObject
         assertTrue(state.activeObjectLocked)
