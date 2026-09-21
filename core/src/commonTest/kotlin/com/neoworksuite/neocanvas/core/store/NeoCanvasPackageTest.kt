@@ -4,7 +4,11 @@ import com.neoworksuite.neocanvas.core.model.AddRasterLayer
 import com.neoworksuite.neocanvas.core.model.ApplyRasterPatch
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.TileAddress
+import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
+import com.neoworksuite.neocanvas.core.model.LayerGroup
+import com.neoworksuite.neocanvas.core.model.LayerMask
+import com.neoworksuite.neocanvas.core.model.LayerPayload
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -34,6 +38,74 @@ class NeoCanvasPackageTest {
         assertContentEquals(pixels, success.tiles.getValue(TileAddress("layer-1", 0, 0)))
         assertEquals(LayerBlendMode.Normal, success.document.layers.single().blendMode)
         assertEquals(false, success.document.layers.single().alphaLocked)
+    }
+
+    @Test
+    fun groups_and_masks_round_trip_while_legacy_files_keep_flat_defaults() {
+        val paintAddress = TileAddress("layer-1", 0, 0)
+        val maskAddress = TileAddress("mask-layer-1", 0, 0)
+        val document = CanvasDocument(
+            "group-mask",
+            256,
+            256,
+            layers = listOf(
+                Layer(
+                    "layer-1",
+                    "Ink",
+                    payload = LayerPayload.Raster(setOf(paintAddress)),
+                    groupId = "group-1",
+                    mask = LayerMask(
+                        "mask-layer-1",
+                        setOf(maskAddress),
+                        enabled = true,
+                        inverted = true,
+                    ),
+                ),
+            ),
+            groups = listOf(
+                LayerGroup(
+                    "group-1",
+                    "Characters",
+                    opacity = .75f,
+                    collapsed = true,
+                ),
+            ),
+        )
+        val paint = opaqueBlackTile()
+        val mask = ByteArray(NeoCanvasPackage.RGBA_TILE_BYTES).also { pixels ->
+            for (i in pixels.indices step 4) {
+                pixels[i] = 255.toByte()
+                pixels[i + 1] = 255.toByte()
+                pixels[i + 2] = 255.toByte()
+                pixels[i + 3] = 255.toByte()
+            }
+        }
+
+        val loaded = assertIs<LoadResult.Success>(
+            NeoCanvasPackage.read(
+                NeoCanvasPackage.write(
+                    document,
+                    mapOf(paintAddress to paint, maskAddress to mask),
+                ),
+            ),
+        )
+
+        assertEquals("group-1", loaded.document.layers.single().groupId)
+        assertEquals("Characters", loaded.document.groups.single().name)
+        assertEquals(.75f, loaded.document.groups.single().opacity)
+        assertTrue(loaded.document.groups.single().collapsed)
+        assertEquals("mask-layer-1", loaded.document.layers.single().mask!!.id)
+        assertTrue(loaded.document.layers.single().mask!!.inverted)
+        assertContentEquals(mask, loaded.tiles.getValue(maskAddress))
+
+        val legacy = assertIs<LoadResult.Success>(NeoCanvasPackage.readMembers(mapOf(
+            "manifest.json" to manifest().encodeToByteArray(),
+            "thumb.png" to transparentThumbnail(),
+            "assets/" to ByteArray(0),
+        )))
+        assertTrue(legacy.document.groups.isEmpty())
+        assertEquals(null, legacy.document.layers.single().groupId)
+        assertEquals(null, legacy.document.layers.single().mask)
     }
 
     @Test fun blend_and_alpha_lock_round_trip_while_legacy_manifest_uses_defaults() {

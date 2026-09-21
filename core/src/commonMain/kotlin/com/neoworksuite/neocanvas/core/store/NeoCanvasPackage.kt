@@ -3,6 +3,8 @@ package com.neoworksuite.neocanvas.core.store
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
+import com.neoworksuite.neocanvas.core.model.LayerGroup
+import com.neoworksuite.neocanvas.core.model.LayerMask
 import com.neoworksuite.neocanvas.core.model.LayerPayload
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import kotlin.math.min
@@ -17,7 +19,7 @@ object NeoCanvasPackage {
         val expectedTiles = document.layers.flatMap { layer ->
             val raster = layer.payload as? LayerPayload.Raster
                 ?: throw IllegalArgumentException("Unsupported layer payload in v1 package.")
-            raster.tileAddresses
+            raster.tileAddresses + layer.mask?.tileAddresses.orEmpty()
         }.toSet()
         require(tiles.keys == expectedTiles) { "Package tile buffers must exactly match the document tile addresses." }
         tiles.forEach { (_, pixels) -> require(pixels.size == RGBA_TILE_BYTES) { "Every tile must be 256×256 RGBA pixels." } }
@@ -29,6 +31,12 @@ object NeoCanvasPackage {
             raster.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEach { address ->
                 members[tileMember(address)] = encodePng(TILE_SIZE_PIXELS, TILE_SIZE_PIXELS, tiles.getValue(address))
             }
+            layer.mask?.tileAddresses
+                .orEmpty()
+                .sortedWith(compareBy(TileAddress::y, TileAddress::x))
+                .forEach { address ->
+                    members[maskTileMember(address)] = encodePng(TILE_SIZE_PIXELS, TILE_SIZE_PIXELS, tiles.getValue(address))
+                }
         }
         members["thumb.png"] = thumbnailPng
         members["assets/"] = ByteArray(0)
@@ -61,6 +69,19 @@ object NeoCanvasPackage {
         val width = documentObject.int("width")
         val height = documentObject.int("height")
         val memberTiles = linkedMapOf<TileAddress, ByteArray>()
+        val groups = if ("groups" in root.fields) {
+            root.array("groups").map { value ->
+                val groupObject = value.asObject()
+                LayerGroup(
+                    id = groupObject.string("id"),
+                    name = groupObject.string("name"),
+                    visible = if ("visible" in groupObject.fields) groupObject.boolean("visible") else true,
+                    opacity = if ("opacity" in groupObject.fields) groupObject.float("opacity") else 1f,
+                    locked = if ("locked" in groupObject.fields) groupObject.boolean("locked") else false,
+                    collapsed = if ("collapsed" in groupObject.fields) groupObject.boolean("collapsed") else false,
+                )
+            }
+        } else emptyList()
         val layers = root.array("layers").map { value ->
             val layerObject = value.asObject()
             val id = layerObject.string("id")
@@ -76,6 +97,23 @@ object NeoCanvasPackage {
                 val png = members[memberName] ?: throw PackageCorruptException("Tile '$memberName' is missing.")
                 memberTiles[address] = decodeTilePng(png)
             }
+            val mask = layerObject.fields["mask"]?.asObject()?.let { maskObject ->
+                val maskId = maskObject.string("id")
+                val maskAddresses = linkedSetOf<TileAddress>()
+                maskObject.array("tiles").forEach { tileValue ->
+                    val memberName = tileValue.asString()
+                    val address = addressForMaskMember(maskId, memberName)
+                    if (!maskAddresses.add(address)) throw PackageCorruptException("Duplicate mask tile address '$memberName'.")
+                    val png = members[memberName] ?: throw PackageCorruptException("Mask tile '$memberName' is missing.")
+                    memberTiles[address] = decodeTilePng(png)
+                }
+                LayerMask(
+                    id = maskId,
+                    tileAddresses = maskAddresses,
+                    enabled = if ("enabled" in maskObject.fields) maskObject.boolean("enabled") else true,
+                    inverted = if ("inverted" in maskObject.fields) maskObject.boolean("inverted") else false,
+                )
+            }
             Layer(id, name, visible, opacity, LayerPayload.Raster(addresses),
                 locked = if ("locked" in layerObject.fields) layerObject.boolean("locked") else false,
                 alphaLocked = if ("alphaLocked" in layerObject.fields) layerObject.boolean("alphaLocked") else false,
@@ -83,14 +121,24 @@ object NeoCanvasPackage {
                 blendMode = if ("blendMode" in layerObject.fields) {
                     runCatching { LayerBlendMode.valueOf(layerObject.string("blendMode")) }
                         .getOrElse { throw PackageIncompatibleException("Unsupported layer blend mode.") }
-                } else LayerBlendMode.Normal)
+                } else LayerBlendMode.Normal,
+                groupId = (layerObject.fields["groupId"] as? JsonString)?.value,
+                mask = mask)
         }
         if (layers.map(Layer::id).distinct().size != layers.size) throw PackageCorruptException("Layer ids must be unique.")
-        val declaredMembers = memberTiles.keys.mapTo(linkedSetOf(), ::tileMember)
-        members.keys.filter { it.startsWith("layers/") && it.endsWith(".png") }.forEach { name ->
+        val declaredMembers = linkedSetOf<String>().apply {
+            layers.forEach { layer ->
+                val raster = layer.payload as LayerPayload.Raster
+                raster.tileAddresses.mapTo(this, ::tileMember)
+                layer.mask?.tileAddresses.orEmpty().mapTo(this, ::maskTileMember)
+            }
+        }
+        members.keys.filter {
+            (it.startsWith("layers/") || it.startsWith("masks/")) && it.endsWith(".png")
+        }.forEach { name ->
             if (name !in declaredMembers) throw PackageCorruptException("Tile '$name' is not declared by the manifest.")
         }
-        LoadResult.Success(CanvasDocument(documentId, width, height, layers), memberTiles)
+        LoadResult.Success(CanvasDocument(documentId, width, height, layers, groups), memberTiles)
     } catch (error: PackageIncompatibleException) {
         LoadResult.Incompatible(error.message ?: "This NeoCanvas format is not supported.")
     } catch (error: Exception) {
@@ -102,7 +150,17 @@ object NeoCanvasPackage {
     private fun manifest(document: CanvasDocument): String = buildString {
         append("{\"formatVersion\":").append(FORMAT_VERSION)
         append(",\"document\":{\"id\":\"").append(json(document.id)).append("\",\"width\":")
-        append(document.width).append(",\"height\":").append(document.height).append("},\"layers\":[")
+        append(document.width).append(",\"height\":").append(document.height).append("},\"groups\":[")
+        document.groups.forEachIndexed { index, group ->
+            if (index > 0) append(',')
+            append("{\"id\":\"").append(json(group.id)).append("\",\"name\":\"").append(json(group.name))
+            append("\",\"visible\":").append(group.visible)
+            append(",\"opacity\":").append(group.opacity)
+            append(",\"locked\":").append(group.locked)
+            append(",\"collapsed\":").append(group.collapsed)
+            append('}')
+        }
+        append("],\"layers\":[")
         document.layers.forEachIndexed { index, layer ->
             if (index > 0) append(',')
             val raster = layer.payload as LayerPayload.Raster
@@ -112,6 +170,18 @@ object NeoCanvasPackage {
             append(",\"alphaLocked\":").append(layer.alphaLocked)
             append(",\"clipping\":").append(layer.clipping)
             append(",\"blendMode\":\"").append(layer.blendMode.name).append('"')
+            layer.groupId?.let { append(",\"groupId\":\"").append(json(it)).append('"') }
+            layer.mask?.let { mask ->
+                append(",\"mask\":{\"id\":\"").append(json(mask.id)).append('"')
+                append(",\"enabled\":").append(mask.enabled)
+                append(",\"inverted\":").append(mask.inverted)
+                append(",\"tiles\":[")
+                mask.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEachIndexed { maskIndex, address ->
+                    if (maskIndex > 0) append(',')
+                    append('"').append(maskTileMember(address)).append('"')
+                }
+                append("]}")
+            }
             append(",\"type\":\"raster\",\"tiles\":[")
             raster.tileAddresses.sortedWith(compareBy(TileAddress::y, TileAddress::x)).forEachIndexed { tileIndex, address ->
                 if (tileIndex > 0) append(',')
@@ -136,9 +206,16 @@ object NeoCanvasPackage {
     }
 
     private fun tileMember(address: TileAddress): String = "layers/${address.layerId}/${address.x}-${address.y}.png"
+    private fun maskTileMember(address: TileAddress): String = "masks/${address.layerId}/${address.x}-${address.y}.png"
 
-    private fun addressForMember(layerId: String, member: String): TileAddress {
-        val prefix = "layers/$layerId/"
+    private fun addressForMaskMember(maskId: String, member: String): TileAddress =
+        addressForMemberPrefix(maskId, member, "masks")
+
+    private fun addressForMember(layerId: String, member: String): TileAddress =
+        addressForMemberPrefix(layerId, member, "layers")
+
+    private fun addressForMemberPrefix(layerId: String, member: String, folder: String): TileAddress {
+        val prefix = "$folder/$layerId/"
         if (!member.startsWith(prefix) || !member.endsWith(".png")) throw PackageCorruptException("Invalid tile member '$member'.")
         val coordinates = member.removePrefix(prefix).removeSuffix(".png").split('-')
         val split = if (coordinates.size == 2) coordinates else {
