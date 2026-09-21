@@ -29,6 +29,14 @@ interface EditorFileActions {
         label: String,
         document: CanvasDocument,
         tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult = createVersionOnBranch(label, "Main", null, document, tiles)
+
+    fun createVersionOnBranch(
+        label: String,
+        branch: String,
+        parentVersionId: String?,
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
     ): SaveResult = SaveResult.Failure("Local version history is unavailable in this host.")
     fun loadVersion(documentId: String, versionId: String): LoadResult =
         LoadResult.Failure("Local version history is unavailable in this host.")
@@ -76,6 +84,8 @@ data class LocalVersionEntry(
     val id: String,
     val label: String,
     val createdAtEpochMillis: Long,
+    val branch: String = "Main",
+    val parentId: String? = null,
 )
 
 data class ImportedImage(val name: String, val width: Int, val height: Int, val argb: IntArray) {

@@ -79,19 +79,42 @@ class WindowsEditorFileActions(
     private fun validVersionLabel(value: String): String? = value.trim().takeIf {
         it.matches(Regex("[\\p{L}\\p{N} _()-]{1,60}"))
     }
+    private fun validVersionBranch(value: String): String? = value.trim().takeIf {
+        it.matches(Regex("[\\p{L}\\p{N} _()-]{1,30}"))
+    }
     private fun safeDocumentId(value: String): String = value.map { character ->
         if (character.isLetterOrDigit() || character == '-' || character == '_' || character == '.') character else '_'
     }.joinToString("").take(120).ifEmpty { "document" }
-    private fun versionFilename(createdAt: Long, label: String): String =
-        createdAt.toString() + "__" + label + ".neoversion"
+    private fun versionFilename(
+        createdAt: Long,
+        label: String,
+        branch: String,
+        parentVersionId: String?,
+    ): String {
+        val parentToken = parentVersionId
+            ?.substringBefore('~')
+            ?.substringBefore("__")
+            ?.takeIf { it.all(Char::isDigit) }
+            ?: "root"
+        return createdAt.toString() + "~" + branch + "~" + parentToken + "~" + label + ".neoversion"
+    }
     private fun parseVersionEntry(filename: String): com.neoworksuite.neocanvas.ui.LocalVersionEntry? {
         if (!isSafeVersionId(filename)) return null
         val stem = filename.removeSuffix(".neoversion")
+        if ('~' in stem) {
+            val parts = stem.split('~', limit = 4)
+            if (parts.size != 4) return null
+            val createdAt = parts[0].toLongOrNull() ?: return null
+            val branch = parts[1].takeIf(String::isNotBlank) ?: return null
+            val parent = parts[2].takeUnless { it == "root" || it.isBlank() }
+            val label = parts[3].takeIf(String::isNotBlank) ?: return null
+            return com.neoworksuite.neocanvas.ui.LocalVersionEntry(filename, label, createdAt, branch, parent)
+        }
         val split = stem.indexOf("__")
         if (split <= 0 || split >= stem.lastIndex) return null
         val createdAt = stem.substring(0, split).toLongOrNull() ?: return null
         val label = stem.substring(split + 2).takeIf(String::isNotBlank) ?: return null
-        return com.neoworksuite.neocanvas.ui.LocalVersionEntry(filename, label, createdAt)
+        return com.neoworksuite.neocanvas.ui.LocalVersionEntry(filename, label, createdAt, "Main", null)
     }
     private fun isSafeVersionId(value: String): Boolean =
         value.isNotBlank() && value == File(value).name && value.endsWith(".neoversion", true)
@@ -121,15 +144,25 @@ class WindowsEditorFileActions(
         label: String,
         document: CanvasDocument,
         tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult = createVersionOnBranch(label, "Main", null, document, tiles)
+
+    override fun createVersionOnBranch(
+        label: String,
+        branch: String,
+        parentVersionId: String?,
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
     ): SaveResult = try {
         val clean = validVersionLabel(label)
             ?: return SaveResult.Failure("Use a version name from 1–60 letters, numbers, spaces, hyphens or parentheses.")
+        val cleanBranch = validVersionBranch(branch)
+            ?: return SaveResult.Failure("Use a branch name from 1–30 letters, numbers, spaces, hyphens or parentheses.")
         val directory = File(versionsDirectory, safeDocumentId(document.id)).apply { mkdirs() }
         var createdAt = System.currentTimeMillis()
-        var target = File(directory, versionFilename(createdAt, clean))
+        var target = File(directory, versionFilename(createdAt, clean, cleanBranch, parentVersionId))
         while (target.exists()) {
             createdAt++
-            target = File(directory, versionFilename(createdAt, clean))
+            target = File(directory, versionFilename(createdAt, clean, cleanBranch, parentVersionId))
         }
         val thumbnail = runCatching { GalleryThumbnail.render(document, tiles).encode() }
             .getOrElse { NeoCanvasPackage.transparentThumbnail() }

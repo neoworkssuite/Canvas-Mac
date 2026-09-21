@@ -69,6 +69,14 @@ class EditorState(
         private set
     var versionError: String? by mutableStateOf(null)
         private set
+    var activeVersionBranch: String by mutableStateOf("Main")
+        private set
+    private var activeVersionParentId: String? = null
+
+    val versionBranches: List<String>
+        get() = (versions.map(LocalVersionEntry::branch) + activeVersionBranch)
+            .distinct()
+            .sortedWith(compareBy<String> { it != "Main" }.thenBy(String::lowercase))
 
     fun openVersions() {
         recentStrokesVisible = false
@@ -96,15 +104,24 @@ class EditorState(
             versionError = "Give this milestone a name."
             return false
         }
+        val parent = activeVersionParentId
+            ?: versions.firstOrNull { it.branch == activeVersionBranch }?.id
         val result = try {
-            fileActions.createVersion(clean, document, tilesForDocument())
+            fileActions.createVersionOnBranch(
+                clean,
+                activeVersionBranch,
+                parent,
+                document,
+                tilesForDocument(),
+            )
         } catch (error: Exception) {
             SaveResult.Failure(error.message ?: "Could not create local version")
         }
         return if (result == SaveResult.Success) {
             versionError = null
             refreshVersions()
-            statusMessage = "Saved version: $clean"
+            activeVersionParentId = versions.firstOrNull { it.branch == activeVersionBranch }?.id
+            statusMessage = "Saved version on " + activeVersionBranch + ": " + clean
             true
         } else {
             versionError = (result as? SaveResult.Failure)?.message ?: "Could not create local version"
@@ -114,8 +131,15 @@ class EditorState(
 
     fun restoreVersion(versionId: String): Boolean {
         if (!supportsVersions || versions.none { it.id == versionId }) return false
+        val target = versions.firstOrNull { it.id == versionId } ?: return false
         val safety = try {
-            fileActions.createVersion("Before restore", document, tilesForDocument())
+            fileActions.createVersionOnBranch(
+                "Before restore",
+                activeVersionBranch,
+                activeVersionParentId,
+                document,
+                tilesForDocument(),
+            )
         } catch (error: Exception) {
             SaveResult.Failure(error.message ?: "Could not create safety version")
         }
@@ -144,8 +168,10 @@ class EditorState(
                 activeLayerId = document.layers.lastOrNull()?.id
                 documentRevision++
                 versionError = null
+                activeVersionBranch = target.branch
+                activeVersionParentId = target.id
                 refreshVersions()
-                statusMessage = "Restored local version — current work was kept as Before restore"
+                statusMessage = "Restored " + target.branch + " version — current work was kept as Before restore"
                 true
             }
             is LoadResult.Failure -> {
@@ -161,6 +187,83 @@ class EditorState(
                 false
             }
         }
+    }
+
+    fun branchFromVersion(versionId: String, branchName: String): Boolean {
+        if (!supportsVersions) return false
+        val source = versions.firstOrNull { it.id == versionId } ?: return false
+        val cleanBranch = branchName.trim()
+        if (!cleanBranch.matches(Regex("[\\p{L}\\p{N} _()-]{1,30}"))) {
+            versionError = "Use a branch name from 1–30 letters, numbers, spaces, hyphens or parentheses."
+            return false
+        }
+
+        val safety = try {
+            fileActions.createVersionOnBranch(
+                "Before branch",
+                activeVersionBranch,
+                activeVersionParentId,
+                document,
+                tilesForDocument(),
+            )
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not preserve current branch")
+        }
+        if (safety != SaveResult.Success) {
+            versionError = (safety as? SaveResult.Failure)?.message ?: "Could not preserve current branch."
+            return false
+        }
+
+        val result = try {
+            fileActions.loadVersion(document.id, versionId)
+        } catch (error: Exception) {
+            LoadResult.Failure(error.message ?: "Could not load branch source")
+        }
+        if (result !is LoadResult.Success) {
+            versionError = when (result) {
+                is LoadResult.Failure -> result.message
+                is LoadResult.Corrupt -> result.message
+                is LoadResult.Incompatible -> result.message
+                else -> "Could not load branch source"
+            }
+            return false
+        }
+
+        clearSelection()
+        resetView()
+        history.reset(result.document)
+        tileStore.restore(result.tiles)
+        resetDormantLayerState()
+        undoTileStates.clear()
+        redoTileStates.clear()
+        markCleanDocument()
+        editVersion = ++nextVersion
+        activeLayerId = document.layers.lastOrNull()?.id
+        documentRevision++
+        activeVersionBranch = cleanBranch
+        activeVersionParentId = source.id
+
+        val start = try {
+            fileActions.createVersionOnBranch(
+                "Branch start",
+                cleanBranch,
+                source.id,
+                document,
+                tilesForDocument(),
+            )
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not save branch start")
+        }
+        if (start != SaveResult.Success) {
+            versionError = (start as? SaveResult.Failure)?.message ?: "Could not save branch start."
+            return false
+        }
+
+        versionError = null
+        refreshVersions()
+        activeVersionParentId = versions.firstOrNull { it.branch == cleanBranch }?.id
+        statusMessage = "Created branch " + cleanBranch + " from " + source.label
+        return true
     }
 
     fun deleteVersion(versionId: String): Boolean {

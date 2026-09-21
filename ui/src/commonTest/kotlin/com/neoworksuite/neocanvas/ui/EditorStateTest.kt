@@ -651,6 +651,57 @@ class EditorStateTest {
     }
 
     @Test
+    fun version_tree_branch_restores_source_and_persists_branch_start() {
+        data class Stored(val entry: LocalVersionEntry, val load: LoadResult.Success)
+        val saved = mutableListOf<Stored>()
+        var clock = 2000L
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsVersions = true
+            override fun listVersions(documentId: String): List<LocalVersionEntry> =
+                saved.map { it.entry }.sortedByDescending { it.createdAtEpochMillis }
+
+            override fun createVersionOnBranch(
+                label: String,
+                branch: String,
+                parentVersionId: String?,
+                document: CanvasDocument,
+                tiles: Map<TileAddress, ByteArray>,
+            ): SaveResult {
+                val id = (clock++).toString() + "~" + branch + "~root~" + label + ".neoversion"
+                saved += Stored(
+                    LocalVersionEntry(id, label, clock, branch, parentVersionId),
+                    LoadResult.Success(document, tiles),
+                )
+                return SaveResult.Success
+            }
+
+            override fun loadVersion(documentId: String, versionId: String): LoadResult =
+                saved.firstOrNull { it.entry.id == versionId }?.load
+                    ?: LoadResult.Failure("Missing version")
+        }
+
+        val initial = CanvasDocument(
+            id = "branch-test",
+            width = 32,
+            height = 32,
+            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial), actions)
+
+        assertTrue(state.createVersion("Sketch"))
+        val source = state.versions.single()
+        state.addLayer()
+        assertEquals(2, state.document.layers.size)
+
+        assertTrue(state.branchFromVersion(source.id, "Client B"))
+
+        assertEquals("Client B", state.activeVersionBranch)
+        assertEquals(1, state.document.layers.size)
+        assertTrue(state.versions.any { it.branch == "Main" && it.label == "Before branch" })
+        assertTrue(state.versions.any { it.branch == "Client B" && it.label == "Branch start" })
+    }
+
+    @Test
     fun psd_import_replaces_the_document_and_marks_it_unsaved() {
         val importedLayer = Layer("psd-layer-1", "PSD Paint", payload = LayerPayload.Raster())
         val imported = com.neoworksuite.neocanvas.renderer.PsdImportResult(

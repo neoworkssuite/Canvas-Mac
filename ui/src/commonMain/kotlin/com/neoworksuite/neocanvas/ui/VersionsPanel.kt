@@ -36,6 +36,8 @@ fun VersionsPanel(
     onClose: () -> Unit,
 ) {
     var label by remember { mutableStateOf("") }
+    var branchSource by remember { mutableStateOf<LocalVersionEntry?>(null) }
+    var branchName by remember { mutableStateOf("") }
 
     Column(
         modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -51,7 +53,7 @@ fun VersionsPanel(
                     letterSpacing = .9.sp,
                 )
                 Text(
-                    "Local milestones · no cloud required",
+                    "BRANCH · " + state.activeVersionBranch.uppercase() + " · local only",
                     color = NeoCanvasColors.faint,
                     fontSize = 9.sp,
                 )
@@ -95,6 +97,47 @@ fun VersionsPanel(
             }
         }
 
+        branchSource?.let { source ->
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(NeoCanvasColors.panelRaised)
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "BRANCH FROM · " + source.label,
+                    color = NeoCanvasColors.paper,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedTextField(
+                    value = branchName,
+                    onValueChange = { branchName = it.take(30) },
+                    singleLine = true,
+                    label = { Text("New branch name") },
+                    placeholder = { Text("e.g. Client B") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { branchSource = null; branchName = "" }) {
+                        Text("Cancel", color = NeoCanvasColors.muted)
+                    }
+                    TextButton(
+                        enabled = branchName.trim().isNotEmpty(),
+                        onClick = {
+                            if (state.branchFromVersion(source.id, branchName)) {
+                                branchSource = null
+                                branchName = ""
+                            }
+                        },
+                    ) {
+                        Text("Create branch", color = NeoCanvasColors.accent)
+                    }
+                }
+            }
+        }
+
         state.versionError?.let { error ->
             Text(
                 error,
@@ -126,6 +169,7 @@ fun VersionsPanel(
                         number = state.versions.size - index,
                         newest = index == 0,
                         onRestore = { state.restoreVersion(version.id) },
+                        onBranch = { branchSource = version; branchName = "" },
                         onDelete = { state.deleteVersion(version.id) },
                     )
                 }
@@ -146,6 +190,7 @@ private fun VersionTimelineRow(
     number: Int,
     newest: Boolean,
     onRestore: () -> Unit,
+    onBranch: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Row(
@@ -174,7 +219,8 @@ private fun VersionTimelineRow(
                 maxLines = 1,
             )
             Text(
-                "VERSION " + number + if (newest) " · LATEST" else " · LOCAL",
+                version.branch.uppercase() + " · VERSION " + number +
+                    if (newest) " · LATEST" else " · LOCAL",
                 color = NeoCanvasColors.faint,
                 fontSize = 8.sp,
                 letterSpacing = .6.sp,
@@ -182,6 +228,9 @@ private fun VersionTimelineRow(
         }
         TextButton(onClick = onRestore) {
             Text("Restore", color = NeoCanvasColors.accent, fontSize = 10.sp)
+        }
+        TextButton(onClick = onBranch) {
+            Text("Branch", color = NeoCanvasColors.accent, fontSize = 10.sp)
         }
         TextButton(onClick = onDelete) {
             Text("Delete", color = NeoCanvasColors.muted, fontSize = 10.sp)
