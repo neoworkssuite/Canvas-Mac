@@ -324,8 +324,25 @@ class EditorState(
         if (result == SaveResult.Success) lastRecoveryVersion = version
         else if (result is SaveResult.Failure) statusMessage = "Autosave failed: ${result.message}. Save your artwork manually."
     }
-    private val undoTileStates = mutableListOf<Map<TileKey, ByteArray>>()
-    private val redoTileStates = mutableListOf<Map<TileKey, ByteArray>>()
+    private data class TileHistoryDelta(
+        val before: Map<TileKey, ByteArray?>,
+        val after: Map<TileKey, ByteArray?>,
+    ) {
+        val retainedBufferCount: Int
+            get() = before.values.count { it != null } + after.values.count { it != null }
+
+        companion object {
+            val Empty = TileHistoryDelta(emptyMap(), emptyMap())
+        }
+    }
+
+    private val undoTileStates = mutableListOf<TileHistoryDelta>()
+    private val redoTileStates = mutableListOf<TileHistoryDelta>()
+
+    internal val retainedRasterHistoryBytes: Long
+        get() = (undoTileStates.sumOf(TileHistoryDelta::retainedBufferCount) +
+            redoTileStates.sumOf(TileHistoryDelta::retainedBufferCount)).toLong() *
+            com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE
 
     var activeLayerId: String? by mutableStateOf(history.current.layers.lastOrNull()?.id)
     var brush: BrushDefinition by mutableStateOf(BuiltInBrushes.pencil)
@@ -1310,19 +1327,20 @@ class EditorState(
         if (!history.undo()) return false
         redoVersions += editVersion
         editVersion = undoVersions.removeLastOrNull() ?: 0
-        val previousTiles = undoTileStates.removeLastOrNull() ?: emptyMap()
-        redoTileStates += tileStore.snapshot()
-        tileStore.restore(previousTiles)
+        val delta = undoTileStates.removeLastOrNull() ?: TileHistoryDelta.Empty
+        redoTileStates += delta
+        applyTileHistory(delta.before)
         afterHistoryMove()
         return true
     }
+
     fun redo(): Boolean {
         if (!history.redo()) return false
         undoVersions += editVersion
         editVersion = redoVersions.removeLastOrNull() ?: 0
-        val nextTiles = redoTileStates.removeLastOrNull() ?: emptyMap()
-        undoTileStates += tileStore.snapshot()
-        tileStore.restore(nextTiles)
+        val delta = redoTileStates.removeLastOrNull() ?: TileHistoryDelta.Empty
+        undoTileStates += delta
+        applyTileHistory(delta.after)
         afterHistoryMove()
         return true
     }
@@ -1622,14 +1640,51 @@ class EditorState(
             is SaveResult.Failure -> buildString { append(result.message); result.recoveryPath?.let { append(" Recovery copy: $it") } }
         }
     }
-    private fun execute(command: DocumentCommand, tilesBefore: Map<TileKey, ByteArray> = tileStore.snapshot()) {
+    private fun execute(command: DocumentCommand, tilesBefore: Map<TileKey, ByteArray>? = null) {
         history.execute(command)
         undoVersions += editVersion
         redoVersions.clear()
         editVersion = ++nextVersion
-        undoTileStates += tilesBefore
+        undoTileStates += if (tilesBefore == null) {
+            TileHistoryDelta.Empty
+        } else {
+            createTileHistoryDelta(tilesBefore, tileStore.snapshot())
+        }
         redoTileStates.clear()
         documentRevision++
+    }
+
+    private fun createTileHistoryDelta(
+        before: Map<TileKey, ByteArray>,
+        after: Map<TileKey, ByteArray>,
+    ): TileHistoryDelta {
+        val beforeChanges = linkedMapOf<TileKey, ByteArray?>()
+        val afterChanges = linkedMapOf<TileKey, ByteArray?>()
+        (before.keys + after.keys).forEach { key ->
+            val old = before[key]
+            val next = after[key]
+            val changed = when {
+                old == null && next == null -> false
+                old == null || next == null -> true
+                else -> !old.contentEquals(next)
+            }
+            if (changed) {
+                beforeChanges[key] = old?.copyOf()
+                afterChanges[key] = next?.copyOf()
+            }
+        }
+        return if (beforeChanges.isEmpty()) TileHistoryDelta.Empty
+        else TileHistoryDelta(beforeChanges, afterChanges)
+    }
+
+    private fun applyTileHistory(state: Map<TileKey, ByteArray?>) {
+        if (state.isEmpty()) return
+        val replacements = linkedMapOf<TileKey, ByteArray>()
+        val removals = linkedSetOf<TileKey>()
+        state.forEach { (key, pixels) ->
+            if (pixels == null) removals += key else replacements[key] = pixels
+        }
+        tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterPatch.of(replacements, removals))
     }
     private fun afterHistoryMove() {
         clearSelection()

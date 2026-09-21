@@ -233,6 +233,34 @@ class EditorStateTest {
         assertEquals(0f, state.viewRotationDegrees, .001f)
     }
 
+    @Test
+    fun raster_history_retains_only_changed_tiles_and_metadata_retains_none() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(1024, 1024)))
+        assertEquals(0L, state.retainedRasterHistoryBytes)
+
+        state.addLayer()
+        assertEquals(0L, state.retainedRasterHistoryBytes)
+
+        val image = ImportedImage(
+            "Large",
+            512,
+            512,
+            IntArray(512 * 512) { 0xFF336699.toInt() },
+        )
+        state.insertImage(image)
+        val afterImport = state.retainedRasterHistoryBytes
+        assertEquals(8L * com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE, afterImport)
+
+        state.cancelTransform()
+        state.brushSize = 2f
+        state.recordStroke(listOf(DrawPoint(400f, 400f)))
+
+        assertEquals(
+            afterImport + 2L * com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE,
+            state.retainedRasterHistoryBytes,
+        )
+    }
+
     @Test fun live_brush_preview_matches_commit_without_mutating_document() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(64, 64)))
         state.addLayer()
