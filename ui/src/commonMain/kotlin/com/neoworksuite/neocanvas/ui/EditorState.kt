@@ -1740,6 +1740,13 @@ class EditorState(
         else showInspector(panel)
     }
 
+    fun selectLayer(id: String): Boolean {
+        if (document.layers.none { it.id == id }) return false
+        if (maskEditingLayerId != id) maskEditingLayerId = null
+        activeLayerId = id
+        return true
+    }
+
     fun addGroupFromActive(): Boolean {
         val id = nextGroupId()
         val layerId = activeLayerId
@@ -1852,6 +1859,7 @@ class EditorState(
         if (document.layers.any { it.id == id && it.locked }) { statusMessage = "Unlock this layer before deleting it"; return }
         if (document.layers.size <= 1) { statusMessage = "Keep at least one drawing layer."; return }
         execute(DeleteLayer(id))
+        if (maskEditingLayerId == id) maskEditingLayerId = null
         activeLayerId = document.layers.lastOrNull()?.id
     }
     fun duplicateActiveLayer() {

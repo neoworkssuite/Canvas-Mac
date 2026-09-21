@@ -236,6 +236,35 @@ class EditorStateTest {
     }
 
     @Test
+    fun group_editor_controls_active_layer_membership_and_collapsed_state() {
+        val initial = CanvasDocument(
+            id = "groups-ui",
+            width = 32,
+            height = 32,
+            layers = listOf(Layer("layer-1", "Paint", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial))
+
+        assertTrue(state.addGroupFromActive())
+        val group = state.document.groups.single()
+        assertEquals(group.id, state.document.layers.single().groupId)
+
+        state.toggleGroupCollapsed(group.id)
+        state.toggleGroupVisibility(group.id)
+        state.toggleGroupLocked(group.id)
+        state.setGroupOpacity(group.id, .5f)
+
+        val updated = state.document.groups.single()
+        assertTrue(updated.collapsed)
+        assertFalse(updated.visible)
+        assertTrue(updated.locked)
+        assertEquals(.5f, updated.opacity)
+
+        state.setActiveLayerGroup(null)
+        assertEquals(null, state.document.layers.single().groupId)
+    }
+
+    @Test
     fun mask_editing_changes_mask_pixels_without_changing_layer_pixels() {
         val paintAddress = TileAddress("layer-1", 0, 0)
         val paint = ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE).apply {

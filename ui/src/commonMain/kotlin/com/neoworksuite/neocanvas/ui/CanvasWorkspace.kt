@@ -502,6 +502,24 @@ fun CanvasWorkspace(
             modifier = Modifier.fillMaxSize(),
         )
 
+        state.maskEditingLayerId?.let { layerId ->
+            val layerName = state.document.layers.firstOrNull { it.id == layerId }?.name ?: "Layer"
+            Box(
+                Modifier.align(Alignment.TopCenter)
+                    .padding(top = 14.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(NeoCanvasColors.chrome.copy(alpha = .94f))
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    "MASK · " + layerName + " · dark hides · eraser reveals",
+                    color = NeoCanvasColors.accent,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
         if (state.effectPreviewType != null) {
             Box(
                 Modifier.fillMaxSize().pointerInput(state.effectPreviewType) {

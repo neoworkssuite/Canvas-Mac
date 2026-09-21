@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
+import com.neoworksuite.neocanvas.core.model.LayerGroup
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -66,25 +67,35 @@ fun StudioInspector(state: EditorState, compact: Boolean, modifier: Modifier = M
 @Composable
 fun LayersPanel(state: EditorState, modifier: Modifier = Modifier) {
     val images = remember { TileImageCache(32) }
+    val collapsedGroups = state.document.groups.filter { it.collapsed }.mapTo(linkedSetOf(), LayerGroup::id)
+    val visibleLayers = state.document.layers.asReversed().filterNot { it.groupId in collapsedGroups }
+
     Column(modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("LAYERS", color = NeoCanvasColors.paper, fontSize = 11.sp, letterSpacing = 1.2.sp)
             Spacer(Modifier.weight(1f))
             Text(
-                state.document.layers.size.toString() + " LOCAL" +
+                state.document.layers.size.toString() + " LAYERS" +
+                    if (state.document.groups.isNotEmpty()) " · " + state.document.groups.size + " GROUPS" else "" +
                     if (state.sleepingLayerCount > 0) " · " + state.sleepingLayerCount + " SLEEPING" else "",
                 color = NeoCanvasColors.faint,
                 fontSize = 9.sp,
                 letterSpacing = .5.sp,
             )
             LayerMemoryMenu(state)
+            LayerTrayAction("Group +", Modifier.padding(start = 5.dp)) { state.addGroupFromActive() }
             Text("＋", color = NeoCanvasColors.ink, fontSize = 20.sp,
-                modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(9.dp)).background(NeoCanvasColors.accent)
+                modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(9.dp)).background(NeoCanvasColors.accent)
                     .clickable { state.addLayer() }.padding(horizontal = 10.dp, vertical = 3.dp)
                     .semantics { contentDescription = "New layer" })
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(state.document.layers.asReversed(), key = { it.id }) { layer -> LayerCard(layer, state, images) }
+            items(state.document.groups.asReversed(), key = { "group-" + it.id }) { group ->
+                LayerGroupCard(group, state)
+            }
+            items(visibleLayers, key = { "layer-" + it.id }) { layer ->
+                LayerCard(layer, state, images)
+            }
         }
     }
 }
@@ -105,12 +116,12 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             LayerTrayAction("Duplicate", Modifier.weight(1f)) {
-                state.activeLayerId = layer.id
+                state.selectLayer(layer.id)
                 state.duplicateActiveLayer()
                 swipeOffset = 0f
             }
             LayerTrayAction("Delete", Modifier.weight(1f), destructive = true) {
-                state.activeLayerId = layer.id
+                state.selectLayer(layer.id)
                 state.deleteActiveLayer()
                 swipeOffset = 0f
             }
@@ -124,7 +135,7 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                         swipeOffset = 0f
                     } else if (!selected) {
                         state.clearSelection()
-                        state.activeLayerId = layer.id
+                        state.selectLayer(layer.id)
                         optionsOpen = false
                     } else {
                         optionsOpen = !optionsOpen
@@ -138,7 +149,7 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                     detectHorizontalDragGestures(
                         onDragStart = {
                             if (state.activeLayerId != layer.id) state.clearSelection()
-                            state.activeLayerId = layer.id
+                            state.selectLayer(layer.id)
                         },
                         onDragEnd = {
                             swipeOffset = if (swipeOffset > actionWidthPx / 3f) actionWidthPx else 0f
@@ -163,7 +174,7 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                             detectVerticalDragGestures(
                                 onDragStart = {
                                     if (state.activeLayerId != layer.id) state.clearSelection()
-                                    state.activeLayerId = layer.id
+                                    state.selectLayer(layer.id)
                                     totalY = 0f
                                 },
                             ) { change, amount ->
@@ -191,20 +202,40 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                     } else {
                         Text(layer.name, color = NeoCanvasColors.paper, fontSize = 12.sp, maxLines = 1)
                     }
+                    val groupName = layer.groupId?.let { groupId ->
+                        state.document.groups.firstOrNull { it.id == groupId }?.name
+                    }
                     Text(
                         buildString {
                             append(layer.blendMode.displayName())
                             append(" · ")
                             append((layer.opacity * 100).toInt())
                             append("%")
+                            groupName?.let { append(" · ").append(it) }
                             if (layer.locked) append(" · Locked")
                             if (layer.alphaLocked) append(" · α")
                             if (layer.clipping) append(" · Clip")
+                            if (layer.mask != null) {
+                                append(if (state.maskEditingLayerId == layer.id) " · MASK EDIT" else " · Mask")
+                            }
                             if (state.isLayerDormant(layer.id)) append(" · Sleeping")
                         },
                         color = NeoCanvasColors.faint,
                         fontSize = 9.sp,
                         maxLines = 1,
+                    )
+                }
+                layer.mask?.let {
+                    Text(
+                        if (state.maskEditingLayerId == layer.id) "M*" else "M",
+                        color = if (state.maskEditingLayerId == layer.id) NeoCanvasColors.accent else NeoCanvasColors.muted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable {
+                            if (state.maskEditingLayerId == layer.id) state.editLayerArtwork()
+                            else state.editLayerMask(layer.id)
+                        }.padding(horizontal = 5.dp, vertical = 6.dp)
+                            .semantics { contentDescription = "Toggle " + layer.name + " mask editing" },
                     )
                 }
                 Text(
@@ -300,6 +331,37 @@ private fun LayerOptionsPanel(
             }
         }
 
+        LayerGroupPicker(layer, state)
+
+        if (layer.mask == null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                LayerTrayAction("Add Mask", Modifier.weight(1f)) {
+                    state.addMaskToActiveLayer()
+                }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                LayerTrayAction(
+                    if (state.maskEditingLayerId == layer.id) "Artwork" else "Edit Mask",
+                    Modifier.weight(1f),
+                ) {
+                    if (state.maskEditingLayerId == layer.id) state.editLayerArtwork()
+                    else state.editLayerMask(layer.id)
+                }
+                LayerTrayAction(if (layer.mask.enabled) "Mask ✓" else "Mask Off", Modifier.weight(1f)) {
+                    state.toggleActiveMaskEnabled()
+                }
+                LayerTrayAction(if (layer.mask.inverted) "Invert ✓" else "Invert", Modifier.weight(1f)) {
+                    state.toggleActiveMaskInverted()
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                LayerTrayAction("Remove Mask", Modifier.weight(1f), destructive = true) {
+                    state.removeActiveMask()
+                }
+            }
+        }
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             LayerTrayAction("Merge Down", Modifier.weight(1f)) {
                 state.mergeActiveLayerDown()
@@ -308,6 +370,110 @@ private fun LayerOptionsPanel(
             LayerTrayAction("Delete", Modifier.weight(1f), destructive = true) {
                 state.deleteActiveLayer()
                 onClose()
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayerGroupCard(group: LayerGroup, state: EditorState) {
+    val childCount = state.document.layers.count { it.groupId == group.id }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+            .background(NeoCanvasColors.panelRaised)
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (group.collapsed) "▸" else "▾",
+                color = NeoCanvasColors.accent,
+                fontSize = 14.sp,
+                modifier = Modifier.clickable { state.toggleGroupCollapsed(group.id) }
+                    .padding(end = 7.dp),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(group.name, color = NeoCanvasColors.paper, fontSize = 11.sp, maxLines = 1)
+                Text(
+                    childCount.toString() + " layer" + if (childCount == 1) "" else "s" +
+                        if (group.locked) " · Locked" else "",
+                    color = NeoCanvasColors.faint,
+                    fontSize = 8.sp,
+                )
+            }
+            Text(
+                if (group.visible) "◉" else "○",
+                color = if (group.visible) NeoCanvasColors.accent else NeoCanvasColors.faint,
+                fontSize = 17.sp,
+                modifier = Modifier.clickable { state.toggleGroupVisibility(group.id) }.padding(5.dp),
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Opacity", color = NeoCanvasColors.faint, fontSize = 8.sp)
+            Slider(
+                value = group.opacity,
+                onValueChange = { state.setGroupOpacity(group.id, it) },
+                modifier = Modifier.weight(1f).height(28.dp).padding(horizontal = 5.dp),
+                colors = studioSliderColors(),
+            )
+            Text(
+                (group.opacity * 100).toInt().toString(),
+                color = NeoCanvasColors.muted,
+                fontSize = 8.sp,
+                modifier = Modifier.width(24.dp),
+            )
+            LayerTrayAction(if (group.locked) "Unlock" else "Lock", Modifier.padding(start = 4.dp)) {
+                state.toggleGroupLocked(group.id)
+            }
+            LayerTrayAction("Delete", Modifier.padding(start = 4.dp), destructive = true) {
+                state.deleteGroup(group.id)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayerGroupPicker(layer: Layer, state: EditorState) {
+    var expanded by remember(layer.id, state.document.groups) { mutableStateOf(false) }
+    val current = layer.groupId?.let { id -> state.document.groups.firstOrNull { it.id == id } }
+    Box {
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+                .background(NeoCanvasColors.panelRaised)
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp, vertical = 7.dp),
+        ) {
+            Text(
+                "Group · " + (current?.name ?: "None"),
+                color = NeoCanvasColors.muted,
+                fontSize = 9.sp,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = NeoCanvasColors.panelRaised,
+        ) {
+            DropdownMenuItem(
+                text = { Text("No group", color = if (current == null) NeoCanvasColors.accent else NeoCanvasColors.paper) },
+                onClick = {
+                    expanded = false
+                    state.setActiveLayerGroup(null)
+                },
+            )
+            state.document.groups.forEach { group ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            group.name,
+                            color = if (current?.id == group.id) NeoCanvasColors.accent else NeoCanvasColors.paper,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        state.setActiveLayerGroup(group.id)
+                    },
+                )
             }
         }
     }
