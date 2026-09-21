@@ -757,6 +757,54 @@ class EditorStateTest {
     }
 
     @Test
+    fun text_and_shape_style_controls_remain_editable_and_undoable() {
+        val document = CanvasDocument(
+            id = "object-styles",
+            width = 640,
+            height = 480,
+            layers = listOf(
+                Layer(
+                    "text-1",
+                    "Title",
+                    payload = LayerPayload.TextObject(
+                        text = "NeoCanvas",
+                        x = 40f,
+                        y = 40f,
+                        width = 320f,
+                        height = 100f,
+                    ),
+                ),
+                Layer(
+                    "shape-1",
+                    "Card",
+                    payload = LayerPayload.ShapeObject(
+                        kind = ShapeKind.Rectangle,
+                        x = 40f,
+                        y = 180f,
+                        width = 280f,
+                        height = 160f,
+                    ),
+                ),
+            ),
+        )
+        val state = EditorState(DocumentHistory(document))
+
+        state.activeLayerId = "text-1"
+        state.setActiveTextBold(true)
+        state.setActiveTextItalic(true)
+        state.setActiveTextLineSpacing(1.75f)
+        assertTrue(state.activeTextObject!!.bold)
+        assertTrue(state.activeTextObject!!.italic)
+        assertEquals(1.75f, state.activeTextObject!!.lineSpacing)
+
+        state.activeLayerId = "shape-1"
+        state.setActiveShapeCornerRadius(36f)
+        assertEquals(36f, state.activeShapeObject!!.cornerRadius)
+        assertTrue(state.undo())
+        assertEquals(0f, state.activeShapeObject!!.cornerRadius)
+    }
+
+    @Test
     fun raster_tools_ignore_editable_object_layers() {
         val initial = CanvasDocument(
             id = "object-raster-guard",

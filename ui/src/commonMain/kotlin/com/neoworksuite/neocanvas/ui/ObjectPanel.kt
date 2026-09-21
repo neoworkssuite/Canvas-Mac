@@ -97,6 +97,22 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                ObjectAction("Bold", Modifier.weight(1f), text.bold, !locked) {
+                    state.setActiveTextBold(!text.bold)
+                }
+                ObjectAction("Italic", Modifier.weight(1f), text.italic, !locked) {
+                    state.setActiveTextItalic(!text.italic)
+                }
+            }
+            ObjectSlider(
+                "Leading",
+                text.lineSpacing,
+                .7f..3f,
+                ((text.lineSpacing * 100f).toInt() / 100f).toString() + "×",
+                !locked,
+                state::setActiveTextLineSpacing,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 ObjectAction("Left", Modifier.weight(1f), text.alignment == TextAlignment.Left, !locked) {
                     state.setActiveTextAlignment(TextAlignment.Left)
                 }
@@ -135,6 +151,16 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                     ObjectAction("No Fill", Modifier.weight(1f), enabled = !locked) { state.removeActiveShapeFill() }
                     ObjectAction("No Outline", Modifier.weight(1f), enabled = !locked) { state.removeActiveShapeStroke() }
                 }
+            }
+            if (shape.kind == ShapeKind.Rectangle) {
+                ObjectSlider(
+                    "Corners",
+                    shape.cornerRadius,
+                    0f..(minOf(kotlin.math.abs(shape.width), kotlin.math.abs(shape.height)) / 2f).coerceAtLeast(1f),
+                    shape.cornerRadius.toInt().toString() + " px",
+                    !locked,
+                    state::setActiveShapeCornerRadius,
+                )
             }
             if (shape.strokeArgb != null || shape.kind == ShapeKind.Line) {
                 ObjectSlider(

@@ -740,6 +740,26 @@ class EditorState(
         execute(UpdateTextLayer(layer.id, payload.copy(alignment = value)))
     }
 
+    fun setActiveTextBold(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.bold == value) return
+        execute(UpdateTextLayer(layer.id, payload.copy(bold = value)))
+    }
+
+    fun setActiveTextItalic(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.italic == value) return
+        execute(UpdateTextLayer(layer.id, payload.copy(italic = value)))
+    }
+
+    fun setActiveTextLineSpacing(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(lineSpacing = value.coerceIn(.7f, 3f))))
+    }
+
     fun setActiveShapeKind(value: ShapeKind) {
         val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return
@@ -747,6 +767,7 @@ class EditorState(
             ShapeKind.Line -> payload.copy(
                 kind = value,
                 fillArgb = null,
+                cornerRadius = 0f,
                 strokeArgb = payload.strokeArgb ?: payload.fillArgb ?: composeColorArgb(color),
                 strokeWidth = payload.strokeWidth.coerceAtLeast(4f),
             )
@@ -754,9 +775,18 @@ class EditorState(
                 kind = value,
                 height = if (payload.height == 0f) 180f else kotlin.math.abs(payload.height),
                 fillArgb = payload.fillArgb ?: payload.strokeArgb ?: composeColorArgb(color),
+                cornerRadius = if (value == ShapeKind.Rectangle) payload.cornerRadius else 0f,
             )
         }
         execute(UpdateShapeLayer(layer.id, next))
+    }
+
+    fun setActiveShapeCornerRadius(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.ShapeObject ?: return
+        if (payload.kind != ShapeKind.Rectangle) return
+        val maxRadius = minOf(kotlin.math.abs(payload.width), kotlin.math.abs(payload.height)) / 2f
+        execute(UpdateShapeLayer(layer.id, payload.copy(cornerRadius = value.coerceIn(0f, maxRadius))))
     }
 
     fun setActiveShapeStrokeWidth(value: Float) {
@@ -828,6 +858,7 @@ class EditorState(
                     signedScaled(payload.height, factor, 0f, document.height * 2f)
                 else signedScaled(payload.height, factor, 8f, document.height * 2f),
                 strokeWidth = (payload.strokeWidth * factor).coerceIn(0f, 128f),
+                cornerRadius = (payload.cornerRadius * factor).coerceAtLeast(0f),
             )))
             is LayerPayload.Raster -> Unit
         }
