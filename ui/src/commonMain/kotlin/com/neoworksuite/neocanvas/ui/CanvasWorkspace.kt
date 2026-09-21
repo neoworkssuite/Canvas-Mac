@@ -680,6 +680,29 @@ fun CanvasWorkspace(
                     editableObjectPreviews = objectGroupGesturePreview,
                 )
 
+                if (state.tool == Tool.Liquify) {
+                    previewPoints.lastOrNull()?.let { point ->
+                        val radius = liquifyFootprintRadius(state.liquifySize, point.pressure)
+                        val centre = Offset(point.x, point.y)
+                        drawCircle(
+                            NeoCanvasColors.accent.copy(alpha = .92f),
+                            radius = radius,
+                            center = centre,
+                            style = Stroke(1.5f / scale),
+                        )
+                        drawCircle(
+                            Color.Black.copy(alpha = .65f),
+                            radius = 2.8f / scale,
+                            center = centre,
+                        )
+                        drawCircle(
+                            NeoCanvasColors.accent,
+                            radius = 1.6f / scale,
+                            center = centre,
+                        )
+                    }
+                }
+
                 arrangePickMarquee?.let { marquee ->
                     drawRect(
                         NeoCanvasColors.accent.copy(alpha = .15f),
@@ -1744,6 +1767,9 @@ private fun snapEditableObjectGroupRotation(rotationDelta: Float): Float {
     val delta = normalizeViewRotation(rotationDelta - guide)
     return if (kotlin.math.abs(delta) <= 3f) guide else rotationDelta
 }
+
+internal fun liquifyFootprintRadius(size: Float, pressure: Float): Float =
+    maxOf(.75f, size.coerceAtLeast(.01f) * normalizedPressure(pressure) * .5f)
 
 private fun signedObjectScale(value: Float, factor: Float, minMagnitude: Float, maxMagnitude: Float): Float {
     if (value == 0f && minMagnitude == 0f) return 0f
