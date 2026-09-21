@@ -148,7 +148,7 @@ private fun ObjectArrangeBar(state: EditorState) {
             }
         } else {
             Text(
-                if (state.objectArrangePicking) "Tap editable Text or Shape objects directly on the canvas."
+                if (state.objectArrangePicking) "Tap objects to toggle them, or drag a marquee across several editable objects."
                 else "Mark another editable Text or Shape layer.",
                 color = NeoCanvasColors.faint,
                 fontSize = 9.sp,

@@ -696,6 +696,24 @@ class EditorState(
         statusMessage = "Arrange selection cleared"
     }
 
+    fun setObjectArrangeSelection(layerIds: Set<String>): Int {
+        val groupsById = document.groups.associateBy { it.id }
+        selectedObjectLayerIds = document.layers.filter { layer ->
+            layer.id in layerIds &&
+                (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject) &&
+                !layer.locked &&
+                layer.groupId?.let { groupsById[it]?.locked } != true
+        }.mapTo(linkedSetOf()) { it.id }
+        selectedObjectLayerIds.lastOrNull()?.let { activeLayerId = it }
+        statusMessage = if (selectedObjectLayerIds.isEmpty()) {
+            "No unlocked editable objects inside Arrange marquee"
+        } else {
+            selectedObjectLayerIds.size.toString() + " object" +
+                if (selectedObjectLayerIds.size == 1) " marked for Arrange" else "s marked for Arrange"
+        }
+        return selectedObjectLayerIds.size
+    }
+
     fun toggleObjectArrangePicking() {
         objectArrangePicking = !objectArrangePicking
         statusMessage = if (objectArrangePicking) {

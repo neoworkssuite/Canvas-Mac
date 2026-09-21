@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
@@ -93,6 +94,7 @@ fun CanvasWorkspace(
     var quickShapeSnapped by remember { mutableStateOf(false) }
     var objectGesturePreview by remember { mutableStateOf<LayerPayload?>(null) }
     var objectGroupGesturePreview by remember { mutableStateOf<Map<String, LayerPayload>>(emptyMap()) }
+    var arrangePickMarquee by remember { mutableStateOf<Rect?>(null) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -309,14 +311,31 @@ fun CanvasWorkspace(
 
                     if (state.objectArrangePicking) {
                         var moved = false
+                        var finalPoint = initialOffset
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val current = point(change.position, 1f)
+                            finalPoint = Offset(current.x, current.y)
                             if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                            arrangePickMarquee = if (moved) {
+                                Rect(
+                                    left = minOf(initialOffset.x, finalPoint.x),
+                                    top = minOf(initialOffset.y, finalPoint.y),
+                                    right = maxOf(initialOffset.x, finalPoint.x),
+                                    bottom = maxOf(initialOffset.y, finalPoint.y),
+                                )
+                            } else null
                             change.consume()
                             if (!change.pressed) break
                         }
-                        if (!moved) {
+                        if (moved) {
+                            arrangePickMarquee?.let { marquee ->
+                                state.setObjectArrangeSelection(
+                                    editableObjectLayerIdsInRect(document, marquee),
+                                )
+                            }
+                        } else {
                             val hit = editableObjectLayerAtPoint(
                                 document = document,
                                 point = initialOffset,
@@ -328,6 +347,7 @@ fun CanvasWorkspace(
                                 state.statusMessage = "No editable Text or Shape object under that point"
                             }
                         }
+                        arrangePickMarquee = null
                         return@awaitEachGesture
                     }
 
@@ -652,6 +672,20 @@ fun CanvasWorkspace(
                     editableObjectPreview = objectGesturePreview,
                     editableObjectPreviews = objectGroupGesturePreview,
                 )
+
+                arrangePickMarquee?.let { marquee ->
+                    drawRect(
+                        NeoCanvasColors.accent.copy(alpha = .15f),
+                        topLeft = Offset(marquee.left, marquee.top),
+                        size = Size(marquee.width, marquee.height),
+                    )
+                    drawRect(
+                        NeoCanvasColors.accent.copy(alpha = .9f),
+                        topLeft = Offset(marquee.left, marquee.top),
+                        size = Size(marquee.width, marquee.height),
+                        style = Stroke(1.5f / scale),
+                    )
+                }
 
                 if (state.objectSnapping) {
                     val guides = when {
@@ -1526,6 +1560,24 @@ internal fun editableObjectLayerAtPoint(
         val geometry = layer.payload.editableObjectGeometry() ?: return@firstOrNull false
         geometry.contains(point, padding)
     }?.id
+}
+
+internal fun editableObjectLayerIdsInRect(
+    document: com.neoworksuite.neocanvas.core.model.CanvasDocument,
+    rect: Rect,
+): Set<String> {
+    val groupsById = document.groups.associateBy { it.id }
+    return document.layers.filter { layer ->
+        val group = layer.groupId?.let(groupsById::get)
+        if (!layer.visible || group?.visible == false) return@filter false
+        val corners = layer.payload.editableObjectGeometry()?.outlineCorners().orEmpty()
+        if (corners.isEmpty()) return@filter false
+        val left = corners.minOf { it.x }
+        val top = corners.minOf { it.y }
+        val right = corners.maxOf { it.x }
+        val bottom = corners.maxOf { it.y }
+        right >= rect.left && left <= rect.right && bottom >= rect.top && top <= rect.bottom
+    }.mapTo(linkedSetOf()) { it.id }
 }
 
 private fun LayerPayload.editableObjectGeometry(): EditableObjectGeometry? = when (this) {
