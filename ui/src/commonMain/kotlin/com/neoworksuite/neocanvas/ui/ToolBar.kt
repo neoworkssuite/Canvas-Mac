@@ -164,6 +164,9 @@ private fun StudioActionsMenu(state: EditorState) {
                     ActionSubmenuItem("Canvas") { page = ActionMenuPage.Canvas }
                     ActionSubmenuItem("Drawing Assist") { page = ActionMenuPage.Assist }
                     ActionSubmenuItem("Utility Tools") { page = ActionMenuPage.Tools }
+                    if (state.supportsVersions) {
+                        ActionItem("Versions…") { closeMenu(); state.openVersions() }
+                    }
                     ActionSubmenuItem("File / Export") { page = ActionMenuPage.File }
                 }
                 ActionMenuPage.Add -> {

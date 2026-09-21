@@ -22,6 +22,18 @@ interface EditorFileActions {
         SaveResult.Failure("Save As is unavailable in this host.")
     val supportsRecovery: Boolean get() = false
     fun loadRecovery(): LoadResult? = null
+
+    val supportsVersions: Boolean get() = false
+    fun listVersions(documentId: String): List<LocalVersionEntry> = emptyList()
+    fun createVersion(
+        label: String,
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult = SaveResult.Failure("Local version history is unavailable in this host.")
+    fun loadVersion(documentId: String, versionId: String): LoadResult =
+        LoadResult.Failure("Local version history is unavailable in this host.")
+    fun deleteVersion(documentId: String, versionId: String): SaveResult =
+        SaveResult.Failure("Local version history is unavailable in this host.")
     fun saveRecovery(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         SaveResult.Failure("Recovery storage is unavailable.")
     fun importImage(onResult: (Result<ImportedImage?>) -> Unit) {
@@ -46,6 +58,12 @@ interface EditorFileActions {
     fun open(): LoadResult
     fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult
 }
+
+data class LocalVersionEntry(
+    val id: String,
+    val label: String,
+    val createdAtEpochMillis: Long,
+)
 
 data class ImportedImage(val name: String, val width: Int, val height: Int, val argb: IntArray) {
     init {

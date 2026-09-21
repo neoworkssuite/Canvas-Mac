@@ -61,6 +61,130 @@ class EditorState(
     val hasUnsavedChanges: Boolean get() = editVersion != savedVersion
     val supportsSaveAs: Boolean get() = fileActions.supportsSaveAs
     val supportsLocalLibrary: Boolean get() = fileActions.supportsLocalLibrary
+    val supportsVersions: Boolean get() = fileActions.supportsVersions
+
+    var versionsVisible by mutableStateOf(false)
+        private set
+    var versions: List<LocalVersionEntry> by mutableStateOf(emptyList())
+        private set
+    var versionError: String? by mutableStateOf(null)
+        private set
+
+    fun openVersions() {
+        if (!supportsVersions) {
+            statusMessage = "Local version history is unavailable on this device"
+            return
+        }
+        if (inspectorVisible) hideInspector()
+        settingsVisible = false
+        refreshVersions()
+        versionsVisible = true
+    }
+
+    fun closeVersions() {
+        versionsVisible = false
+        versionError = null
+    }
+
+    fun createVersion(label: String): Boolean {
+        if (!supportsVersions) return false
+        val clean = label.trim()
+        if (clean.isEmpty()) {
+            versionError = "Give this milestone a name."
+            return false
+        }
+        val result = try {
+            fileActions.createVersion(clean, document, tilesForDocument())
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not create local version")
+        }
+        return if (result == SaveResult.Success) {
+            versionError = null
+            refreshVersions()
+            statusMessage = "Saved version: $clean"
+            true
+        } else {
+            versionError = (result as? SaveResult.Failure)?.message ?: "Could not create local version"
+            false
+        }
+    }
+
+    fun restoreVersion(versionId: String): Boolean {
+        if (!supportsVersions || versions.none { it.id == versionId }) return false
+        val safety = try {
+            fileActions.createVersion("Before restore", document, tilesForDocument())
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not create safety version")
+        }
+        if (safety != SaveResult.Success) {
+            versionError = (safety as? SaveResult.Failure)?.message
+                ?: "Could not create the safety version, so restore was cancelled."
+            return false
+        }
+
+        val result = try {
+            fileActions.loadVersion(document.id, versionId)
+        } catch (error: Exception) {
+            LoadResult.Failure(error.message ?: "Could not load local version")
+        }
+        return when (result) {
+            is LoadResult.Success -> {
+                clearSelection()
+                resetView()
+                history.reset(result.document)
+                tileStore.restore(result.tiles)
+                undoTileStates.clear()
+                redoTileStates.clear()
+                markCleanDocument()
+                editVersion = ++nextVersion
+                activeLayerId = document.layers.lastOrNull()?.id
+                documentRevision++
+                versionError = null
+                refreshVersions()
+                statusMessage = "Restored local version — current work was kept as Before restore"
+                true
+            }
+            is LoadResult.Failure -> {
+                versionError = result.message
+                false
+            }
+            is LoadResult.Corrupt -> {
+                versionError = result.message
+                false
+            }
+            is LoadResult.Incompatible -> {
+                versionError = result.message
+                false
+            }
+        }
+    }
+
+    fun deleteVersion(versionId: String): Boolean {
+        if (!supportsVersions || versions.none { it.id == versionId }) return false
+        val result = try {
+            fileActions.deleteVersion(document.id, versionId)
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not delete local version")
+        }
+        return if (result == SaveResult.Success) {
+            versionError = null
+            refreshVersions()
+            statusMessage = "Deleted local version"
+            true
+        } else {
+            versionError = (result as? SaveResult.Failure)?.message ?: "Could not delete local version"
+            false
+        }
+    }
+
+    private fun refreshVersions() {
+        versions = try {
+            fileActions.listVersions(document.id).sortedByDescending { it.createdAtEpochMillis }
+        } catch (error: Exception) {
+            versionError = error.message ?: "Could not read local versions"
+            emptyList()
+        }
+    }
     var localDocuments: List<String>? by mutableStateOf(null)
         private set
     var namingLocalCopy by mutableStateOf(false)
@@ -859,10 +983,12 @@ class EditorState(
 
     fun openSettings() {
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
+        versionsVisible = false
         settingsVisible = true
     }
 
     fun showInspector(panel: InspectorPanel) {
+        versionsVisible = false
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects && panel != InspectorPanel.Effects) {
             commitEffectPreview()
         }

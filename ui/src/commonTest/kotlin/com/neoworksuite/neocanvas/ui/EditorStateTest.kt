@@ -375,6 +375,49 @@ class EditorStateTest {
     }
 
     @Test
+    fun local_versions_create_and_restore_with_a_safety_snapshot() {
+        val saved = mutableListOf<Pair<LocalVersionEntry, LoadResult.Success>>()
+        var clock = 1000L
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsVersions = true
+            override fun listVersions(documentId: String): List<LocalVersionEntry> =
+                saved.map { it.first }.sortedByDescending { it.createdAtEpochMillis }
+
+            override fun createVersion(
+                label: String,
+                document: CanvasDocument,
+                tiles: Map<TileAddress, ByteArray>,
+            ): SaveResult {
+                val entry = LocalVersionEntry("v" + clock + ".neoversion", label, clock++)
+                saved += entry to LoadResult.Success(document, tiles)
+                return SaveResult.Success
+            }
+
+            override fun loadVersion(documentId: String, versionId: String): LoadResult =
+                saved.firstOrNull { it.first.id == versionId }?.second
+                    ?: LoadResult.Failure("Missing version")
+
+            override fun deleteVersion(documentId: String, versionId: String): SaveResult {
+                val removed = saved.removeAll { it.first.id == versionId }
+                return if (removed) SaveResult.Success else SaveResult.Failure("Missing version")
+            }
+        }
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)), actions)
+
+        assertTrue(state.createVersion("Sketch"))
+        val sketchId = state.versions.single().id
+        state.addLayer()
+        assertTrue(state.hasUnsavedChanges)
+
+        assertTrue(state.restoreVersion(sketchId))
+
+        assertEquals(1, state.document.layers.size)
+        assertTrue(state.hasUnsavedChanges)
+        assertTrue(state.versions.any { it.label == "Before restore" })
+        assertEquals("Restored local version — current work was kept as Before restore", state.statusMessage)
+    }
+
+    @Test
     fun psd_import_replaces_the_document_and_marks_it_unsaved() {
         val importedLayer = Layer("psd-layer-1", "PSD Paint", payload = LayerPayload.Raster())
         val imported = com.neoworksuite.neocanvas.renderer.PsdImportResult(

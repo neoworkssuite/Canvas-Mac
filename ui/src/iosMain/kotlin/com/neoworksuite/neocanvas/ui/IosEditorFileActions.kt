@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.jetbrains.skia.Image
 import platform.Foundation.NSURL
 import platform.Foundation.NSData
+import platform.Foundation.NSDate
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -61,6 +62,7 @@ internal class IosEditorFileActions(
 
     private val libraryDirectory: String get() = join(documentsRoot, "NeoCanvas")
     private val recoveryDirectory: String get() = join(libraryDirectory, "Recovery")
+    private val versionsDirectory: String get() = join(libraryDirectory, "Versions")
     private val exportDirectory: String get() = join(libraryDirectory, "Exports")
     private val palettePath: String get() = join(libraryDirectory, "palette.txt")
     private val brushLibraryPath: String get() = join(libraryDirectory, "brush-library.txt")
@@ -70,12 +72,14 @@ internal class IosEditorFileActions(
     override val supportsLocalLibrary: Boolean = true
     override val supportsSaveAs: Boolean = true
     override val supportsRecovery: Boolean = true
+    override val supportsVersions: Boolean = true
     override val supportsPsdImport: Boolean = true
     override val supportsPsdExport: Boolean = true
 
     init {
         ensureDirectory(libraryDirectory)
         ensureDirectory(recoveryDirectory)
+        ensureDirectory(versionsDirectory)
         ensureDirectory(exportDirectory)
     }
 
@@ -197,6 +201,54 @@ internal class IosEditorFileActions(
 
     override fun loadRecovery(): LoadResult? =
         if (fm.fileExistsAtPath(recoveryPath)) readPackage(recoveryPath) else null
+
+    override fun listVersions(documentId: String): List<LocalVersionEntry> {
+        val directory = versionDirectory(documentId)
+        if (!fm.fileExistsAtPath(directory)) return emptyList()
+        return fm.contentsOfDirectoryAtPath(directory, null)
+            ?.filterIsInstance<String>()
+            .orEmpty()
+            .mapNotNull(::parseVersionEntry)
+            .sortedByDescending { it.createdAtEpochMillis }
+    }
+
+    override fun createVersion(
+        label: String,
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult {
+        val clean = validVersionLabel(label)
+            ?: return SaveResult.Failure("Use a version name from 1–60 letters, numbers, spaces, hyphens or parentheses.")
+        val directory = versionDirectory(document.id)
+        ensureDirectory(directory)
+        var createdAt = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
+        var filename = versionFilename(createdAt, clean)
+        while (fm.fileExistsAtPath(join(directory, filename))) {
+            createdAt++
+            filename = versionFilename(createdAt, clean)
+        }
+        val thumbnail = runCatching { GalleryThumbnail.render(document, tiles).encode() }
+            .getOrElse { NeoCanvasPackage.transparentThumbnail() }
+        val bytes = runCatching { NeoCanvasPackage.write(document, tiles, thumbnail) }
+            .getOrElse { return SaveResult.Failure("Could not prepare local version: " + (it.message ?: "unknown error")) }
+        return if (writeBytes(join(directory, filename), bytes)) SaveResult.Success
+        else SaveResult.Failure("Could not write local version on this iPad.")
+    }
+
+    override fun loadVersion(documentId: String, versionId: String): LoadResult {
+        if (!isSafeVersionId(versionId)) return LoadResult.Failure("Invalid local version.")
+        val path = join(versionDirectory(documentId), versionId)
+        if (!fm.fileExistsAtPath(path)) return LoadResult.Failure("Local version was not found.")
+        return readPackage(path)
+    }
+
+    override fun deleteVersion(documentId: String, versionId: String): SaveResult {
+        if (!isSafeVersionId(versionId)) return SaveResult.Failure("Invalid local version.")
+        val path = join(versionDirectory(documentId), versionId)
+        if (!fm.fileExistsAtPath(path)) return SaveResult.Failure("Local version was not found.")
+        return if (fm.removeItemAtPath(path, null)) SaveResult.Success
+        else SaveResult.Failure("Could not delete local version.")
+    }
 
     override fun loadPalette(): List<String> {
         val data = NSData.dataWithContentsOfFile(palettePath)?.toByteArray() ?: return emptyList()
@@ -357,6 +409,35 @@ internal class IosEditorFileActions(
     private fun validArtworkName(value: String): String? = value.trim().takeIf {
         it.matches(Regex("[\\p{L}\\p{N} _()-]{1,80}"))
     }
+
+    private fun validVersionLabel(value: String): String? = value.trim().takeIf {
+        it.matches(Regex("[\\p{L}\\p{N} _()-]{1,60}"))
+    }
+
+    private fun versionDirectory(documentId: String): String =
+        join(versionsDirectory, safeDocumentId(documentId))
+
+    private fun safeDocumentId(value: String): String =
+        value.map { character ->
+            if (character.isLetterOrDigit() || character == '-' || character == '_' || character == '.') character else '_'
+        }.joinToString("").take(120).ifEmpty { "document" }
+
+    private fun versionFilename(createdAt: Long, label: String): String =
+        createdAt.toString() + "__" + label + ".neoversion"
+
+    private fun parseVersionEntry(filename: String): LocalVersionEntry? {
+        if (!isSafeVersionId(filename)) return null
+        val stem = filename.removeSuffix(".neoversion")
+        val split = stem.indexOf("__")
+        if (split <= 0 || split >= stem.lastIndex) return null
+        val createdAt = stem.substring(0, split).toLongOrNull() ?: return null
+        val label = stem.substring(split + 2).takeIf(String::isNotBlank) ?: return null
+        return LocalVersionEntry(filename, label, createdAt)
+    }
+
+    private fun isSafeVersionId(value: String): Boolean =
+        value.isNotBlank() && '/' !in value && '\\' !in value &&
+            value.endsWith(".neoversion", ignoreCase = true)
 
     private fun isSafeLocalName(value: String): Boolean =
         value.isNotBlank() && '/' !in value && '\\' !in value && value.endsWith(".neocanvas", ignoreCase = true)

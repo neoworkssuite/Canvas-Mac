@@ -4,8 +4,10 @@ import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
+import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
+import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import java.awt.FileDialog
 import java.awt.Frame
@@ -74,7 +76,27 @@ class WindowsEditorFileActions(
     private fun validArtworkName(value: String): String? = value.trim().takeIf {
         it.matches(Regex("[\\p{L}\\p{N} _()-]{1,80}"))
     }
+    private fun validVersionLabel(value: String): String? = value.trim().takeIf {
+        it.matches(Regex("[\\p{L}\\p{N} _()-]{1,60}"))
+    }
+    private fun safeDocumentId(value: String): String = value.map { character ->
+        if (character.isLetterOrDigit() || character == '-' || character == '_' || character == '.') character else '_'
+    }.joinToString("").take(120).ifEmpty { "document" }
+    private fun versionFilename(createdAt: Long, label: String): String =
+        createdAt.toString() + "__" + label + ".neoversion"
+    private fun parseVersionEntry(filename: String): com.neoworksuite.neocanvas.ui.LocalVersionEntry? {
+        if (!isSafeVersionId(filename)) return null
+        val stem = filename.removeSuffix(".neoversion")
+        val split = stem.indexOf("__")
+        if (split <= 0 || split >= stem.lastIndex) return null
+        val createdAt = stem.substring(0, split).toLongOrNull() ?: return null
+        val label = stem.substring(split + 2).takeIf(String::isNotBlank) ?: return null
+        return com.neoworksuite.neocanvas.ui.LocalVersionEntry(filename, label, createdAt)
+    }
+    private fun isSafeVersionId(value: String): Boolean =
+        value.isNotBlank() && value == File(value).name && value.endsWith(".neoversion", true)
     override val supportsRecovery = true
+    override val supportsVersions = true
     private val recoveryFile get() = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/recovery/last-session.neocanvas",
@@ -82,6 +104,52 @@ class WindowsEditorFileActions(
     override fun loadRecovery(): LoadResult? = recoveryFile.let { if (it.exists()) documents.load(it.absolutePath) else null }
     override fun saveRecovery(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         documents.save(recoveryFile.absolutePath, document, tiles)
+
+    private val versionsDirectory get() = File(libraryDirectory.parentFile, "Versions")
+
+    override fun listVersions(documentId: String): List<com.neoworksuite.neocanvas.ui.LocalVersionEntry> {
+        val directory = File(versionsDirectory, safeDocumentId(documentId))
+        return directory.listFiles().orEmpty()
+            .filter { it.isFile && it.name.endsWith(".neoversion", true) }
+            .mapNotNull { parseVersionEntry(it.name) }
+            .sortedByDescending { it.createdAtEpochMillis }
+    }
+
+    override fun createVersion(
+        label: String,
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult = try {
+        val clean = validVersionLabel(label)
+            ?: return SaveResult.Failure("Use a version name from 1–60 letters, numbers, spaces, hyphens or parentheses.")
+        val directory = File(versionsDirectory, safeDocumentId(document.id)).apply { mkdirs() }
+        var createdAt = System.currentTimeMillis()
+        var target = File(directory, versionFilename(createdAt, clean))
+        while (target.exists()) {
+            createdAt++
+            target = File(directory, versionFilename(createdAt, clean))
+        }
+        val thumbnail = runCatching { GalleryThumbnail.render(document, tiles).encode() }
+            .getOrElse { NeoCanvasPackage.transparentThumbnail() }
+        target.writeBytes(NeoCanvasPackage.write(document, tiles, thumbnail))
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not create local version: " + (error.message ?: "unknown error"))
+    }
+
+    override fun loadVersion(documentId: String, versionId: String): LoadResult {
+        if (!isSafeVersionId(versionId)) return LoadResult.Failure("Invalid local version.")
+        val target = File(File(versionsDirectory, safeDocumentId(documentId)), versionId)
+        if (!target.isFile) return LoadResult.Failure("Local version was not found.")
+        return NeoCanvasPackage.read(target.readBytes())
+    }
+
+    override fun deleteVersion(documentId: String, versionId: String): SaveResult {
+        if (!isSafeVersionId(versionId)) return SaveResult.Failure("Invalid local version.")
+        val target = File(File(versionsDirectory, safeDocumentId(documentId)), versionId)
+        if (!target.isFile) return SaveResult.Failure("Local version was not found.")
+        return if (target.delete()) SaveResult.Success else SaveResult.Failure("Could not delete local version.")
+    }
     override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
         onResult(runCatching {
             val path = choose("Import Photoshop PSD", FileDialog.LOAD, null) ?: return@runCatching null
