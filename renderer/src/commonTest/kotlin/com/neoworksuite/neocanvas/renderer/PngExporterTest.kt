@@ -158,6 +158,47 @@ class PngExporterTest {
     }
 
     @Test
+    fun font_aware_text_rasterizer_flattens_editable_text_for_export() {
+        val document = CanvasDocument(
+            "text-export",
+            4,
+            4,
+            layers = listOf(
+                Layer(
+                    "text",
+                    "Text",
+                    opacity = .5f,
+                    payload = LayerPayload.TextObject(
+                        "Neo",
+                        x = 0f,
+                        y = 0f,
+                        width = 4f,
+                        height = 4f,
+                    ),
+                ),
+            ),
+        )
+        var requestedSize = 0 to 0
+        val image = PngExporter.render(
+            document,
+            emptyMap(),
+            textRasterizer = TextRasterizer { _, width, height ->
+                requestedSize = width to height
+                ByteArray(width * height * 4).apply {
+                    this[0] = 255.toByte()
+                    this[3] = 255.toByte()
+                }
+            },
+        )
+
+        assertEquals(4 to 4, requestedSize)
+        val first = image.rgbaAt(0, 0)
+        assertEquals(255, first[0].toInt() and 255)
+        assertEquals(128, first[3].toInt() and 255)
+        assertEquals(0, image.rgbaAt(1, 0)[3].toInt() and 255)
+    }
+
+    @Test
     fun editable_shapes_flatten_into_png_and_text_never_disappears_silently() {
         val shapeDocument = CanvasDocument(
             "shape-png",

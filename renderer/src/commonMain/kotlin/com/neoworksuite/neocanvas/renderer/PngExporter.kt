@@ -31,10 +31,26 @@ fun interface PngTarget {
     fun write(bytes: ByteArray)
 }
 
-/** Composites visible raster layers at document resolution and writes a local PNG when requested. */
+/**
+ * Host font bridge used only while flattening editable text for interchange output.
+ * The returned bytes are a full-document RGBA8 surface with transparent pixels outside the text.
+ */
+fun interface TextRasterizer {
+    fun rasterize(text: LayerPayload.TextObject, outputWidth: Int, outputHeight: Int): ByteArray
+}
+
+/** Composites visible layers at document resolution and writes a local PNG when requested. */
 object PngExporter {
-    fun export(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>, target: PngTarget): SaveResult = try {
-        target.write(render(document, tiles).encode())
+    fun export(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>, target: PngTarget): SaveResult =
+        export(document, tiles, textRasterizer = null, target = target)
+
+    fun export(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+        textRasterizer: TextRasterizer?,
+        target: PngTarget,
+    ): SaveResult = try {
+        target.write(render(document, tiles, textRasterizer = textRasterizer).encode())
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PNG: ${error.message ?: "unknown output error"}")
@@ -44,6 +60,7 @@ object PngExporter {
         document: CanvasDocument,
         tiles: Map<TileAddress, ByteArray>,
         allowTextPlaceholder: Boolean = false,
+        textRasterizer: TextRasterizer? = null,
     ): PngImage {
         val output = ByteArray(document.width * document.height * 4)
         val groupsById = document.groups.associateBy { it.id }
@@ -85,19 +102,34 @@ object PngExporter {
                 }
 
                 is LayerPayload.TextObject -> {
-                    if (!allowTextPlaceholder) {
-                        error(
+                    when {
+                        textRasterizer != null -> {
+                            require(layer.mask == null && !layer.clipping) {
+                                "Editable text with masks or clipping must be rasterized before PNG export."
+                            }
+                            val rendered = textRasterizer.rasterize(payload, document.width, document.height)
+                            require(rendered.size == output.size) {
+                                "Font-aware text rasterizer returned the wrong pixel dimensions."
+                            }
+                            compositeImage(
+                                output,
+                                rendered,
+                                effectiveOpacity,
+                                layer.blendMode,
+                            )
+                        }
+                        allowTextPlaceholder -> compositeTextPlaceholder(
+                            output,
+                            document.width,
+                            document.height,
+                            payload,
+                            effectiveOpacity,
+                            layer.blendMode,
+                        )
+                        else -> error(
                             "Editable text needs font-aware rasterization before PNG export. Keep the NeoCanvas file or rasterize the text layer.",
                         )
                     }
-                    compositeTextPlaceholder(
-                        output,
-                        document.width,
-                        document.height,
-                        payload,
-                        effectiveOpacity,
-                        layer.blendMode,
-                    )
                 }
             }
         }
@@ -212,6 +244,19 @@ object PngExporter {
                     blendMode,
                 )
             }
+        }
+    }
+
+    private fun compositeImage(
+        output: ByteArray,
+        source: ByteArray,
+        opacity: Float,
+        blendMode: com.neoworksuite.neocanvas.core.model.LayerBlendMode,
+    ) {
+        var offset = 0
+        while (offset < output.size) {
+            LayerCompositor.compositePixel(output, offset, source, offset, opacity, blendMode)
+            offset += 4
         }
     }
 
