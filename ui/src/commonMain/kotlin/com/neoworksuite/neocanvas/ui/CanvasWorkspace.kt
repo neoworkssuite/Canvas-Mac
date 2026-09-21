@@ -92,6 +92,7 @@ fun CanvasWorkspace(
     var quickShapeRawPoints by remember { mutableStateOf<List<DrawPoint>>(emptyList()) }
     var quickShapeSnapped by remember { mutableStateOf(false) }
     var objectGesturePreview by remember { mutableStateOf<LayerPayload?>(null) }
+    var objectGroupGesturePreview by remember { mutableStateOf<Map<String, LayerPayload>>(emptyMap()) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -304,7 +305,49 @@ fun CanvasWorkspace(
                         initial.x >= document.width || initial.y >= document.height)) return@awaitEachGesture
 
                     val initialOffset = Offset(initial.x, initial.y)
-                    val startingObjectLayer = state.activeObjectLayer?.takeIf { state.objectEditorVisible }
+                    val arrangeGroupsById = document.groups.associateBy { it.id }
+                    val startingGroupLayers = document.layers.filter { layer ->
+                        layer.id in state.selectedObjectLayerIds &&
+                            (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
+                    }
+                    val startingGroupPayloads: Map<String, LayerPayload> =
+                        if (startingGroupLayers.size >= 2) startingGroupLayers.associate { it.id to it.payload } else emptyMap()
+                    val startingGroupBounds = editableObjectArrangeBounds(startingGroupPayloads.values.toList())
+                    val groupCenter = startingGroupBounds?.let {
+                        Offset((it.left + it.right) / 2f, (it.top + it.bottom) / 2f)
+                    }
+                    val groupHandleRadius = 18f / gestureScale
+                    val groupCorners = startingGroupBounds?.let {
+                        listOf(
+                            Offset(it.left, it.top),
+                            Offset(it.right, it.top),
+                            Offset(it.left, it.bottom),
+                            Offset(it.right, it.bottom),
+                        )
+                    }.orEmpty()
+                    val groupRotationHandle = startingGroupBounds?.let {
+                        Offset((it.left + it.right) / 2f, it.top - 32f / gestureScale)
+                    }
+                    val groupDrag = when {
+                        startingGroupBounds == null -> ObjectDrag.None
+                        groupRotationHandle != null &&
+                            (initialOffset - groupRotationHandle).getDistance() <= groupHandleRadius -> ObjectDrag.Rotate
+                        groupCorners.any { (initialOffset - it).getDistance() <= groupHandleRadius } -> ObjectDrag.Scale
+                        initialOffset.x in startingGroupBounds.left..startingGroupBounds.right &&
+                            initialOffset.y in startingGroupBounds.top..startingGroupBounds.bottom -> ObjectDrag.Move
+                        else -> ObjectDrag.None
+                    }
+                    if (groupDrag != ObjectDrag.None && startingGroupLayers.any { layer ->
+                            layer.locked || layer.groupId?.let { arrangeGroupsById[it]?.locked } == true
+                        }) {
+                        state.statusMessage = "Unlock all marked objects before transforming them"
+                        down.consume()
+                        return@awaitEachGesture
+                    }
+
+                    val startingObjectLayer = state.activeObjectLayer?.takeIf {
+                        state.objectEditorVisible && groupDrag == ObjectDrag.None
+                    }
                     val startingObjectPayload = startingObjectLayer?.payload?.takeIf {
                         it is LayerPayload.TextObject || it is LayerPayload.ShapeObject
                     }
@@ -336,10 +379,14 @@ fun CanvasWorkspace(
                     try {
                         inProgress.clear()
                         moveDelta = Offset.Zero
+                        if (groupDrag != ObjectDrag.None) {
+                            objectGroupGesturePreview = startingGroupPayloads
+                        }
                         if (startingObjectPayload != null && objectDrag != ObjectDrag.None) {
                             objectGesturePreview = startingObjectPayload
                         }
-                        val startingTransform = if (objectDrag == ObjectDrag.None) state.transformSession else null
+                        val startingTransform =
+                            if (objectDrag == ObjectDrag.None && groupDrag == ObjectDrag.None) state.transformSession else null
                         val startingBounds = startingTransform?.targetBounds(document.width, document.height)
                         val transformCenter = startingBounds?.let { Offset((it.left + it.right) / 2f, (it.top + it.bottom) / 2f) }
                         val handleRadius = 18f / gestureScale
@@ -359,12 +406,20 @@ fun CanvasWorkspace(
                         val startAngle = transformCenter?.let { atan2(initial.y - it.y, initial.x - it.x) } ?: 0f
                         val objectCenter = startingObjectGeometry?.center
                         val objectStartDistance = objectCenter?.let { (initialOffset - it).getDistance().coerceAtLeast(.001f) } ?: 1f
-                        movingSelection = startingTransform == null && startingObjectPayload == null && state.tool == Tool.MoveSelection &&
+                        val groupStartDistance = groupCenter?.let {
+                            (initialOffset - it).getDistance().coerceAtLeast(.001f)
+                        } ?: 1f
+                        var groupTranslation = Offset.Zero
+                        var groupScale = 1f
+                        var groupRotationDelta = 0f
+                        movingSelection = startingTransform == null && startingObjectPayload == null &&
+                            groupDrag == ObjectDrag.None && state.tool == Tool.MoveSelection &&
                             (state.selection?.contains(initial.x.toInt(), initial.y.toInt()) == true)
                         inProgress += initial
                         quickShapeSnapped = false
                         quickShapePointerDown =
-                            state.quickShapeEnabled && state.tool == Tool.Brush && startingTransform == null
+                            state.quickShapeEnabled && state.tool == Tool.Brush && startingTransform == null &&
+                                startingObjectPayload == null && groupDrag == ObjectDrag.None
                         quickShapeRawPoints = if (quickShapePointerDown) listOf(initial) else emptyList()
                         quickShapeRevision++
                         var previous = down.position
@@ -380,7 +435,41 @@ fun CanvasWorkspace(
                             val amount = change.position - previous
                             val currentPoint = point(change.position, 1f)
                             val currentObjectPoint = Offset(currentPoint.x, currentPoint.y)
-                            if (startingObjectPayload != null && objectCenter != null && objectDrag != ObjectDrag.None) {
+                            if (groupDrag != ObjectDrag.None && groupCenter != null) {
+                                when (groupDrag) {
+                                    ObjectDrag.Move -> {
+                                        groupTranslation = currentObjectPoint - initialOffset
+                                        groupScale = 1f
+                                        groupRotationDelta = 0f
+                                    }
+                                    ObjectDrag.Scale -> {
+                                        groupTranslation = Offset.Zero
+                                        groupScale = ((currentObjectPoint - groupCenter).getDistance() / groupStartDistance)
+                                            .takeIf { it.isFinite() }?.coerceIn(.05f, 20f) ?: 1f
+                                        groupRotationDelta = 0f
+                                    }
+                                    ObjectDrag.Rotate -> {
+                                        groupTranslation = Offset.Zero
+                                        groupScale = 1f
+                                        groupRotationDelta = angleDeltaDegrees(
+                                            initialOffset - groupCenter,
+                                            currentObjectPoint - groupCenter,
+                                        )
+                                    }
+                                    ObjectDrag.None -> Unit
+                                }
+                                objectGroupGesturePreview = startingGroupPayloads.mapValues { (_, payload) ->
+                                    transformEditableObjectAsGroup(
+                                        payload = payload,
+                                        groupCenter = groupCenter,
+                                        translation = groupTranslation,
+                                        scale = groupScale,
+                                        rotationDelta = groupRotationDelta,
+                                        documentWidth = document.width,
+                                        documentHeight = document.height,
+                                    )
+                                }
+                            } else if (startingObjectPayload != null && objectCenter != null && objectDrag != ObjectDrag.None) {
                                 objectGesturePreview = when (objectDrag) {
                                     ObjectDrag.Move -> state.snapEditableObjectPreview(
                                         transformEditableObject(
@@ -463,7 +552,14 @@ fun CanvasWorkspace(
                             if (!change.pressed) break
                         }
                         if (cancelled) return@awaitEachGesture
-                        if (startingObjectPayload != null && objectDrag != ObjectDrag.None) {
+                        if (groupDrag != ObjectDrag.None) {
+                            state.transformSelectedObjects(
+                                translationX = groupTranslation.x,
+                                translationY = groupTranslation.y,
+                                scale = groupScale,
+                                rotationDelta = groupRotationDelta,
+                            )
+                        } else if (startingObjectPayload != null && objectDrag != ObjectDrag.None) {
                             objectGesturePreview?.let { state.commitActiveObjectTransform(it) }
                         } else if (startingTransform != null) {
                             // The preview remains pending until the explicit Apply or Cancel action.
@@ -484,6 +580,7 @@ fun CanvasWorkspace(
                         moveDelta = Offset.Zero
                         movingSelection = false
                         objectGesturePreview = null
+                        objectGroupGesturePreview = emptyMap()
                     }
                 }
             }.pointerInput(Unit) {
@@ -514,6 +611,7 @@ fun CanvasWorkspace(
                     textMeasurer,
                     editableObjectPreviewLayerId = if (objectGesturePreview != null) state.activeLayerId else null,
                     editableObjectPreview = objectGesturePreview,
+                    editableObjectPreviews = objectGroupGesturePreview,
                 )
 
                 if (state.objectSnapping) {
@@ -546,30 +644,52 @@ fun CanvasWorkspace(
 
                 if (state.selectedObjectLayerIds.isNotEmpty()) {
                     val groupsById = document.groups.associateBy { it.id }
-                    val markedPayloads = document.layers.mapNotNull { layer ->
-                        val group = layer.groupId?.let(groupsById::get)
-                        if (layer.id !in state.selectedObjectLayerIds || !layer.visible || group?.visible == false) null
-                        else layer.payload.takeIf {
-                            it is LayerPayload.TextObject || it is LayerPayload.ShapeObject
-                        }
+                    val markedLayers = document.layers.mapNotNull { layer ->
+                        if (layer.id !in state.selectedObjectLayerIds) return@mapNotNull null
+                        val payload = objectGroupGesturePreview[layer.id] ?: layer.payload
+                        if (payload is LayerPayload.TextObject || payload is LayerPayload.ShapeObject) {
+                            layer to payload
+                        } else null
                     }
                     val memberColor = NeoCanvasColors.accent.copy(alpha = .45f)
-                    markedPayloads.forEach { payload ->
-                        val corners = payload.editableObjectGeometry()?.outlineCorners().orEmpty()
-                        if (corners.size >= 2) {
-                            corners.forEachIndexed { index, point ->
-                                val next = corners[(index + 1) % corners.size]
-                                drawLine(memberColor, point, next, 1f / scale)
+                    markedLayers.forEach { (layer, payload) ->
+                        val group = layer.groupId?.let(groupsById::get)
+                        if (layer.visible && group?.visible != false) {
+                            val corners = payload.editableObjectGeometry()?.outlineCorners().orEmpty()
+                            if (corners.size >= 2) {
+                                corners.forEachIndexed { index, point ->
+                                    val next = corners[(index + 1) % corners.size]
+                                    drawLine(memberColor, point, next, 1f / scale)
+                                }
                             }
                         }
                     }
-                    editableObjectArrangeBounds(markedPayloads)?.let { bounds ->
+                    editableObjectArrangeBounds(markedLayers.map { it.second })?.let { bounds ->
+                        val accent = NeoCanvasColors.accent
                         drawRect(
-                            NeoCanvasColors.accent.copy(alpha = .85f),
+                            accent.copy(alpha = .85f),
                             topLeft = Offset(bounds.left, bounds.top),
                             size = Size(bounds.right - bounds.left, bounds.bottom - bounds.top),
                             style = Stroke(1.5f / scale),
                         )
+                        if (markedLayers.size >= 2) {
+                            val radius = 6f / scale
+                            val handles = listOf(
+                                Offset(bounds.left, bounds.top),
+                                Offset(bounds.right, bounds.top),
+                                Offset(bounds.left, bounds.bottom),
+                                Offset(bounds.right, bounds.bottom),
+                            )
+                            handles.forEach { handle ->
+                                drawCircle(Color.Black, radius * 1.5f, handle)
+                                drawCircle(accent, radius, handle)
+                            }
+                            val topCenter = Offset((bounds.left + bounds.right) / 2f, bounds.top)
+                            val rotateHandle = Offset(topCenter.x, topCenter.y - 32f / scale)
+                            drawLine(accent, topCenter, rotateHandle, 1.25f / scale)
+                            drawCircle(Color.Black, radius * 1.5f, rotateHandle)
+                            drawCircle(accent, radius, rotateHandle)
+                        }
                     }
                 }
 
@@ -612,7 +732,7 @@ fun CanvasWorkspace(
                     drawLine(guideColor, Offset(0f, document.height / 2f),
                         Offset(document.width.toFloat(), document.height / 2f), 1f / scale)
                 }
-                if (state.objectEditorVisible) {
+                if (state.objectEditorVisible && state.selectedObjectCount < 2) {
                     val activeObjectLayer = state.activeObjectLayer
                     val groupVisible = activeObjectLayer?.groupId?.let { groupId ->
                         document.groups.firstOrNull { it.id == groupId }?.visible
@@ -1003,6 +1123,7 @@ private fun DrawScope.drawStoredTiles(
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
     editableObjectPreviewLayerId: String? = null,
     editableObjectPreview: LayerPayload? = null,
+    editableObjectPreviews: Map<String, LayerPayload> = emptyMap(),
 ) {
     val groupsById = state.document.groups.associateBy { it.id }
     state.document.layers.forEachIndexed { index, layer ->
@@ -1010,7 +1131,9 @@ private fun DrawScope.drawStoredTiles(
         val effectiveOpacity = layer.opacity * (group?.opacity ?: 1f)
         if (!layer.visible || group?.visible == false || effectiveOpacity <= 0f) return@forEachIndexed
         val blendMode = layerBlendMode(layer.blendMode)
-        val renderedPayload = if (layer.id == editableObjectPreviewLayerId && editableObjectPreview != null) {
+        val renderedPayload = editableObjectPreviews[layer.id] ?: if (
+            layer.id == editableObjectPreviewLayerId && editableObjectPreview != null
+        ) {
             editableObjectPreview
         } else layer.payload
         when (val payload = renderedPayload) {
@@ -1383,6 +1506,56 @@ private fun transformEditableObject(
                 y = (centerY - newHeight / 2f).coerceIn(-abs(newHeight), documentHeight.toFloat()),
                 width = newWidth,
                 height = newHeight,
+                strokeWidth = (payload.strokeWidth * safeScale).coerceIn(0f, 128f),
+                cornerRadius = (payload.cornerRadius * safeScale).coerceAtLeast(0f),
+                rotationDegrees = normalizeViewRotation(payload.rotationDegrees + rotationDelta),
+            )
+        }
+
+        is LayerPayload.Raster -> payload
+    }
+}
+
+private fun transformEditableObjectAsGroup(
+    payload: LayerPayload,
+    groupCenter: Offset,
+    translation: Offset,
+    scale: Float,
+    rotationDelta: Float,
+    documentWidth: Int,
+    documentHeight: Int,
+): LayerPayload {
+    val safeScale = scale.takeIf { it.isFinite() && it > 0f }?.coerceIn(.05f, 20f) ?: 1f
+    val objectCenter = payload.editableObjectGeometry()?.center ?: return payload
+    val transformedCenter =
+        groupCenter + rotateOffset((objectCenter - groupCenter) * safeScale, rotationDelta) + translation
+
+    return when (payload) {
+        is LayerPayload.TextObject -> {
+            val width = (payload.width * safeScale).coerceIn(20f, maxOf(20f, documentWidth * 2f))
+            val height = (payload.height * safeScale).coerceIn(20f, maxOf(20f, documentHeight * 2f))
+            payload.copy(
+                x = transformedCenter.x - width / 2f,
+                y = transformedCenter.y - height / 2f,
+                width = width,
+                height = height,
+                fontSize = (payload.fontSize * safeScale).coerceIn(6f, 512f),
+                rotationDegrees = normalizeViewRotation(payload.rotationDegrees + rotationDelta),
+            )
+        }
+
+        is LayerPayload.ShapeObject -> {
+            val width = signedObjectScale(payload.width, safeScale, 8f, maxOf(8f, documentWidth * 2f))
+            val height = if (payload.kind == ShapeKind.Line) {
+                signedObjectScale(payload.height, safeScale, 0f, maxOf(8f, documentHeight * 2f))
+            } else {
+                signedObjectScale(payload.height, safeScale, 8f, maxOf(8f, documentHeight * 2f))
+            }
+            payload.copy(
+                x = transformedCenter.x - width / 2f,
+                y = transformedCenter.y - height / 2f,
+                width = width,
+                height = height,
                 strokeWidth = (payload.strokeWidth * safeScale).coerceIn(0f, 128f),
                 cornerRadius = (payload.cornerRadius * safeScale).coerceAtLeast(0f),
                 rotationDegrees = normalizeViewRotation(payload.rotationDegrees + rotationDelta),
