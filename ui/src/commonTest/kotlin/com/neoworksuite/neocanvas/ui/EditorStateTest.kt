@@ -928,6 +928,95 @@ class EditorStateTest {
     }
 
     @Test
+    fun arrange_marks_editable_objects_and_aligns_them_in_one_undo_step() {
+        val first = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 10f,
+            y = 20f,
+            width = 50f,
+            height = 40f,
+        )
+        val second = LayerPayload.TextObject(
+            text = "Title",
+            x = 100f,
+            y = 40f,
+            width = 100f,
+            height = 50f,
+        )
+        val initial = CanvasDocument(
+            id = "multi-align",
+            width = 300,
+            height = 200,
+            layers = listOf(
+                Layer("shape-1", "Shape", payload = first),
+                Layer("text-1", "Text", payload = second),
+            ),
+        )
+        val state = EditorState(DocumentHistory(initial))
+
+        assertTrue(state.toggleObjectArrangeSelection("shape-1"))
+        assertTrue(state.toggleObjectArrangeSelection("text-1"))
+        assertEquals(2, state.selectedObjectCount)
+        assertTrue(state.arrangeSelectedObjects(ObjectCanvasAlignment.Right))
+
+        assertEquals(150f, (state.document.layers[0].payload as LayerPayload.ShapeObject).x, .001f)
+        assertEquals(100f, (state.document.layers[1].payload as LayerPayload.TextObject).x, .001f)
+        assertTrue(state.undo())
+        assertEquals(initial, state.document)
+        assertFalse(state.undo())
+    }
+
+    @Test
+    fun arrange_distribution_uses_equal_visual_spacing_and_keeps_outer_objects() {
+        val layers = listOf(
+            Layer("a", "A", payload = LayerPayload.ShapeObject(
+                kind = ShapeKind.Rectangle, x = 0f, y = 20f, width = 20f, height = 20f,
+            )),
+            Layer("b", "B", payload = LayerPayload.ShapeObject(
+                kind = ShapeKind.Rectangle, x = 30f, y = 20f, width = 20f, height = 20f,
+            )),
+            Layer("c", "C", payload = LayerPayload.ShapeObject(
+                kind = ShapeKind.Rectangle, x = 100f, y = 20f, width = 20f, height = 20f,
+            )),
+        )
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "distribute-objects",
+            width = 200,
+            height = 100,
+            layers = layers,
+        )))
+        listOf("a", "b", "c").forEach { assertTrue(state.toggleObjectArrangeSelection(it)) }
+
+        assertTrue(state.distributeSelectedObjects(horizontal = true))
+
+        assertEquals(0f, (state.document.layers[0].payload as LayerPayload.ShapeObject).x, .001f)
+        assertEquals(50f, (state.document.layers[1].payload as LayerPayload.ShapeObject).x, .001f)
+        assertEquals(100f, (state.document.layers[2].payload as LayerPayload.ShapeObject).x, .001f)
+        assertEquals("Distributed selected objects horizontally", state.statusMessage)
+    }
+
+    @Test
+    fun arrange_mark_refuses_locked_objects() {
+        val shape = LayerPayload.ShapeObject(
+            kind = ShapeKind.Ellipse,
+            x = 20f,
+            y = 20f,
+            width = 60f,
+            height = 60f,
+        )
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "locked-arrange",
+            width = 200,
+            height = 200,
+            layers = listOf(Layer("locked", "Locked", payload = shape, locked = true)),
+        )))
+
+        assertFalse(state.toggleObjectArrangeSelection("locked"))
+        assertEquals(0, state.selectedObjectCount)
+        assertEquals("Unlock this object before adding it to Arrange", state.statusMessage)
+    }
+
+    @Test
     fun raster_tools_ignore_editable_object_layers() {
         val initial = CanvasDocument(
             id = "object-raster-guard",

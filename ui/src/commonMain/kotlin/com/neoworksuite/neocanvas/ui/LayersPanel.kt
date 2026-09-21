@@ -78,7 +78,8 @@ fun LayersPanel(state: EditorState, modifier: Modifier = Modifier) {
             Text(
                 state.document.layers.size.toString() + " LAYERS" +
                     if (state.document.groups.isNotEmpty()) " · " + state.document.groups.size + " GROUPS" else "" +
-                    if (state.sleepingLayerCount > 0) " · " + state.sleepingLayerCount + " SLEEPING" else "",
+                    if (state.sleepingLayerCount > 0) " · " + state.sleepingLayerCount + " SLEEPING" else "" +
+                    if (state.selectedObjectCount > 0) " · " + state.selectedObjectCount + " ARRANGE" else "",
                 color = NeoCanvasColors.faint,
                 fontSize = 9.sp,
                 letterSpacing = .5.sp,
@@ -90,7 +91,10 @@ fun LayersPanel(state: EditorState, modifier: Modifier = Modifier) {
                     .clickable { state.addLayer() }.padding(horizontal = 10.dp, vertical = 3.dp)
                     .semantics { contentDescription = "New layer" })
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (state.selectedObjectCount > 0) {
+            ObjectArrangeBar(state)
+        }
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(state.document.groups.asReversed(), key = { "group-" + it.id }) { group ->
                 LayerGroupCard(group, state)
             }
@@ -102,8 +106,52 @@ fun LayersPanel(state: EditorState, modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun ObjectArrangeBar(state: EditorState) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+            .background(NeoCanvasColors.panelRaised).padding(7.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                state.selectedObjectCount.toString() + " OBJECT" +
+                    if (state.selectedObjectCount == 1) " MARKED" else "S MARKED",
+                color = NeoCanvasColors.accent,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            LayerTrayAction("Clear") { state.clearObjectArrangeSelection() }
+        }
+        if (state.selectedObjectCount >= 2) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("Left", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Left) }
+                LayerTrayAction("Centre", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.CenterHorizontal) }
+                LayerTrayAction("Right", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Right) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("Top", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Top) }
+                LayerTrayAction("Middle", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.CenterVertical) }
+                LayerTrayAction("Bottom", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Bottom) }
+            }
+        } else {
+            Text("Mark another editable Text or Shape layer.", color = NeoCanvasColors.faint, fontSize = 9.sp)
+        }
+        if (state.selectedObjectCount >= 3) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("Space H", Modifier.weight(1f)) { state.distributeSelectedObjects(horizontal = true) }
+                LayerTrayAction("Space V", Modifier.weight(1f)) { state.distributeSelectedObjects(horizontal = false) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) {
     val selected = layer.id == state.activeLayerId
+    val arrangeSelected = state.isObjectArrangeSelected(layer.id)
+    val editableObject = layer.payload is com.neoworksuite.neocanvas.core.model.LayerPayload.TextObject ||
+        layer.payload is com.neoworksuite.neocanvas.core.model.LayerPayload.ShapeObject
     val density = LocalDensity.current
     val actionWidthPx = with(density) { 132.dp.toPx() }
     val reorderThresholdPx = with(density) { 44.dp.toPx() }
@@ -130,7 +178,7 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
 
         Column(
             Modifier.fillMaxWidth().offset { IntOffset(swipeOffset.roundToInt(), 0) }
-                .background(if (selected) NeoCanvasColors.panelRaised else NeoCanvasColors.chrome)
+                .background(if (selected || arrangeSelected) NeoCanvasColors.panelRaised else NeoCanvasColors.chrome)
                 .clickable {
                     if (swipeOffset != 0f) {
                         swipeOffset = 0f
@@ -190,7 +238,17 @@ private fun LayerCard(layer: Layer, state: EditorState, images: TileImageCache) 
                         }
                         .semantics { contentDescription = "Drag " + layer.name + " to reorder" },
                 )
-                LayerThumbnail(layer, state, images, Modifier.size(42.dp))
+                if (editableObject) {
+                    Text(
+                        if (arrangeSelected) "✓" else "○",
+                        color = if (arrangeSelected) NeoCanvasColors.accent else NeoCanvasColors.faint,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable { state.toggleObjectArrangeSelection(layer.id) }
+                            .padding(end = 6.dp, top = 5.dp, bottom = 5.dp)
+                            .semantics { contentDescription = "Mark " + layer.name + " for Arrange" },
+                    )
+                }
+                                LayerThumbnail(layer, state, images, Modifier.size(42.dp))
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     if (renaming) {
                         BasicTextField(

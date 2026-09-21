@@ -45,6 +45,7 @@ import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
 import com.neoworksuite.neocanvas.core.model.UpdateTextLayer
 import com.neoworksuite.neocanvas.core.model.UpdateShapeLayer
+import com.neoworksuite.neocanvas.core.model.UpdateEditableObjects
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
 import com.neoworksuite.neocanvas.core.store.LoadResult
@@ -648,6 +649,43 @@ class EditorState(
     val activeObjectLocked: Boolean
         get() = activeObjectLayer?.let { it.locked || isGroupLocked(it) } ?: false
 
+    var selectedObjectLayerIds: Set<String> by mutableStateOf(emptySet())
+        private set
+
+    val selectedObjectCount: Int
+        get() = document.layers.count { layer ->
+            layer.id in selectedObjectLayerIds &&
+                (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
+        }
+
+    fun isObjectArrangeSelected(layerId: String): Boolean = layerId in selectedObjectLayerIds
+
+    fun toggleObjectArrangeSelection(layerId: String): Boolean {
+        val layer = document.layers.firstOrNull { it.id == layerId } ?: return false
+        if (layer.payload !is LayerPayload.TextObject && layer.payload !is LayerPayload.ShapeObject) {
+            statusMessage = "Arrange selection is for editable Text and Shape layers"
+            return false
+        }
+        if (layer.locked || isGroupLocked(layer)) {
+            statusMessage = "Unlock this object before adding it to Arrange"
+            return false
+        }
+        selectedObjectLayerIds = if (layerId in selectedObjectLayerIds) {
+            selectedObjectLayerIds - layerId
+        } else {
+            selectedObjectLayerIds + layerId
+        }
+        activeLayerId = layerId
+        statusMessage = selectedObjectCount.toString() + " object" +
+            if (selectedObjectCount == 1) " marked for Arrange" else "s marked for Arrange"
+        return true
+    }
+
+    fun clearObjectArrangeSelection() {
+        selectedObjectLayerIds = emptySet()
+        statusMessage = "Arrange selection cleared"
+    }
+
     private fun mutableActiveObjectLayer(action: String = "editing it"): Layer? {
         val layer = activeObjectLayer ?: return null
         if (layer.locked || isGroupLocked(layer)) {
@@ -827,6 +865,113 @@ class EditorState(
             }
             is LayerPayload.Raster -> Unit
         }
+    }
+
+    fun arrangeSelectedObjects(alignment: ObjectCanvasAlignment): Boolean {
+        val layers = mutableArrangeLayers(minimum = 2) ?: return false
+        val bounds = layers.associate { it.id to editableObjectVisualBounds(it.payload) }
+        val unionLeft = bounds.values.minOf { it.left }
+        val unionTop = bounds.values.minOf { it.top }
+        val unionRight = bounds.values.maxOf { it.right }
+        val unionBottom = bounds.values.maxOf { it.bottom }
+        val targetCenterX = (unionLeft + unionRight) / 2f
+        val targetCenterY = (unionTop + unionBottom) / 2f
+
+        val updates = layers.associate { layer ->
+            val item = bounds.getValue(layer.id)
+            val dx = when (alignment) {
+                ObjectCanvasAlignment.Left -> unionLeft - item.left
+                ObjectCanvasAlignment.CenterHorizontal,
+                ObjectCanvasAlignment.CenterBoth -> targetCenterX - (item.left + item.right) / 2f
+                ObjectCanvasAlignment.Right -> unionRight - item.right
+                else -> 0f
+            }
+            val dy = when (alignment) {
+                ObjectCanvasAlignment.Top -> unionTop - item.top
+                ObjectCanvasAlignment.CenterVertical,
+                ObjectCanvasAlignment.CenterBoth -> targetCenterY - (item.top + item.bottom) / 2f
+                ObjectCanvasAlignment.Bottom -> unionBottom - item.bottom
+                else -> 0f
+            }
+            layer.id to translateEditableObject(layer.payload, dx, dy)
+        }
+        execute(UpdateEditableObjects(updates))
+        statusMessage = when (alignment) {
+            ObjectCanvasAlignment.Left -> "Aligned selected objects left"
+            ObjectCanvasAlignment.CenterHorizontal -> "Aligned selected objects horizontally"
+            ObjectCanvasAlignment.Right -> "Aligned selected objects right"
+            ObjectCanvasAlignment.Top -> "Aligned selected objects top"
+            ObjectCanvasAlignment.CenterVertical -> "Aligned selected objects vertically"
+            ObjectCanvasAlignment.Bottom -> "Aligned selected objects bottom"
+            ObjectCanvasAlignment.CenterBoth -> "Centred selected objects together"
+        }
+        return true
+    }
+
+    fun distributeSelectedObjects(horizontal: Boolean): Boolean {
+        val layers = mutableArrangeLayers(minimum = 3) ?: return false
+        val bounds = layers.associate { it.id to editableObjectVisualBounds(it.payload) }
+        val ordered = if (horizontal) {
+            layers.sortedBy { bounds.getValue(it.id).left }
+        } else {
+            layers.sortedBy { bounds.getValue(it.id).top }
+        }
+        val firstBounds = bounds.getValue(ordered.first().id)
+        val lastBounds = bounds.getValue(ordered.last().id)
+        val totalSize = ordered.sumOf { layer ->
+            val item = bounds.getValue(layer.id)
+            if (horizontal) (item.right - item.left).toDouble() else (item.bottom - item.top).toDouble()
+        }.toFloat()
+        val span = if (horizontal) {
+            lastBounds.right - firstBounds.left
+        } else {
+            lastBounds.bottom - firstBounds.top
+        }
+        val gap = (span - totalSize) / (ordered.size - 1)
+
+        var cursor = if (horizontal) firstBounds.right + gap else firstBounds.bottom + gap
+        val updates = linkedMapOf<String, LayerPayload>()
+        ordered.forEachIndexed { index, layer ->
+            val item = bounds.getValue(layer.id)
+            if (index == 0 || index == ordered.lastIndex) {
+                updates[layer.id] = layer.payload
+            } else if (horizontal) {
+                updates[layer.id] = translateEditableObject(layer.payload, cursor - item.left, 0f)
+                cursor += (item.right - item.left) + gap
+            } else {
+                updates[layer.id] = translateEditableObject(layer.payload, 0f, cursor - item.top)
+                cursor += (item.bottom - item.top) + gap
+            }
+        }
+        execute(UpdateEditableObjects(updates))
+        statusMessage = if (horizontal) {
+            "Distributed selected objects horizontally"
+        } else {
+            "Distributed selected objects vertically"
+        }
+        return true
+    }
+
+    private fun mutableArrangeLayers(minimum: Int): List<Layer>? {
+        val layers = document.layers.filter { layer ->
+            layer.id in selectedObjectLayerIds &&
+                (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
+        }
+        if (layers.size < minimum) {
+            statusMessage = "Mark at least $minimum editable objects for Arrange"
+            return null
+        }
+        if (layers.any { it.locked || isGroupLocked(it) }) {
+            statusMessage = "Unlock all marked objects before arranging them"
+            return null
+        }
+        return layers
+    }
+
+    private fun translateEditableObject(payload: LayerPayload, dx: Float, dy: Float): LayerPayload = when (payload) {
+        is LayerPayload.TextObject -> payload.copy(x = payload.x + dx, y = payload.y + dy)
+        is LayerPayload.ShapeObject -> payload.copy(x = payload.x + dx, y = payload.y + dy)
+        is LayerPayload.Raster -> payload
     }
 
     fun alignActiveObjectToCanvas(alignment: ObjectCanvasAlignment): Boolean {
@@ -1419,6 +1564,7 @@ class EditorState(
     private fun resetDormantLayerState() {
         dormantLayerIds = emptySet()
         maskEditingLayerId = null
+        selectedObjectLayerIds = emptySet()
         resetEditableStrokes()
     }
 
@@ -2406,6 +2552,7 @@ class EditorState(
         if (document.layers.any { it.id == id && it.locked }) { statusMessage = "Unlock this layer before deleting it"; return }
         if (document.layers.size <= 1) { statusMessage = "Keep at least one drawing layer."; return }
         execute(DeleteLayer(id))
+        selectedObjectLayerIds = selectedObjectLayerIds - id
         if (maskEditingLayerId == id) maskEditingLayerId = null
         activeLayerId = document.layers.lastOrNull()?.id
     }
