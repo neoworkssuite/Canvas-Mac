@@ -2335,6 +2335,27 @@ class EditorState(
         return true
     }
 
+    fun clearActiveRasterLayer(): Boolean {
+        val layerId = activeLayerId ?: return false
+        if (!wakeLayer(layerId)) return false
+        val layer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked }
+        if (layer?.payload !is LayerPayload.Raster || isGroupLocked(layer)) {
+            statusMessage = "Clear gesture needs an unlocked visible raster layer"
+            return false
+        }
+        val removals = tileStore.keys.filterTo(linkedSetOf()) { it.layerId == layerId }
+        if (removals.isEmpty()) {
+            statusMessage = "Active layer is already empty"
+            return true
+        }
+        val before = tileStore.snapshot()
+        tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterPatch.of(emptyMap(), removals))
+        execute(ApplyRasterPatch(layerId, removedTileAddresses = removals), before)
+        clearSelection()
+        statusMessage = "Cleared active layer — Undo to restore"
+        return true
+    }
+
     fun clearSelectedPixels() {
         val bounds = selection ?: return
         val layer = activeLayerId ?: return

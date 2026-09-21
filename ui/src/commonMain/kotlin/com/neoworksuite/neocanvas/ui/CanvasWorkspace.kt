@@ -210,6 +210,11 @@ fun CanvasWorkspace(
                         var stylusSeen = firstDown.type == PointerType.Stylus
                         var threeFingerStart: Offset? = null
                         var threeFingerEnd: Offset? = null
+                        var threeFingerLastX: Float? = null
+                        var threeFingerScrubSegment = 0f
+                        var threeFingerScrubDirection = 0
+                        var threeFingerScrubReversals = 0
+                        var threeFingerHorizontalTravel = 0f
                         rapidHistoryTriggered = false
                         rapidHistoryFingerCount = 0
                         rapidHistoryRevision++
@@ -248,6 +253,20 @@ fun CanvasWorkspace(
                                     val centroid = touches.map { it.position }.reduce { a, b -> a + b } / touches.size.toFloat()
                                     if (threeFingerStart == null) threeFingerStart = centroid
                                     threeFingerEnd = centroid
+                                    threeFingerLastX?.let { previousX ->
+                                        val dx = centroid.x - previousX
+                                        threeFingerHorizontalTravel += kotlin.math.abs(dx)
+                                        threeFingerScrubSegment += dx
+                                        if (kotlin.math.abs(threeFingerScrubSegment) >= viewConfiguration.touchSlop * 1.25f) {
+                                            val direction = if (threeFingerScrubSegment > 0f) 1 else -1
+                                            if (threeFingerScrubDirection != 0 && direction != threeFingerScrubDirection) {
+                                                threeFingerScrubReversals++
+                                            }
+                                            threeFingerScrubDirection = direction
+                                            threeFingerScrubSegment = 0f
+                                        }
+                                    }
+                                    threeFingerLastX = centroid.x
                                 }
 
                                 if (touches.size == 2) {
@@ -304,6 +323,16 @@ fun CanvasWorkspace(
 
                                 if (rapidHistoryTriggered) {
                                     // Hold-to-repeat already performed the history action; do not add the tap action.
+                                } else if (isThreeFingerScrubClear(
+                                        maxTouchCount = maxTouchCount,
+                                        durationMillis = duration,
+                                        reversals = threeFingerScrubReversals,
+                                        horizontalTravel = threeFingerHorizontalTravel,
+                                        touchSlop = viewConfiguration.touchSlop,
+                                        stylusSeen = stylusSeen,
+                                    )
+                                ) {
+                                    state.clearActiveRasterLayer()
                                 } else if (isThreeFingerClipboardSwipe(
                                         maxTouchCount = maxTouchCount,
                                         durationMillis = duration,
@@ -1971,6 +2000,19 @@ private fun applyViewportTransform(
     state.panX = nextCanvasCenter.x - baseCenter.x
     state.panY = nextCanvasCenter.y - baseCenter.y
     state.rotateViewBy(rotationChange)
+}
+
+internal fun isThreeFingerScrubClear(
+    maxTouchCount: Int,
+    durationMillis: Long,
+    reversals: Int,
+    horizontalTravel: Float,
+    touchSlop: Float,
+    stylusSeen: Boolean,
+): Boolean {
+    if (stylusSeen || maxTouchCount != 3 || durationMillis !in 0L..1400L) return false
+    if (!horizontalTravel.isFinite() || !touchSlop.isFinite() || touchSlop <= 0f) return false
+    return reversals >= 2 && horizontalTravel >= touchSlop * 10f
 }
 
 internal fun shouldArmRapidHistoryGesture(
