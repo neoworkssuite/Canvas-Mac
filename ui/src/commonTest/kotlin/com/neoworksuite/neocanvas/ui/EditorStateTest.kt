@@ -647,7 +647,7 @@ class EditorStateTest {
         assertEquals(1, state.document.layers.size)
         assertTrue(state.hasUnsavedChanges)
         assertTrue(state.versions.any { it.label == "Before restore" })
-        assertEquals("Restored local version — current work was kept as Before restore", state.statusMessage)
+        assertEquals("Restored Main version — current work was kept as Before restore", state.statusMessage)
     }
 
     @Test
