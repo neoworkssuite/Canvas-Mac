@@ -577,6 +577,27 @@ class DuplicateEditableLayers(
     }
 }
 
+class MoveLayersToStackEdge(
+    layerIds: Set<String>,
+    val toFront: Boolean,
+) : DocumentCommand {
+    val layerIds: Set<String> = layerIds.toSet()
+
+    init {
+        require(this.layerIds.isNotEmpty()) { "At least one layer is required to reorder." }
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        val existingIds = document.layers.mapTo(linkedSetOf(), Layer::id)
+        require(layerIds.all { it in existingIds }) { "Every reordered layer must exist." }
+        val selected = document.layers.filter { it.id in layerIds }
+        val unselected = document.layers.filterNot { it.id in layerIds }
+        return document.copy(
+            layers = if (toFront) unselected + selected else selected + unselected,
+        )
+    }
+}
+
 class DeleteLayers(layerIds: Set<String>) : DocumentCommand {
     val layerIds: Set<String> = layerIds.toSet()
 

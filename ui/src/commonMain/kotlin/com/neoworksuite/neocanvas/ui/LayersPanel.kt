@@ -136,6 +136,10 @@ private fun ObjectArrangeBar(state: EditorState) {
                 LayerTrayAction("Duplicate", Modifier.weight(1f)) { state.duplicateSelectedObjects() }
                 LayerTrayAction("Delete", Modifier.weight(1f), destructive = true) { state.deleteSelectedObjects() }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("To Back", Modifier.weight(1f)) { state.moveSelectedObjectsToStackEdge(toFront = false) }
+                LayerTrayAction("To Front", Modifier.weight(1f)) { state.moveSelectedObjectsToStackEdge(toFront = true) }
+            }
         }
         if (state.selectedObjectCount >= 2) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

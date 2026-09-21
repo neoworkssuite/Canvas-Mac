@@ -24,6 +24,7 @@ import com.neoworksuite.neocanvas.core.model.DocumentHistory
 import com.neoworksuite.neocanvas.core.model.DuplicateLayer
 import com.neoworksuite.neocanvas.core.model.DuplicateEditableLayers
 import com.neoworksuite.neocanvas.core.model.DeleteLayers
+import com.neoworksuite.neocanvas.core.model.MoveLayersToStackEdge
 import com.neoworksuite.neocanvas.core.model.MoveLayer
 import com.neoworksuite.neocanvas.core.model.RenameLayer
 import com.neoworksuite.neocanvas.core.model.SetLayerOpacity
@@ -934,6 +935,17 @@ class EditorState(
         activeLayerId = document.layers.lastOrNull()?.id
         statusMessage = "Deleted " + layers.size + " marked object" +
             if (layers.size == 1) "" else "s"
+        return true
+    }
+
+    fun moveSelectedObjectsToStackEdge(toFront: Boolean): Boolean {
+        val layers = mutableArrangeLayers(minimum = 1) ?: return false
+        execute(MoveLayersToStackEdge(layers.mapTo(linkedSetOf(), Layer::id), toFront))
+        statusMessage = if (toFront) {
+            "Moved marked objects to front"
+        } else {
+            "Moved marked objects to back"
+        }
         return true
     }
 
