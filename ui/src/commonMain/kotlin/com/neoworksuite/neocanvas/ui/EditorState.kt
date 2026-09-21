@@ -2468,6 +2468,9 @@ class EditorState(
     var autoRecoveryEnabled: Boolean by mutableStateOf(true)
     var showStatusMessages: Boolean by mutableStateOf(true)
     var quickShapeEnabled: Boolean by mutableStateOf(true)
+    var eyedropperSampleMerged: Boolean by mutableStateOf(true)
+    var eyedropperReturnAfterSample: Boolean by mutableStateOf(true)
+    private var eyedropperReturnTool: Tool = Tool.Brush
     var gridGuideVisible: Boolean by mutableStateOf(false)
     var perspectiveGuideVisible: Boolean by mutableStateOf(false)
     var guideSpacing: Float by mutableFloatStateOf(128f)
@@ -2478,6 +2481,8 @@ class EditorState(
         autoRecoveryEnabled = true
         showStatusMessages = true
         quickShapeEnabled = true
+        eyedropperSampleMerged = true
+        eyedropperReturnAfterSample = true
         gridGuideVisible = false
         perspectiveGuideVisible = false
         guideSpacing = 128f
@@ -2498,6 +2503,8 @@ class EditorState(
                     "autoRecoveryEnabled" to autoRecoveryEnabled.toString(),
                     "showStatusMessages" to showStatusMessages.toString(),
                     "quickShapeEnabled" to quickShapeEnabled.toString(),
+                    "eyedropperSampleMerged" to eyedropperSampleMerged.toString(),
+                    "eyedropperReturnAfterSample" to eyedropperReturnAfterSample.toString(),
                     "gridGuideVisible" to gridGuideVisible.toString(),
                     "perspectiveGuideVisible" to perspectiveGuideVisible.toString(),
                     "guideSpacing" to guideSpacing.toString(),
@@ -2525,6 +2532,10 @@ class EditorState(
             autoRecoveryEnabled = preferences["autoRecoveryEnabled"]?.toBoolean() ?: autoRecoveryEnabled
             showStatusMessages = preferences["showStatusMessages"]?.toBoolean() ?: showStatusMessages
             quickShapeEnabled = preferences["quickShapeEnabled"]?.toBoolean() ?: quickShapeEnabled
+            eyedropperSampleMerged =
+                preferences["eyedropperSampleMerged"]?.toBoolean() ?: eyedropperSampleMerged
+            eyedropperReturnAfterSample =
+                preferences["eyedropperReturnAfterSample"]?.toBoolean() ?: eyedropperReturnAfterSample
             gridGuideVisible = preferences["gridGuideVisible"]?.toBoolean() ?: gridGuideVisible
             perspectiveGuideVisible = preferences["perspectiveGuideVisible"]?.toBoolean() ?: perspectiveGuideVisible
             guideSpacing = preferences["guideSpacing"]?.toFloatOrNull()?.coerceIn(32f, 512f) ?: guideSpacing
@@ -2610,9 +2621,15 @@ class EditorState(
         brushOpacity = selection.opacity
     }
     fun activateTool(next: Tool) {
+        if (next == Tool.Eyedropper && tool != Tool.Eyedropper) eyedropperReturnTool = tool
+        val temporaryLiquifyEyedropper =
+            next == Tool.Eyedropper && tool == Tool.Liquify && eyedropperReturnAfterSample
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
-        if (inspectorVisible && inspectorPanel == InspectorPanel.Liquify && next != Tool.Liquify) hideInspector()
-        if (next != Tool.Liquify) clearLiquifySession()
+        if (
+            inspectorVisible && inspectorPanel == InspectorPanel.Liquify &&
+            next != Tool.Liquify && !temporaryLiquifyEyedropper
+        ) hideInspector()
+        if (next != Tool.Liquify && !temporaryLiquifyEyedropper) clearLiquifySession()
         tool = next
     }
 
@@ -3310,22 +3327,107 @@ class EditorState(
             execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
             statusMessage = "Filled connected colour on active layer"
         } else if (tool == Tool.Eyedropper) {
-            var r = NeoCanvasColors.paper.red
-            var g = NeoCanvasColors.paper.green
-            var b = NeoCanvasColors.paper.blue
-            document.layers.filter { it.visible }.forEach { layer ->
-                val bytes = tileStore.read(TileKey(layer.id, x / 256, y / 256)) ?: return@forEach
-                val i = ((y % 256) * 256 + x % 256) * 4
-                val alpha = (bytes[i + 3].toInt() and 255) / 255f * layer.opacity
-                r = (bytes[i].toInt() and 255) / 255f * alpha + r * (1f - alpha)
-                g = (bytes[i + 1].toInt() and 255) / 255f * alpha + g * (1f - alpha)
-                b = (bytes[i + 2].toInt() and 255) / 255f * alpha + b * (1f - alpha)
+            val sampled = sampleEyedropperColor(x, y)
+            if (sampled == null) {
+                statusMessage = if (eyedropperSampleMerged) {
+                    "No visible raster colour at this point"
+                } else {
+                    "No colour on the active raster layer at this point"
+                }
+                return
             }
-            color = Color(r, g, b)
-            tool = Tool.Brush
-            statusMessage = "Sampled visible colour"
+            color = sampled
+            if (eyedropperReturnAfterSample) {
+                tool = eyedropperReturnTool
+            }
+            statusMessage = if (eyedropperSampleMerged) {
+                "Sampled merged canvas colour"
+            } else {
+                "Sampled active layer colour"
+            }
         }
     }
+    private fun sampleEyedropperColor(x: Int, y: Int): Color? {
+        val groupsById = document.groups.associateBy { it.id }
+        val tileX = x / 256
+        val tileY = y / 256
+        val localOffset = ((y % 256) * 256 + x % 256) * 4
+
+        fun maskFactor(layer: Layer): Float {
+            val mask = layer.mask ?: return 1f
+            if (!mask.enabled) return 1f
+            val bytes = tileStore.read(TileKey(mask.id, tileX, tileY)) ?: return if (mask.inverted) 0f else 1f
+            val value = (bytes[localOffset].toInt() and 255) / 255f
+            return if (mask.inverted) 1f - value else value
+        }
+
+        fun rasterPixel(layer: Layer): ByteArray? {
+            val raster = layer.payload as? LayerPayload.Raster ?: return null
+            if (raster.tileAddresses.none { it.x == tileX && it.y == tileY }) return null
+            val bytes = tileStore.read(TileKey(layer.id, tileX, tileY)) ?: return null
+            val pixel = byteArrayOf(
+                bytes[localOffset],
+                bytes[localOffset + 1],
+                bytes[localOffset + 2],
+                bytes[localOffset + 3],
+            )
+            val alpha = (pixel[3].toInt() and 255) / 255f * maskFactor(layer)
+            pixel[3] = (alpha * 255f + .5f).toInt().coerceIn(0, 255).toByte()
+            return pixel
+        }
+
+        fun visible(layer: Layer): Boolean {
+            val group = layer.groupId?.let(groupsById::get)
+            return layer.visible && group?.visible != false
+        }
+
+        if (!eyedropperSampleMerged) {
+            val layer = activeLayerId?.let { id -> document.layers.firstOrNull { it.id == id } } ?: return null
+            if (!visible(layer)) return null
+            val pixel = rasterPixel(layer) ?: return null
+            if ((pixel[3].toInt() and 255) == 0) return null
+            return Color(
+                (pixel[0].toInt() and 255) / 255f,
+                (pixel[1].toInt() and 255) / 255f,
+                (pixel[2].toInt() and 255) / 255f,
+            )
+        }
+
+        val paper = NeoCanvasColors.paper
+        val destination = byteArrayOf(
+            (paper.red * 255f + .5f).toInt().toByte(),
+            (paper.green * 255f + .5f).toInt().toByte(),
+            (paper.blue * 255f + .5f).toInt().toByte(),
+            255.toByte(),
+        )
+        document.layers.forEachIndexed { index, layer ->
+            if (!visible(layer)) return@forEachIndexed
+            val pixel = rasterPixel(layer) ?: return@forEachIndexed
+            if (layer.clipping && index > 0) {
+                val base = document.layers[index - 1]
+                val baseAlpha = if (visible(base)) {
+                    rasterPixel(base)?.let { (it[3].toInt() and 255) / 255f } ?: 0f
+                } else 0f
+                val clippedAlpha = (pixel[3].toInt() and 255) / 255f * baseAlpha
+                pixel[3] = (clippedAlpha * 255f + .5f).toInt().coerceIn(0, 255).toByte()
+            }
+            val groupOpacity = layer.groupId?.let(groupsById::get)?.opacity ?: 1f
+            com.neoworksuite.neocanvas.renderer.LayerCompositor.compositePixel(
+                destination = destination,
+                destinationOffset = 0,
+                source = pixel,
+                sourceOffset = 0,
+                opacity = layer.opacity * groupOpacity,
+                blendMode = layer.blendMode,
+            )
+        }
+        return Color(
+            (destination[0].toInt() and 255) / 255f,
+            (destination[1].toInt() and 255) / 255f,
+            (destination[2].toInt() and 255) / 255f,
+        )
+    }
+
     fun resetView() {
         zoom = 1f
         panX = 0f

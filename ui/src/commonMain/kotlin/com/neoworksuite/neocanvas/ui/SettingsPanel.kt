@@ -60,6 +60,18 @@ fun SettingsPanel(
             state.quickShapeEnabled,
         ) { state.quickShapeEnabled = it; state.persistPreferences() }
 
+        SettingsToggle(
+            "Eyedropper samples merged canvas",
+            "On samples the visible raster composite; off samples only the active raster layer.",
+            state.eyedropperSampleMerged,
+        ) { state.eyedropperSampleMerged = it; state.persistPreferences() }
+
+        SettingsToggle(
+            "Eyedropper returns to previous tool",
+            "Return to the tool you were using after one sample instead of staying in Eyedropper.",
+            state.eyedropperReturnAfterSample,
+        ) { state.eyedropperReturnAfterSample = it; state.persistPreferences() }
+
         SettingsSection("CANVAS & EDITING")
         SettingsToggle(
             "Smooth selection resizing",
