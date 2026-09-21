@@ -70,6 +70,14 @@ enum class InspectorPanel { Layers, Brushes, Colors, Effects, Liquify }
 enum class PendingDocumentAction { New, Open, Close }
 data class DrawPoint(val x: Float, val y: Float, val pressure: Float = 1f)
 
+private data class ArtworkClipboard(
+    val width: Int,
+    val height: Int,
+    val originX: Int,
+    val originY: Int,
+    val tiles: Map<TileKey, ByteArray>,
+)
+
 /**
  * Shared editor coordinator. Pixels live in [tileStore], while every visible document mutation
  * is recorded in [history]. Tile snapshots pair with history entries so undo/redo restores both
@@ -640,6 +648,8 @@ class EditorState(
     var tool: Tool by mutableStateOf(Tool.Brush)
     var selection: CanvasSelection? by mutableStateOf(null)
         private set
+    private var artworkClipboard: ArtworkClipboard? by mutableStateOf(null)
+    val hasArtworkClipboard: Boolean get() = artworkClipboard != null
     var selectionMode: SelectionShape by mutableStateOf(SelectionShape.Rectangle)
     var selectionCombineMode: SelectionCombineMode by mutableStateOf(SelectionCombineMode.Replace)
     var transformSession: TransformSession? by mutableStateOf(null)
@@ -2221,6 +2231,110 @@ class EditorState(
         beginTransform()
         statusMessage = "Image imported — transform active. Drag the image or its handles, then leave Transform when finished."
     }
+    fun copySelectionToArtworkClipboard(): Boolean {
+        val bounds = selection ?: run {
+            statusMessage = "Make a selection before copying artwork"
+            return false
+        }
+        val layerId = activeLayerId ?: return false
+        val layer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked }
+        if (layer?.payload !is LayerPayload.Raster || isGroupLocked(layer)) {
+            statusMessage = "Copy needs an unlocked visible raster layer"
+            return false
+        }
+        val width = bounds.right - bounds.left
+        val height = bounds.bottom - bounds.top
+        if (width <= 0 || height <= 0) return false
+
+        val source = tileStore.snapshotLayer(layerId)
+        val copied = linkedMapOf<TileKey, ByteArray>()
+        for (y in bounds.top until bounds.bottom) for (x in bounds.left until bounds.right) {
+            if (!bounds.contains(x, y)) continue
+            val sourceKey = TileKey(layerId, x / 256, y / 256)
+            val sourceBytes = source[sourceKey] ?: continue
+            val sourceOffset = ((y % 256) * 256 + x % 256) * 4
+            if ((sourceBytes[sourceOffset + 3].toInt() and 255) == 0) continue
+
+            val localX = x - bounds.left
+            val localY = y - bounds.top
+            val targetKey = TileKey("__clipboard__", localX / 256, localY / 256)
+            val target = copied.getOrPut(targetKey) {
+                ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE)
+            }
+            val targetOffset = ((localY % 256) * 256 + localX % 256) * 4
+            for (channel in 0..3) target[targetOffset + channel] = sourceBytes[sourceOffset + channel]
+        }
+        if (copied.isEmpty()) {
+            statusMessage = "Selected artwork is empty"
+            return false
+        }
+        artworkClipboard = ArtworkClipboard(
+            width = width,
+            height = height,
+            originX = bounds.left,
+            originY = bounds.top,
+            tiles = copied.mapValues { (_, bytes) -> bytes.copyOf() },
+        )
+        statusMessage = "Copied selected artwork"
+        return true
+    }
+
+    fun pasteArtworkClipboard(): Boolean {
+        val clipboard = artworkClipboard ?: run {
+            statusMessage = "Copy artwork before pasting"
+            return false
+        }
+        val id = nextLayerId()
+        val maxLeft = (document.width - clipboard.width).coerceAtLeast(0)
+        val maxTop = (document.height - clipboard.height).coerceAtLeast(0)
+        val left = (clipboard.originX + 16).coerceIn(0, maxLeft)
+        val top = (clipboard.originY + 16).coerceIn(0, maxTop)
+        val pasted = linkedMapOf<TileKey, ByteArray>()
+
+        clipboard.tiles.forEach { (sourceKey, sourceBytes) ->
+            val tileBaseX = sourceKey.x * 256
+            val tileBaseY = sourceKey.y * 256
+            val tileWidth = minOf(256, clipboard.width - tileBaseX).coerceAtLeast(0)
+            val tileHeight = minOf(256, clipboard.height - tileBaseY).coerceAtLeast(0)
+            for (localY in 0 until tileHeight) for (localX in 0 until tileWidth) {
+                val sourceOffset = (localY * 256 + localX) * 4
+                if ((sourceBytes[sourceOffset + 3].toInt() and 255) == 0) continue
+                val x = left + tileBaseX + localX
+                val y = top + tileBaseY + localY
+                if (x !in 0 until document.width || y !in 0 until document.height) continue
+                val targetKey = TileKey(id, x / 256, y / 256)
+                val target = pasted.getOrPut(targetKey) {
+                    ByteArray(com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE)
+                }
+                val targetOffset = ((y % 256) * 256 + x % 256) * 4
+                for (channel in 0..3) target[targetOffset + channel] = sourceBytes[sourceOffset + channel]
+            }
+        }
+        if (pasted.isEmpty()) {
+            statusMessage = "Copied artwork does not fit this canvas"
+            return false
+        }
+
+        val before = tileStore.snapshot()
+        tileStore.applyPatch(com.neoworksuite.neocanvas.renderer.RasterPatch.of(pasted))
+        execute(
+            com.neoworksuite.neocanvas.core.model.ImportRasterLayer(
+                id,
+                "Pasted artwork",
+                pasted.keys,
+            ),
+            before,
+        )
+        activeLayerId = id
+        val right = minOf(document.width, left + clipboard.width)
+        val bottom = minOf(document.height, top + clipboard.height)
+        selection = CanvasSelection(left, top, right, bottom)
+        tool = Tool.MoveSelection
+        beginTransform()
+        statusMessage = "Pasted artwork — transform active"
+        return true
+    }
+
     fun clearSelectedPixels() {
         val bounds = selection ?: return
         val layer = activeLayerId ?: return

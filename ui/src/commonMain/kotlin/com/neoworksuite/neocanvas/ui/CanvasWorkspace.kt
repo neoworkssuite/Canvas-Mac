@@ -103,6 +103,7 @@ fun CanvasWorkspace(
     var quickMenuRevision by remember { mutableIntStateOf(0) }
     var quickMenuCandidate by remember { mutableStateOf<Offset?>(null) }
     var quickMenuAnchor by remember { mutableStateOf<Offset?>(null) }
+    var clipboardMenuVisible by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -190,6 +191,8 @@ fun CanvasWorkspace(
                         var accumulatedRotation = 0f
                         var touchTravel = 0f
                         var stylusSeen = firstDown.type == PointerType.Stylus
+                        var threeFingerStart: Offset? = null
+                        var threeFingerEnd: Offset? = null
 
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -207,6 +210,12 @@ fun CanvasWorkspace(
                                 // Multi-touch always belongs to canvas navigation/shortcuts, never to a brush stroke.
                                 inProgress.clear()
                                 touches.forEach { it.consume() }
+
+                                if (touches.size >= 3) {
+                                    val centroid = touches.map { it.position }.reduce { a, b -> a + b } / touches.size.toFloat()
+                                    if (threeFingerStart == null) threeFingerStart = centroid
+                                    threeFingerEnd = centroid
+                                }
 
                                 if (touches.size == 2) {
                                     val first = touches[0]
@@ -258,7 +267,18 @@ fun CanvasWorkspace(
                                 val duration = (lastEventTime - multiTouchStartedAt).coerceAtLeast(0L)
                                 val tapTravelLimit = viewConfiguration.touchSlop * maxOf(2, maxTouchCount) * 1.5f
 
-                                if (isFourFingerCanvasToggle(
+                                if (isThreeFingerClipboardSwipe(
+                                        maxTouchCount = maxTouchCount,
+                                        durationMillis = duration,
+                                        start = threeFingerStart,
+                                        end = threeFingerEnd,
+                                        touchSlop = viewConfiguration.touchSlop,
+                                        stylusSeen = stylusSeen,
+                                    )
+                                ) {
+                                    clipboardMenuVisible = true
+                                    state.statusMessage = "Artwork clipboard — Copy or Paste"
+                                } else if (isFourFingerCanvasToggle(
                                         maxTouchCount = maxTouchCount,
                                         durationMillis = duration,
                                         touchTravel = touchTravel,
@@ -965,6 +985,13 @@ fun CanvasWorkspace(
                 anchor = anchor,
                 viewport = viewport,
                 onDismiss = { quickMenuAnchor = null },
+            )
+        }
+
+        if (clipboardMenuVisible) {
+            ClipboardGestureMenu(
+                state = state,
+                onDismiss = { clipboardMenuVisible = false },
             )
         }
 
@@ -1907,6 +1934,51 @@ private fun applyViewportTransform(
     state.panX = nextCanvasCenter.x - baseCenter.x
     state.panY = nextCanvasCenter.y - baseCenter.y
     state.rotateViewBy(rotationChange)
+}
+
+internal fun isThreeFingerClipboardSwipe(
+    maxTouchCount: Int,
+    durationMillis: Long,
+    start: Offset?,
+    end: Offset?,
+    touchSlop: Float,
+    stylusSeen: Boolean,
+): Boolean {
+    if (stylusSeen || maxTouchCount != 3 || durationMillis !in 0L..900L) return false
+    if (!touchSlop.isFinite() || touchSlop <= 0f) return false
+    val from = start ?: return false
+    val to = end ?: return false
+    val delta = to - from
+    return kotlin.math.abs(delta.x) >= touchSlop * 4f &&
+        kotlin.math.abs(delta.x) >= kotlin.math.abs(delta.y) * 1.5f
+}
+
+@Composable
+private fun ClipboardGestureMenu(
+    state: EditorState,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        Modifier.fillMaxSize()
+            .background(Color.Black.copy(alpha = .10f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier.clip(RoundedCornerShape(14.dp))
+                .background(NeoCanvasColors.chrome.copy(alpha = .98f))
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            QuickMenuAction("Copy", enabled = state.selection != null) {
+                if (state.copySelectionToArtworkClipboard()) onDismiss()
+            }
+            QuickMenuAction("Paste", enabled = state.hasArtworkClipboard) {
+                if (state.pasteArtworkClipboard()) onDismiss()
+            }
+            QuickMenuAction("Cancel") { onDismiss() }
+        }
+    }
 }
 
 internal fun shouldArmQuickMenu(
