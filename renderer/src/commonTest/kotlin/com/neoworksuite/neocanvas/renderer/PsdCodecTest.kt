@@ -50,6 +50,26 @@ class PsdCodecTest {
     }
 
     @Test
+    fun editable_objects_are_reported_and_rejected_by_psd_v1_export() {
+        val document = CanvasDocument(
+            id = "psd-object",
+            width = 64,
+            height = 64,
+            layers = listOf(
+                Layer(
+                    "text",
+                    "Text",
+                    payload = LayerPayload.TextObject("Hello", x = 4f, y = 4f, width = 40f, height = 20f),
+                ),
+            ),
+        )
+        val report = PsdCodec.analyzeExport(document, emptyMap())
+        assertFalse(report.canExport)
+        assertTrue(report.blockingIssues.any { "raster layers only" in it })
+        assertFailsWith<IllegalArgumentException> { PsdCodec.encode(document, emptyMap()) }
+    }
+
+    @Test
     fun layered_round_trip_preserves_raster_layers_and_supported_metadata() {
         val baseId = "base"
         val topId = "top"

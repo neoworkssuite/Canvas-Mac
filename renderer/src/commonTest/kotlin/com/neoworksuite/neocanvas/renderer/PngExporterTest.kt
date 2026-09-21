@@ -5,8 +5,10 @@ import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.TileAddress
+import com.neoworksuite.neocanvas.core.model.ShapeKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class PngExporterTest {
     @Test fun multiply_and_screen_blend_modes_are_used_during_export() {
@@ -120,6 +122,57 @@ class PngExporterTest {
             TileAddress("top", 0, 0) to top,
         )).rgbaAt(0, 0)
         assertEquals(100, result[0].toInt() and 255)
+    }
+
+    @Test
+    fun editable_shapes_flatten_into_png_and_text_never_disappears_silently() {
+        val shapeDocument = CanvasDocument(
+            "shape-png",
+            32,
+            32,
+            layers = listOf(
+                Layer(
+                    "shape",
+                    "Shape",
+                    payload = LayerPayload.ShapeObject(
+                        kind = ShapeKind.Rectangle,
+                        x = 8f,
+                        y = 8f,
+                        width = 16f,
+                        height = 12f,
+                        fillArgb = 0xffff0000.toInt(),
+                    ),
+                ),
+            ),
+        )
+        val rendered = PngExporter.render(shapeDocument, emptyMap())
+        val inside = rendered.rgbaAt(12, 12)
+        val outside = rendered.rgbaAt(2, 2)
+        assertEquals(255, inside[0].toInt() and 255)
+        assertEquals(255, inside[3].toInt() and 255)
+        assertEquals(0, outside[3].toInt() and 255)
+
+        val textDocument = CanvasDocument(
+            "text-png",
+            32,
+            32,
+            layers = listOf(
+                Layer(
+                    "text",
+                    "Text",
+                    payload = LayerPayload.TextObject(
+                        "Hello",
+                        x = 2f,
+                        y = 2f,
+                        width = 24f,
+                        height = 10f,
+                    ),
+                ),
+            ),
+        )
+        assertFailsWith<IllegalStateException> {
+            PngExporter.render(textDocument, emptyMap())
+        }
     }
 
     @Test

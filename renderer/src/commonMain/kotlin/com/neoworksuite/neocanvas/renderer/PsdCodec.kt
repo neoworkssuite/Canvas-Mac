@@ -82,6 +82,9 @@ object PsdCodec {
             "PSD dimensions must be between 1 and 30,000 pixels."
         }
         require(document.layers.size <= MAX_LAYERS) { "PSD export supports up to " + MAX_LAYERS + " layers." }
+        require(document.layers.all { it.payload is LayerPayload.Raster }) {
+            "PSD V1 export currently supports raster layers only. Rasterize text and shape objects first."
+        }
 
         val merged = PngExporter.render(document, tiles).rgba
         val hasMergedAlpha = (3 until merged.size step 4).any { (merged[it].toInt() and 255) != 255 }

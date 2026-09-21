@@ -2,6 +2,7 @@ package com.neoworksuite.neocanvas.renderer
 
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import kotlin.math.max
@@ -46,21 +47,42 @@ object PngExporter {
             val group = layer.groupId?.let(groupsById::get)
             val effectiveOpacity = layer.opacity * (group?.opacity ?: 1f)
             if (!layer.visible || group?.visible == false || effectiveOpacity <= 0f) return@forEachIndexed
-            val raster = layer.payload as? LayerPayload.Raster ?: return@forEachIndexed
-            val clippingBase = if (layer.clipping && index > 0) document.layers[index - 1] else null
-            val clippingRaster = clippingBase?.payload as? LayerPayload.Raster
-            raster.tileAddresses.forEach { address ->
-                val sourcePixels = tiles[address] ?: return@forEach
-                require(sourcePixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
-                val maskedPixels = applyLayerMask(sourcePixels, layer.mask, address, tiles)
-                val pixels = if (layer.clipping) {
-                    val basePixels = clippingRaster?.let {
-                        val raw = tiles[TileAddress(clippingBase!!.id, address.x, address.y)]
-                        raw?.let { applyLayerMask(it, clippingBase.mask, address, tiles) }
+            when (val payload = layer.payload) {
+                is LayerPayload.Raster -> {
+                    val clippingBase = if (layer.clipping && index > 0) document.layers[index - 1] else null
+                    val clippingRaster = clippingBase?.payload as? LayerPayload.Raster
+                    payload.tileAddresses.forEach { address ->
+                        val sourcePixels = tiles[address] ?: return@forEach
+                        require(sourcePixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
+                        val maskedPixels = applyLayerMask(sourcePixels, layer.mask, address, tiles)
+                        val pixels = if (layer.clipping) {
+                            val basePixels = clippingRaster?.let {
+                                val raw = tiles[TileAddress(clippingBase!!.id, address.x, address.y)]
+                                raw?.let { applyLayerMask(it, clippingBase.mask, address, tiles) }
+                            }
+                            clipAlpha(maskedPixels, basePixels)
+                        } else maskedPixels
+                        compositeTile(output, document.width, document.height, address, pixels, effectiveOpacity, layer.blendMode)
                     }
-                    clipAlpha(maskedPixels, basePixels)
-                } else maskedPixels
-                compositeTile(output, document.width, document.height, address, pixels, effectiveOpacity, layer.blendMode)
+                }
+
+                is LayerPayload.ShapeObject -> {
+                    require(layer.mask == null && !layer.clipping) {
+                        "Editable shapes with masks or clipping must be rasterized before PNG export."
+                    }
+                    compositeShape(
+                        output,
+                        document.width,
+                        document.height,
+                        payload,
+                        effectiveOpacity,
+                        layer.blendMode,
+                    )
+                }
+
+                is LayerPayload.TextObject -> error(
+                    "Editable text needs font-aware rasterization before PNG export. Keep the NeoCanvas file or rasterize the text layer.",
+                )
             }
         }
         return PngImage(document.width, document.height, output)
@@ -110,6 +132,141 @@ object PngExporter {
             offset += 4
         }
         return output
+    }
+
+    private fun compositeShape(
+        output: ByteArray,
+        outputWidth: Int,
+        outputHeight: Int,
+        shape: LayerPayload.ShapeObject,
+        opacity: Float,
+        blendMode: com.neoworksuite.neocanvas.core.model.LayerBlendMode,
+    ) {
+        val strokeHalf = if (shape.strokeArgb != null) shape.strokeWidth / 2f else 0f
+        val centerX = shape.x + shape.width / 2f
+        val centerY = shape.y + shape.height / 2f
+        val angle = shape.rotationDegrees * kotlin.math.PI.toFloat() / 180f
+        val cosA = kotlin.math.cos(angle)
+        val sinA = kotlin.math.sin(angle)
+
+        fun rotatePoint(x: Float, y: Float): Pair<Float, Float> {
+            val dx = x - centerX
+            val dy = y - centerY
+            return (centerX + dx * cosA - dy * sinA) to (centerY + dx * sinA + dy * cosA)
+        }
+
+        val rawLeft = minOf(shape.x, shape.x + shape.width) - strokeHalf - 2f
+        val rawTop = minOf(shape.y, shape.y + shape.height) - strokeHalf - 2f
+        val rawRight = maxOf(shape.x, shape.x + shape.width) + strokeHalf + 2f
+        val rawBottom = maxOf(shape.y, shape.y + shape.height) + strokeHalf + 2f
+        val corners = listOf(
+            rotatePoint(rawLeft, rawTop),
+            rotatePoint(rawRight, rawTop),
+            rotatePoint(rawLeft, rawBottom),
+            rotatePoint(rawRight, rawBottom),
+        )
+        val fromX = kotlin.math.floor(corners.minOf { it.first }).toInt().coerceIn(0, outputWidth)
+        val fromY = kotlin.math.floor(corners.minOf { it.second }).toInt().coerceIn(0, outputHeight)
+        val toX = kotlin.math.ceil(corners.maxOf { it.first }).toInt().coerceIn(0, outputWidth)
+        val toY = kotlin.math.ceil(corners.maxOf { it.second }).toInt().coerceIn(0, outputHeight)
+        if (fromX >= toX || fromY >= toY) return
+
+        val inverseCos = cosA
+        val inverseSin = -sinA
+        val sampleOffsets = floatArrayOf(.25f, .75f)
+        val source = ByteArray(4)
+
+        fun localPoint(px: Float, py: Float): Pair<Float, Float> {
+            val dx = px - centerX
+            val dy = py - centerY
+            val rx = centerX + dx * inverseCos - dy * inverseSin
+            val ry = centerY + dx * inverseSin + dy * inverseCos
+            return (rx - shape.x) to (ry - shape.y)
+        }
+
+        fun rectangleFill(lx: Float, ly: Float): Boolean =
+            lx >= 0f && lx <= shape.width && ly >= 0f && ly <= shape.height
+
+        fun rectangleStroke(lx: Float, ly: Float): Boolean {
+            if (shape.strokeArgb == null) return false
+            val half = shape.strokeWidth / 2f
+            val outer = lx >= -half && lx <= shape.width + half && ly >= -half && ly <= shape.height + half
+            if (!outer) return false
+            val innerLeft = half
+            val innerTop = half
+            val innerRight = shape.width - half
+            val innerBottom = shape.height - half
+            val inner = innerRight > innerLeft && innerBottom > innerTop &&
+                lx > innerLeft && lx < innerRight && ly > innerTop && ly < innerBottom
+            return !inner
+        }
+
+        fun ellipseRadius(lx: Float, ly: Float): Float {
+            val rx = shape.width / 2f
+            val ry = shape.height / 2f
+            if (rx <= 0f || ry <= 0f) return Float.POSITIVE_INFINITY
+            val nx = (lx - rx) / rx
+            val ny = (ly - ry) / ry
+            return kotlin.math.sqrt(nx * nx + ny * ny)
+        }
+
+        fun ellipseFill(lx: Float, ly: Float): Boolean = ellipseRadius(lx, ly) <= 1f
+
+        fun ellipseStroke(lx: Float, ly: Float): Boolean {
+            if (shape.strokeArgb == null) return false
+            val minRadius = minOf(kotlin.math.abs(shape.width), kotlin.math.abs(shape.height)) / 2f
+            if (minRadius <= 0f) return false
+            return kotlin.math.abs(ellipseRadius(lx, ly) - 1f) * minRadius <= shape.strokeWidth / 2f
+        }
+
+        fun lineStroke(lx: Float, ly: Float): Boolean {
+            val vx = shape.width
+            val vy = shape.height
+            val length2 = vx * vx + vy * vy
+            if (length2 <= 0f) return false
+            val t = ((lx * vx + ly * vy) / length2).coerceIn(0f, 1f)
+            val nearestX = t * vx
+            val nearestY = t * vy
+            val dx = lx - nearestX
+            val dy = ly - nearestY
+            return kotlin.math.sqrt(dx * dx + dy * dy) <= shape.strokeWidth.coerceAtLeast(1f) / 2f
+        }
+
+        fun compositeSolid(argb: Int, coverage: Float, destinationOffset: Int) {
+            if (coverage <= 0f) return
+            source[0] = (argb ushr 16).toByte()
+            source[1] = (argb ushr 8).toByte()
+            source[2] = argb.toByte()
+            val alpha = (argb ushr 24) and 255
+            source[3] = (alpha * coverage + .5f).toInt().coerceIn(0, 255).toByte()
+            LayerCompositor.compositePixel(output, destinationOffset, source, 0, opacity, blendMode)
+        }
+
+        for (y in fromY until toY) {
+            for (x in fromX until toX) {
+                var fillHits = 0
+                var strokeHits = 0
+                for (oy in sampleOffsets) {
+                    for (ox in sampleOffsets) {
+                        val (lx, ly) = localPoint(x + ox, y + oy)
+                        when (shape.kind) {
+                            ShapeKind.Rectangle -> {
+                                if (shape.fillArgb != null && rectangleFill(lx, ly)) fillHits++
+                                if (rectangleStroke(lx, ly)) strokeHits++
+                            }
+                            ShapeKind.Ellipse -> {
+                                if (shape.fillArgb != null && ellipseFill(lx, ly)) fillHits++
+                                if (ellipseStroke(lx, ly)) strokeHits++
+                            }
+                            ShapeKind.Line -> if (lineStroke(lx, ly)) strokeHits++
+                        }
+                    }
+                }
+                val destinationOffset = (y * outputWidth + x) * 4
+                shape.fillArgb?.let { compositeSolid(it, fillHits / 4f, destinationOffset) }
+                shape.strokeArgb?.let { compositeSolid(it, strokeHits / 4f, destinationOffset) }
+            }
+        }
     }
 
     private fun compositeTile(output: ByteArray, outputWidth: Int, outputHeight: Int, address: TileAddress, tile: ByteArray,
