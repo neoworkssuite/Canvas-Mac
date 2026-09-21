@@ -241,7 +241,16 @@ fun CanvasWorkspace(
                                 val duration = (lastEventTime - multiTouchStartedAt).coerceAtLeast(0L)
                                 val tapTravelLimit = viewConfiguration.touchSlop * maxOf(2, maxTouchCount) * 1.5f
 
-                                if (!stylusSeen && !transformStarted && duration <= 350L && touchTravel <= tapTravelLimit) {
+                                if (isFourFingerCanvasToggle(
+                                        maxTouchCount = maxTouchCount,
+                                        durationMillis = duration,
+                                        touchTravel = touchTravel,
+                                        touchSlop = viewConfiguration.touchSlop,
+                                        stylusSeen = stylusSeen,
+                                    )
+                                ) {
+                                    state.toggleCanvasOnlyMode()
+                                } else if (!stylusSeen && !transformStarted && duration <= 350L && touchTravel <= tapTravelLimit) {
                                     when (maxTouchCount) {
                                         2 -> if (state.undo()) state.statusMessage = "Undo"
                                         3 -> if (state.redo()) state.statusMessage = "Redo"
@@ -1837,6 +1846,18 @@ private fun applyViewportTransform(
     state.panX = nextCanvasCenter.x - baseCenter.x
     state.panY = nextCanvasCenter.y - baseCenter.y
     state.rotateViewBy(rotationChange)
+}
+
+internal fun isFourFingerCanvasToggle(
+    maxTouchCount: Int,
+    durationMillis: Long,
+    touchTravel: Float,
+    touchSlop: Float,
+    stylusSeen: Boolean,
+): Boolean {
+    if (stylusSeen || maxTouchCount < 4 || durationMillis !in 0L..450L) return false
+    if (!touchTravel.isFinite() || !touchSlop.isFinite() || touchSlop <= 0f) return false
+    return touchTravel <= touchSlop * maxTouchCount * 1.5f
 }
 
 private fun angleDeltaDegrees(previous: Offset, current: Offset): Float {

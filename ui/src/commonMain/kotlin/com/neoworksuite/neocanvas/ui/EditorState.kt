@@ -646,6 +646,24 @@ class EditorState(
         private set
     var transformSnapping: Boolean by mutableStateOf(false)
     var objectSnapping: Boolean by mutableStateOf(false)
+    var canvasOnlyMode: Boolean by mutableStateOf(false)
+        private set
+
+    fun toggleCanvasOnlyMode() {
+        canvasOnlyMode = !canvasOnlyMode
+        if (canvasOnlyMode) {
+            if (inspectorVisible) hideInspector()
+            objectEditorVisible = false
+            recentStrokesVisible = false
+            psdCompatibilityVisible = false
+            versionsVisible = false
+            workbenchPanelVisible = false
+            settingsVisible = false
+            statusMessage = "Canvas only — four-finger tap to restore controls"
+        } else {
+            statusMessage = "Canvas controls restored"
+        }
+    }
 
     var objectEditorVisible: Boolean by mutableStateOf(false)
         private set

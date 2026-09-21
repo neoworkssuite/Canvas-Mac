@@ -173,14 +173,18 @@ fun NeoCanvasApp(
             },
     ) {
         val compact = maxWidth < 860.dp
-        Column(Modifier.fillMaxSize()) {
-            StudioTopBar(state, compact, onGallery = { state.requestClose { destination = AppDestination.Gallery } })
-            if (compact) {
-                CanvasWorkspace(state, Modifier.weight(1f).fillMaxWidth())
-            } else {
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
-                    CanvasWorkspace(state, Modifier.fillMaxHeight().weight(1f))
+        if (state.canvasOnlyMode) {
+            CanvasWorkspace(state, Modifier.fillMaxSize())
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                StudioTopBar(state, compact, onGallery = { state.requestClose { destination = AppDestination.Gallery } })
+                if (compact) {
+                    CanvasWorkspace(state, Modifier.weight(1f).fillMaxWidth())
+                } else {
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
+                        CanvasWorkspace(state, Modifier.fillMaxHeight().weight(1f))
+                    }
                 }
             }
         }
