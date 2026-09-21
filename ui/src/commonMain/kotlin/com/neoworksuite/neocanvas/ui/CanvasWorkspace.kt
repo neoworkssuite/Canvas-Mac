@@ -516,6 +516,34 @@ fun CanvasWorkspace(
                     editableObjectPreview = objectGesturePreview,
                 )
 
+                if (state.objectSnapping) {
+                    objectGesturePreview?.let { preview ->
+                        val guides = editableObjectSmartGuides(
+                            preview,
+                            document.width,
+                            document.height,
+                            tolerance = 1.5f / scale,
+                        )
+                        val guideColor = NeoCanvasColors.accent.copy(alpha = .9f)
+                        guides.verticalX?.let { x ->
+                            drawLine(
+                                guideColor,
+                                Offset(x, 0f),
+                                Offset(x, document.height.toFloat()),
+                                1.5f / scale,
+                            )
+                        }
+                        guides.horizontalY?.let { y ->
+                            drawLine(
+                                guideColor,
+                                Offset(0f, y),
+                                Offset(document.width.toFloat(), y),
+                                1.5f / scale,
+                            )
+                        }
+                    }
+                }
+
                 if (state.gridGuideVisible) {
                     val spacing = state.guideSpacing.coerceIn(32f, 512f)
                     val gridColor = NeoCanvasColors.accent.copy(alpha = .22f)
@@ -1172,6 +1200,43 @@ internal object NeoCanvasColors {
     val disabled = Color(0xFF53606E)
 }
 
+
+internal data class EditableObjectSmartGuides(
+    val verticalX: Float? = null,
+    val horizontalY: Float? = null,
+)
+
+internal fun editableObjectSmartGuides(
+    payload: LayerPayload,
+    documentWidth: Int,
+    documentHeight: Int,
+    tolerance: Float,
+): EditableObjectSmartGuides {
+    if (tolerance < 0f || !tolerance.isFinite()) return EditableObjectSmartGuides()
+    val geometry = payload.editableObjectGeometry() ?: return EditableObjectSmartGuides()
+    val corners = geometry.outlineCorners()
+    if (corners.isEmpty()) return EditableObjectSmartGuides()
+    val left = corners.minOf { it.x }
+    val right = corners.maxOf { it.x }
+    val top = corners.minOf { it.y }
+    val bottom = corners.maxOf { it.y }
+    val centerX = (left + right) / 2f
+    val centerY = (top + bottom) / 2f
+
+    val vertical = listOf(
+        kotlin.math.abs(left) to 0f,
+        kotlin.math.abs(centerX - documentWidth / 2f) to documentWidth / 2f,
+        kotlin.math.abs(right - documentWidth) to documentWidth.toFloat(),
+    ).filter { it.first <= tolerance }.minByOrNull { it.first }?.second
+
+    val horizontal = listOf(
+        kotlin.math.abs(top) to 0f,
+        kotlin.math.abs(centerY - documentHeight / 2f) to documentHeight / 2f,
+        kotlin.math.abs(bottom - documentHeight) to documentHeight.toFloat(),
+    ).filter { it.first <= tolerance }.minByOrNull { it.first }?.second
+
+    return EditableObjectSmartGuides(vertical, horizontal)
+}
 
 private data class EditableObjectGeometry(
     val x: Float,
