@@ -252,6 +252,7 @@ class EditorStateTest {
         assertEquals(4L * com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE, afterImport)
 
         state.cancelTransform()
+        state.activateTool(Tool.Brush)
         state.brushSize = 2f
         state.recordStroke(listOf(DrawPoint(400f, 400f)))
 
