@@ -107,13 +107,17 @@ class EditorState(
         val parent = activeVersionParentId
             ?: versions.firstOrNull { it.branch == activeVersionBranch }?.id
         val result = try {
-            fileActions.createVersionOnBranch(
-                clean,
-                activeVersionBranch,
-                parent,
-                document,
-                tilesForDocument(),
-            )
+            if (fileActions.supportsVersionBranches) {
+                fileActions.createVersionOnBranch(
+                    clean,
+                    activeVersionBranch,
+                    parent,
+                    document,
+                    tilesForDocument(),
+                )
+            } else {
+                fileActions.createVersion(clean, document, tilesForDocument())
+            }
         } catch (error: Exception) {
             SaveResult.Failure(error.message ?: "Could not create local version")
         }
@@ -133,13 +137,17 @@ class EditorState(
         if (!supportsVersions || versions.none { it.id == versionId }) return false
         val target = versions.firstOrNull { it.id == versionId } ?: return false
         val safety = try {
-            fileActions.createVersionOnBranch(
-                "Before restore",
-                activeVersionBranch,
-                activeVersionParentId,
-                document,
-                tilesForDocument(),
-            )
+            if (fileActions.supportsVersionBranches) {
+                fileActions.createVersionOnBranch(
+                    "Before restore",
+                    activeVersionBranch,
+                    activeVersionParentId,
+                    document,
+                    tilesForDocument(),
+                )
+            } else {
+                fileActions.createVersion("Before restore", document, tilesForDocument())
+            }
         } catch (error: Exception) {
             SaveResult.Failure(error.message ?: "Could not create safety version")
         }
@@ -190,7 +198,10 @@ class EditorState(
     }
 
     fun branchFromVersion(versionId: String, branchName: String): Boolean {
-        if (!supportsVersions) return false
+        if (!supportsVersions || !fileActions.supportsVersionBranches) {
+            versionError = "Version branching is unavailable on this device."
+            return false
+        }
         val source = versions.firstOrNull { it.id == versionId } ?: return false
         val cleanBranch = branchName.trim()
         if (!cleanBranch.matches(Regex("[\\p{L}\\p{N} _()-]{1,30}"))) {
