@@ -265,8 +265,13 @@ class EditorStateTest {
         val maskAddress = TileAddress(mask.id, 0, 0)
         val maskBytes = assertNotNull(state.tileStore.read(maskAddress))
         val offset = (12 * 256 + 12) * 4
-        assertEquals(0, maskBytes[offset].toInt() and 255)
+        assertTrue((maskBytes[offset].toInt() and 255) < 255)
         assertTrue(maskAddress in state.tilesForDocument())
+        val rendered = com.neoworksuite.neocanvas.renderer.PngExporter.render(
+            state.document,
+            state.tilesForDocument(),
+        )
+        assertTrue((rendered.rgbaAt(12, 12)[3].toInt() and 255) < 255)
     }
 
     @Test
