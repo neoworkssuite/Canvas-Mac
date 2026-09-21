@@ -7,6 +7,7 @@ import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.core.store.SaveResult
+import com.neoworksuite.neocanvas.renderer.EditableObjectRasterizer
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
@@ -88,6 +89,7 @@ internal class IosEditorFileActions(
     override val supportsDeepLayers: Boolean = true
     override val supportsPsdImport: Boolean = true
     override val supportsPsdExport: Boolean = true
+    override val supportsEditableObjectPsdFlattening: Boolean = true
 
     init {
         ensureDirectory(libraryDirectory)
@@ -367,7 +369,12 @@ internal class IosEditorFileActions(
         ensureDirectory(exportDirectory)
         val base = currentDocumentName?.removeSuffix(".neocanvas") ?: "NeoCanvas"
         val target = join(exportDirectory, "$base.psd")
-        val bytes = PsdCodec.encode(document, tiles)
+        val exportDocument = EditableObjectRasterizer.rasterize(
+            document,
+            tiles,
+            textRasterizer = ipadTextRasterizer,
+        )
+        val bytes = PsdCodec.encode(exportDocument.document, exportDocument.tiles)
         if (writeBytes(target, bytes)) SaveResult.Success
         else SaveResult.Failure("Could not write PSD to iPad Documents.")
     } catch (error: Exception) {

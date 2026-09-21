@@ -1070,6 +1070,40 @@ class EditorStateTest {
     }
 
     @Test
+    fun psd_preflight_allows_editable_objects_when_host_can_flatten_them() {
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsPsdExport = true
+            override val supportsEditableObjectPsdFlattening = true
+        }
+        val document = CanvasDocument(
+            id = "psd-editable-preflight",
+            width = 320,
+            height = 240,
+            layers = listOf(
+                Layer(
+                    "text",
+                    "Title",
+                    payload = LayerPayload.TextObject(
+                        "NeoCanvas",
+                        x = 20f,
+                        y = 20f,
+                        width = 220f,
+                        height = 80f,
+                    ),
+                ),
+            ),
+        )
+        val state = EditorState(DocumentHistory(document), actions)
+
+        state.openPsdCompatibility()
+
+        val report = assertNotNull(state.psdCompatibilityReport)
+        assertTrue(report.canExport)
+        assertEquals(1, report.editableObjectLayerCount)
+        assertTrue(report.blockingIssues.isEmpty())
+    }
+
+    @Test
     fun psd_import_replaces_the_document_and_marks_it_unsaved() {
         val importedLayer = Layer("psd-layer-1", "PSD Paint", payload = LayerPayload.Raster())
         val imported = com.neoworksuite.neocanvas.renderer.PsdImportResult(

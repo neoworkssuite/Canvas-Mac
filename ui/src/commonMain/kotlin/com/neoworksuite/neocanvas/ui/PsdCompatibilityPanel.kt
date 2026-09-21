@@ -29,6 +29,13 @@ fun PsdCompatibilityPanel(
 ) {
     val report = state.psdCompatibilityReport ?: return
     val notices = buildList {
+        if (report.editableObjectLayerCount > 0) {
+            add(
+                report.editableObjectLayerCount.toString() + " editable Text/Shape layer" +
+                    if (report.editableObjectLayerCount == 1) " will" else "s will" +
+                    " be rasterized into separate PSD layers. The NeoCanvas source stays editable.",
+            )
+        }
         if (report.lockedLayerCount > 0) {
             add(report.lockedLayerCount.toString() + " layer lock state" +
                 if (report.lockedLayerCount == 1) " is" else "s are" +
@@ -84,7 +91,7 @@ fun PsdCompatibilityPanel(
             )
             Text(
                 report.width.toString() + " × " + report.height + " · " +
-                    report.layerCount + " raster layer" + if (report.layerCount == 1) "" else "s",
+                    report.layerCount + " layer" + if (report.layerCount == 1) "" else "s",
                 color = NeoCanvasColors.paper,
                 fontSize = 11.sp,
             )

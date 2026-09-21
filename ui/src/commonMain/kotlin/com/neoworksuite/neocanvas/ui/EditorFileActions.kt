@@ -63,6 +63,7 @@ interface EditorFileActions {
     }
     val supportsPsdImport: Boolean get() = false
     val supportsPsdExport: Boolean get() = false
+    val supportsEditableObjectPsdFlattening: Boolean get() = false
     fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
         onResult(Result.failure(IllegalStateException("PSD import is unavailable in this host.")))
     }

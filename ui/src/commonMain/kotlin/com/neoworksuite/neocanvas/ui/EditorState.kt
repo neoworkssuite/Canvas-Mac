@@ -444,7 +444,11 @@ class EditorState(
         workbenchPanelVisible = false
         settingsVisible = false
         psdCompatibilityReport = try {
-            com.neoworksuite.neocanvas.renderer.PsdCodec.analyzeExport(document, tilesForDocument())
+            com.neoworksuite.neocanvas.renderer.PsdCodec.analyzeExport(
+                document,
+                tilesForDocument(),
+                canFlattenEditableObjects = fileActions.supportsEditableObjectPsdFlattening,
+            )
         } catch (error: Exception) {
             statusMessage = "Could not inspect PSD compatibility: " + (error.message ?: "unknown error")
             null
