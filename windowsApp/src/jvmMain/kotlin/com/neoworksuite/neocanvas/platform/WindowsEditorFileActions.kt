@@ -120,6 +120,7 @@ class WindowsEditorFileActions(
         value.isNotBlank() && value == File(value).name && value.endsWith(".neoversion", true)
     override val supportsRecovery = true
     override val supportsVersions = true
+    override val supportsVersionBranches = true
     override val supportsWorkbench = true
     override val supportsDeepLayers = true
     private val recoveryFile get() = File(
