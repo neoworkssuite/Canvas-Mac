@@ -2,6 +2,7 @@ package com.neoworksuite.neocanvas.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
@@ -41,6 +43,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,6 +73,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
@@ -95,6 +99,10 @@ fun CanvasWorkspace(
     var objectGesturePreview by remember { mutableStateOf<LayerPayload?>(null) }
     var objectGroupGesturePreview by remember { mutableStateOf<Map<String, LayerPayload>>(emptyMap()) }
     var arrangePickMarquee by remember { mutableStateOf<Rect?>(null) }
+    var quickMenuPointerDown by remember { mutableStateOf(false) }
+    var quickMenuRevision by remember { mutableIntStateOf(0) }
+    var quickMenuCandidate by remember { mutableStateOf<Offset?>(null) }
+    var quickMenuAnchor by remember { mutableStateOf<Offset?>(null) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -108,6 +116,15 @@ fun CanvasWorkspace(
         inProgress.clear()
         inProgress.addAll(shape.points)
         state.statusMessage = "QuickShape: ${shape.type.label} — lift to place"
+    }
+
+    LaunchedEffect(quickMenuPointerDown, quickMenuRevision) {
+        if (!quickMenuPointerDown) return@LaunchedEffect
+        val revision = quickMenuRevision
+        delay(450)
+        if (!quickMenuPointerDown || quickMenuRevision != revision) return@LaunchedEffect
+        quickMenuAnchor = quickMenuCandidate
+        if (quickMenuAnchor != null) state.statusMessage = "QuickMenu — choose an action"
     }
 
     Box(
@@ -289,6 +306,41 @@ fun CanvasWorkspace(
                 ) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
+                    if (quickMenuAnchor != null) {
+                        quickMenuAnchor = null
+                        down.consume()
+                        return@awaitEachGesture
+                    }
+                    if (shouldArmQuickMenu(
+                            isStylus = down.type == PointerType.Stylus,
+                            fingerPaintingEnabled = state.fingerPaintingEnabled,
+                            tool = state.tool,
+                            objectArrangePicking = state.objectArrangePicking,
+                        )
+                    ) {
+                        quickMenuPointerDown = true
+                        quickMenuCandidate = down.position
+                        quickMenuRevision++
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                val pressedTouches = event.changes.count { it.pressed && it.type != PointerType.Stylus }
+                                if (pressedTouches > 1 ||
+                                    (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                                ) {
+                                    return@awaitEachGesture
+                                }
+                                if (quickMenuAnchor != null) change.consume()
+                                if (!change.pressed) break
+                            }
+                        } finally {
+                            quickMenuPointerDown = false
+                            quickMenuCandidate = null
+                            quickMenuRevision++
+                        }
+                        return@awaitEachGesture
+                    }
                     if (
                         down.type != PointerType.Stylus &&
                         !state.fingerPaintingEnabled &&
@@ -906,6 +958,15 @@ fun CanvasWorkspace(
             scale = scale,
             modifier = Modifier.fillMaxSize(),
         )
+
+        quickMenuAnchor?.let { anchor ->
+            QuickMenuOverlay(
+                state = state,
+                anchor = anchor,
+                viewport = viewport,
+                onDismiss = { quickMenuAnchor = null },
+            )
+        }
 
         state.maskEditingLayerId?.let { layerId ->
             val layerName = state.document.layers.firstOrNull { it.id == layerId }?.name ?: "Layer"
@@ -1846,6 +1907,105 @@ private fun applyViewportTransform(
     state.panX = nextCanvasCenter.x - baseCenter.x
     state.panY = nextCanvasCenter.y - baseCenter.y
     state.rotateViewBy(rotationChange)
+}
+
+internal fun shouldArmQuickMenu(
+    isStylus: Boolean,
+    fingerPaintingEnabled: Boolean,
+    tool: Tool,
+    objectArrangePicking: Boolean,
+): Boolean =
+    !isStylus &&
+        !fingerPaintingEnabled &&
+        !objectArrangePicking &&
+        tool in setOf(Tool.Brush, Tool.Eraser, Tool.Smudge, Tool.Liquify)
+
+@Composable
+private fun QuickMenuOverlay(
+    state: EditorState,
+    anchor: Offset,
+    viewport: IntSize,
+    onDismiss: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val panelWidth = 236.dp
+    val panelHeight = 116.dp
+    val panelWidthPx = with(density) { panelWidth.toPx() }
+    val panelHeightPx = with(density) { panelHeight.toPx() }
+    val margin = with(density) { 8.dp.toPx() }
+    val x = (anchor.x - panelWidthPx / 2f).coerceIn(
+        margin,
+        (viewport.width - panelWidthPx - margin).coerceAtLeast(margin),
+    )
+    val y = (anchor.y - panelHeightPx / 2f).coerceIn(
+        margin,
+        (viewport.height - panelHeightPx - margin).coerceAtLeast(margin),
+    )
+    fun perform(action: () -> Unit) {
+        onDismiss()
+        action()
+    }
+
+    Column(
+        Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+            .width(panelWidth)
+            .clip(RoundedCornerShape(14.dp))
+            .background(NeoCanvasColors.chrome.copy(alpha = .98f))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "QUICKMENU",
+                color = NeoCanvasColors.accent,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = .7.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "×",
+                color = NeoCanvasColors.muted,
+                fontSize = 16.sp,
+                modifier = Modifier.clickable(onClick = onDismiss).padding(horizontal = 5.dp),
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            QuickMenuAction("Undo", Modifier.weight(1f), state.canUndo) { perform { state.undo() } }
+            QuickMenuAction("Redo", Modifier.weight(1f), state.canRedo) { perform { state.redo() } }
+            QuickMenuAction("Pick", Modifier.weight(1f)) { perform { state.activateTool(Tool.Eyedropper) } }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            QuickMenuAction("Brush", Modifier.weight(1f)) { perform { state.activateTool(Tool.Brush) } }
+            QuickMenuAction("Eraser", Modifier.weight(1f)) { perform { state.activateTool(Tool.Eraser) } }
+            QuickMenuAction("Layers", Modifier.weight(1f)) {
+                perform { state.showInspector(InspectorPanel.Layers) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickMenuAction(
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier.clip(RoundedCornerShape(8.dp))
+            .background(if (enabled) NeoCanvasColors.panelRaised else NeoCanvasColors.chrome)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (enabled) NeoCanvasColors.paper else NeoCanvasColors.disabled,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
 }
 
 internal fun isFourFingerCanvasToggle(
