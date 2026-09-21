@@ -215,7 +215,7 @@ object PngExporter {
         val toX = kotlin.math.ceil(centerX + radius).toInt().coerceIn(0, outputWidth)
         val toY = kotlin.math.ceil(centerY + radius).toInt().coerceIn(0, outputHeight)
         val lineCount = (text.text.lineSequence().count().coerceIn(1, 4))
-        val lineHeight = (text.fontSize * text.lineSpacing).coerceAtLeast(text.height / (lineCount + 2f))
+        val lineHeight = text.height / (lineCount + 2f)
         val strokeThickness = maxOf(1f, minOf(text.fontSize * .08f, lineHeight * .18f))
         val alphaBase = ((argb ushr 24) and 255) / 255f
 
