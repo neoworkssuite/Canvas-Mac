@@ -65,7 +65,17 @@ class PsdCodecTest {
         )
         val report = PsdCodec.analyzeExport(document, emptyMap())
         assertFalse(report.canExport)
+        assertEquals(1, report.editableObjectLayerCount)
         assertTrue(report.blockingIssues.any { "raster layers only" in it })
+
+        val flattenable = PsdCodec.analyzeExport(
+            document,
+            emptyMap(),
+            canFlattenEditableObjects = true,
+        )
+        assertTrue(flattenable.canExport)
+        assertEquals(1, flattenable.editableObjectLayerCount)
+        assertTrue(flattenable.blockingIssues.isEmpty())
         assertFailsWith<IllegalArgumentException> { PsdCodec.encode(document, emptyMap()) }
     }
 

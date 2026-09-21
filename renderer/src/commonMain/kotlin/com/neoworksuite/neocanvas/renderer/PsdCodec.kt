@@ -23,6 +23,7 @@ data class PsdCompatibilityReport(
     val estimatedRawPixelBytes: Long,
     val canExport: Boolean,
     val blockingIssues: List<String>,
+    val editableObjectLayerCount: Int = 0,
 )
 
 /**
@@ -43,6 +44,7 @@ object PsdCodec {
     fun analyzeExport(
         document: CanvasDocument,
         tiles: Map<TileAddress, ByteArray>,
+        canFlattenEditableObjects: Boolean = false,
     ): PsdCompatibilityReport {
         val issues = mutableListOf<String>()
         if (document.width !in 1..30_000 || document.height !in 1..30_000) {
@@ -51,7 +53,8 @@ object PsdCodec {
         if (document.layers.size > MAX_LAYERS) {
             issues += "PSD export supports up to " + MAX_LAYERS + " layers."
         }
-        if (document.layers.any { it.payload !is LayerPayload.Raster }) {
+        val editableObjectLayerCount = document.layers.count { it.payload !is LayerPayload.Raster }
+        if (editableObjectLayerCount > 0 && !canFlattenEditableObjects) {
             issues += "PSD V1 export currently supports raster layers only."
         }
 
@@ -74,6 +77,7 @@ object PsdCodec {
             estimatedRawPixelBytes = estimated,
             canExport = issues.isEmpty(),
             blockingIssues = issues,
+            editableObjectLayerCount = editableObjectLayerCount,
         )
     }
 
