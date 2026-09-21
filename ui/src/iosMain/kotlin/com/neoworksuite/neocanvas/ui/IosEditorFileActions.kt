@@ -19,6 +19,7 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.usePinned
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.jetbrains.skia.Font
+import platform.CoreGraphics.CGRectMake
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Image
@@ -46,6 +47,9 @@ import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePNGRepresentation
+import platform.UIKit.UIGraphicsBeginPDFContextToFile
+import platform.UIKit.UIGraphicsBeginPDFPageWithInfo
+import platform.UIKit.UIGraphicsEndPDFContext
 import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UINavigationControllerDelegateProtocol
 import platform.UIKit.UIViewController
@@ -92,6 +96,7 @@ internal class IosEditorFileActions(
     override val supportsPsdImport: Boolean = true
     override val supportsPsdExport: Boolean = true
     override val supportsJpegExport: Boolean = true
+    override val supportsPdfExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
 
     init {
@@ -402,6 +407,40 @@ internal class IosEditorFileActions(
         else SaveResult.Failure("Could not write JPEG to iPad Documents.")
     } catch (error: Exception) {
         SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportPdf(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+    ): SaveResult = try {
+        ensureDirectory(exportDirectory)
+        val base = currentDocumentName?.removeSuffix(".neocanvas") ?: "NeoCanvas"
+        val target = join(exportDirectory, "$base.pdf")
+        val flattened = PngExporter.render(
+            document,
+            tiles,
+            textRasterizer = ipadTextRasterizer,
+        )
+        val image = UIImage(data = flattened.encode().toNSData())
+        val pageBounds = CGRectMake(
+            0.0,
+            0.0,
+            document.width.toDouble(),
+            document.height.toDouble(),
+        )
+        if (!UIGraphicsBeginPDFContextToFile(target, pageBounds, null)) {
+            return SaveResult.Failure("iPadOS could not create the PDF.")
+        }
+        try {
+            UIGraphicsBeginPDFPageWithInfo(pageBounds, null)
+            image.drawInRect(pageBounds)
+        } finally {
+            UIGraphicsEndPDFContext()
+        }
+        if (fm.fileExistsAtPath(target)) SaveResult.Success
+        else SaveResult.Failure("Could not write PDF to iPad Documents.")
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PDF: " + (error.message ?: "unknown output error"))
     }
 
     override fun exportPsd(
