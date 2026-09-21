@@ -544,6 +544,35 @@ fun CanvasWorkspace(
                     }
                 }
 
+                if (state.selectedObjectLayerIds.isNotEmpty()) {
+                    val groupsById = document.groups.associateBy { it.id }
+                    val markedPayloads = document.layers.mapNotNull { layer ->
+                        val group = layer.groupId?.let(groupsById::get)
+                        if (layer.id !in state.selectedObjectLayerIds || !layer.visible || group?.visible == false) null
+                        else layer.payload.takeIf {
+                            it is LayerPayload.TextObject || it is LayerPayload.ShapeObject
+                        }
+                    }
+                    val memberColor = NeoCanvasColors.accent.copy(alpha = .45f)
+                    markedPayloads.forEach { payload ->
+                        val corners = payload.editableObjectGeometry()?.outlineCorners().orEmpty()
+                        if (corners.size >= 2) {
+                            corners.forEachIndexed { index, point ->
+                                val next = corners[(index + 1) % corners.size]
+                                drawLine(memberColor, point, next, 1f / scale)
+                            }
+                        }
+                    }
+                    editableObjectArrangeBounds(markedPayloads)?.let { bounds ->
+                        drawRect(
+                            NeoCanvasColors.accent.copy(alpha = .85f),
+                            topLeft = Offset(bounds.left, bounds.top),
+                            size = Size(bounds.right - bounds.left, bounds.bottom - bounds.top),
+                            style = Stroke(1.5f / scale),
+                        )
+                    }
+                }
+
                 if (state.gridGuideVisible) {
                     val spacing = state.guideSpacing.coerceIn(32f, 512f)
                     val gridColor = NeoCanvasColors.accent.copy(alpha = .22f)
@@ -1200,6 +1229,26 @@ internal object NeoCanvasColors {
     val disabled = Color(0xFF53606E)
 }
 
+
+internal data class EditableObjectArrangeBounds(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+)
+
+internal fun editableObjectArrangeBounds(payloads: List<LayerPayload>): EditableObjectArrangeBounds? {
+    val points = payloads.flatMap { payload ->
+        payload.editableObjectGeometry()?.outlineCorners().orEmpty()
+    }
+    if (points.isEmpty()) return null
+    return EditableObjectArrangeBounds(
+        left = points.minOf { it.x },
+        top = points.minOf { it.y },
+        right = points.maxOf { it.x },
+        bottom = points.maxOf { it.y },
+    )
+}
 
 internal data class EditableObjectSmartGuides(
     val verticalX: Float? = null,
