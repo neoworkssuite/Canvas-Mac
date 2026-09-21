@@ -133,6 +133,10 @@ private fun ObjectArrangeBar(state: EditorState) {
         }
         if (state.selectedObjectCount >= 2) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                LayerTrayAction("Group", Modifier.weight(1f)) { state.groupSelectedObjects() }
+                LayerTrayAction("Ungroup", Modifier.weight(1f)) { state.ungroupSelectedObjects() }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 LayerTrayAction("Left", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Left) }
                 LayerTrayAction("Centre", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.CenterHorizontal) }
                 LayerTrayAction("Right", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Right) }

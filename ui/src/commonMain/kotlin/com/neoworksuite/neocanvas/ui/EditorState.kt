@@ -26,6 +26,8 @@ import com.neoworksuite.neocanvas.core.model.MoveLayer
 import com.neoworksuite.neocanvas.core.model.RenameLayer
 import com.neoworksuite.neocanvas.core.model.SetLayerOpacity
 import com.neoworksuite.neocanvas.core.model.SetLayerGroupMembership
+import com.neoworksuite.neocanvas.core.model.GroupLayers
+import com.neoworksuite.neocanvas.core.model.UngroupLayers
 import com.neoworksuite.neocanvas.core.model.SetLayerGroupVisibility
 import com.neoworksuite.neocanvas.core.model.SetLayerGroupOpacity
 import com.neoworksuite.neocanvas.core.model.SetLayerGroupLocked
@@ -659,6 +661,13 @@ class EditorState(
                 (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
         }
 
+    val selectedGroupedObjectCount: Int
+        get() = document.layers.count { layer ->
+            layer.id in selectedObjectLayerIds &&
+                layer.groupId != null &&
+                (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
+        }
+
     fun isObjectArrangeSelected(layerId: String): Boolean = layerId in selectedObjectLayerIds
 
     fun toggleObjectArrangeSelection(layerId: String): Boolean {
@@ -875,6 +884,33 @@ class EditorState(
             }
             is LayerPayload.Raster -> Unit
         }
+    }
+
+    fun groupSelectedObjects(): Boolean {
+        val layers = mutableArrangeLayers(minimum = 2) ?: return false
+        val groupId = nextGroupId()
+        execute(
+            GroupLayers(
+                groupId = groupId,
+                name = "Group " + (document.groups.size + 1),
+                layerIds = layers.mapTo(linkedSetOf(), Layer::id),
+            ),
+        )
+        statusMessage = "Grouped " + layers.size + " marked objects"
+        return true
+    }
+
+    fun ungroupSelectedObjects(): Boolean {
+        val layers = mutableArrangeLayers(minimum = 1) ?: return false
+        val groupedLayers = layers.filter { it.groupId != null }
+        if (groupedLayers.isEmpty()) {
+            statusMessage = "Marked objects are already ungrouped"
+            return false
+        }
+        execute(UngroupLayers(groupedLayers.mapTo(linkedSetOf(), Layer::id)))
+        statusMessage = "Ungrouped " + groupedLayers.size + " marked object" +
+            if (groupedLayers.size == 1) "" else "s"
+        return true
     }
 
     fun arrangeSelectedObjects(alignment: ObjectCanvasAlignment): Boolean {

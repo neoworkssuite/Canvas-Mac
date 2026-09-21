@@ -253,6 +253,64 @@ data class SetLayerGroupMembership(val layerId: String, val groupId: String?) : 
     }
 }
 
+class GroupLayers(
+    val groupId: String,
+    val name: String,
+    layerIds: Set<String>,
+) : DocumentCommand {
+    val layerIds: Set<String> = layerIds.toSet()
+
+    init {
+        require(groupId.isNotBlank())
+        require(name.isNotBlank())
+        require(this.layerIds.size >= 2) { "At least two layers are required to create a group." }
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        require(document.groups.none { it.id == groupId }) { "A group with id '$groupId' already exists." }
+        val existingIds = document.layers.mapTo(linkedSetOf(), Layer::id)
+        require(layerIds.all { it in existingIds }) { "Every grouped layer must exist in the document." }
+
+        val affectedGroups = document.layers
+            .filter { it.id in layerIds }
+            .mapNotNullTo(linkedSetOf(), Layer::groupId)
+        val updatedLayers = document.layers.map { layer ->
+            if (layer.id in layerIds) layer.copy(groupId = groupId) else layer
+        }
+        val retainedGroups = document.groups.filter { group ->
+            group.id !in affectedGroups || updatedLayers.any { it.groupId == group.id }
+        }
+        return document.copy(
+            layers = updatedLayers,
+            groups = retainedGroups + LayerGroup(groupId, name.trim()),
+        )
+    }
+}
+
+class UngroupLayers(layerIds: Set<String>) : DocumentCommand {
+    val layerIds: Set<String> = layerIds.toSet()
+
+    init {
+        require(this.layerIds.isNotEmpty()) { "At least one layer is required to ungroup." }
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        val existingIds = document.layers.mapTo(linkedSetOf(), Layer::id)
+        require(layerIds.all { it in existingIds }) { "Every ungrouped layer must exist in the document." }
+
+        val affectedGroups = document.layers
+            .filter { it.id in layerIds }
+            .mapNotNullTo(linkedSetOf(), Layer::groupId)
+        val updatedLayers = document.layers.map { layer ->
+            if (layer.id in layerIds) layer.copy(groupId = null) else layer
+        }
+        val retainedGroups = document.groups.filter { group ->
+            group.id !in affectedGroups || updatedLayers.any { it.groupId == group.id }
+        }
+        return document.copy(layers = updatedLayers, groups = retainedGroups)
+    }
+}
+
 data class DeleteLayerGroup(val groupId: String) : DocumentCommand {
     override fun apply(document: CanvasDocument): CanvasDocument {
         require(document.groups.any { it.id == groupId }) { "Layer group does not exist." }
