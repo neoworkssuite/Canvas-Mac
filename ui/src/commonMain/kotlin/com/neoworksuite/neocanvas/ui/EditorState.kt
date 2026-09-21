@@ -2604,7 +2604,7 @@ class EditorState(
         objectArrangePicking = false
         activateTool(Tool.Liquify)
         showInspector(InspectorPanel.Liquify)
-        statusMessage = "Liquify " + liquifyMode.name.lowercase() + " — drag on canvas"
+        statusMessage = "Liquify " + liquifyMode.displayName.lowercase() + " — drag on canvas"
         return true
     }
 
@@ -2917,7 +2917,7 @@ class EditorState(
             ) BuiltInBrushes.eraser else brush
             appendEditableStroke(layerId, layerBefore, points, stabilize, activeLayer, effectiveBrush, mode)
         } else if (tool == Tool.Liquify) {
-            statusMessage = "Liquify " + liquifyMode.name.lowercase() + " applied"
+            statusMessage = "Liquify " + liquifyMode.displayName.lowercase() + " applied"
         }
     }
 

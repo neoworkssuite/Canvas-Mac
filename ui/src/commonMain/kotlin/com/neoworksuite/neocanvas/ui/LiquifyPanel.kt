@@ -52,6 +52,11 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
             LiquifyModeButton("Pinch", LiquifyMode.Pinch, state, Modifier.weight(1f))
             LiquifyModeButton("Expand", LiquifyMode.Expand, state, Modifier.weight(1f))
         }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            LiquifyModeButton("Twirl L", LiquifyMode.TwirlLeft, state, Modifier.weight(1f))
+            LiquifyModeButton("Twirl R", LiquifyMode.TwirlRight, state, Modifier.weight(1f))
+            LiquifyModeButton("Smooth", LiquifyMode.Smooth, state, Modifier.weight(1f))
+        }
 
         LiquifySlider(
             label = "Size",
@@ -78,6 +83,9 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
                     LiquifyMode.Push -> "PUSH · drag artwork in the stroke direction"
                     LiquifyMode.Pinch -> "PINCH · pull pixels inward beneath the brush"
                     LiquifyMode.Expand -> "EXPAND · push pixels outward beneath the brush"
+                    LiquifyMode.TwirlLeft -> "TWIRL LEFT · rotate pixels anticlockwise under the brush"
+                    LiquifyMode.TwirlRight -> "TWIRL RIGHT · rotate pixels clockwise under the brush"
+                    LiquifyMode.Smooth -> "SMOOTH · soften local distortion and hard transitions"
                 },
                 color = NeoCanvasColors.paper,
                 fontSize = 10.sp,
@@ -112,7 +120,7 @@ private fun LiquifyModeButton(
             .background(if (selected) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
             .clickable {
                 state.liquifyMode = mode
-                state.statusMessage = "Liquify " + mode.name.lowercase()
+                state.statusMessage = "Liquify " + mode.displayName.lowercase()
             }
             .padding(horizontal = 9.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,

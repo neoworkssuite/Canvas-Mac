@@ -73,6 +73,36 @@ class RasterLiquifyTest {
     }
 
     @Test
+    fun twirl_directions_and_smooth_generate_real_distinct_warps() {
+        val bytes = ByteArray(TileFormat.BYTES_PER_TILE)
+        for (y in 14..18) for (x in 18..24) {
+            val offset = (y * TILE_SIZE_PIXELS + x) * 4
+            bytes[offset] = 230.toByte()
+            bytes[offset + 1] = 100.toByte()
+            bytes[offset + 2] = 30
+            bytes[offset + 3] = 255.toByte()
+        }
+        val store = TileStore(mapOf(TileKey("paint", 0, 0) to bytes))
+
+        fun warped(mode: LiquifyMode): TileStore {
+            val patch = RasterLiquify.stroke(
+                store, "paint", listOf(RasterPoint(16f, 16f)),
+                size = 30f, strength = 1f, mode = mode,
+                canvasWidth = 64, canvasHeight = 64,
+            )
+            assertFalse(patch.keys.isEmpty())
+            return TileStore(store.snapshot()).apply { applyPatch(patch) }
+        }
+
+        val left = warped(LiquifyMode.TwirlLeft).snapshot().getValue(TileKey("paint", 0, 0))
+        val right = warped(LiquifyMode.TwirlRight).snapshot().getValue(TileKey("paint", 0, 0))
+        val smooth = warped(LiquifyMode.Smooth).snapshot().getValue(TileKey("paint", 0, 0))
+
+        assertFalse(left.contentEquals(right))
+        assertFalse(smooth.contentEquals(bytes))
+    }
+
+    @Test
     fun liquify_respects_selection_acceptance() {
         val store = storeWithBlock()
         val before = store.snapshot()

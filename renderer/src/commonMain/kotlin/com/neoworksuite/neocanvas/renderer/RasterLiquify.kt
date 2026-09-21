@@ -1,12 +1,21 @@
 package com.neoworksuite.neocanvas.renderer
 
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
-enum class LiquifyMode { Push, Pinch, Expand }
+enum class LiquifyMode(val displayName: String) {
+    Push("Push"),
+    Pinch("Pinch"),
+    Expand("Expand"),
+    TwirlLeft("Twirl Left"),
+    TwirlRight("Twirl Right"),
+    Smooth("Smooth"),
+}
 
 /**
  * Local spatial warp for raster artwork.
@@ -110,21 +119,44 @@ object RasterLiquify {
                 if (falloff <= .0001f) continue
 
                 val amount = strength * safePressure * falloff
-                val sourcePoint = when (mode) {
+                val sampled = when (mode) {
                     LiquifyMode.Push -> {
                         val displacement = radius * .72f * amount
-                        Pair(x + .5f - ux * displacement, y + .5f - uy * displacement)
+                        sample(x + .5f - ux * displacement, y + .5f - uy * displacement)
                     }
                     LiquifyMode.Pinch -> {
                         val factor = 1f + .72f * amount
-                        Pair(cx + vx * factor, cy + vy * factor)
+                        sample(cx + vx * factor, cy + vy * factor)
                     }
                     LiquifyMode.Expand -> {
                         val factor = (1f - .72f * amount).coerceAtLeast(.12f)
-                        Pair(cx + vx * factor, cy + vy * factor)
+                        sample(cx + vx * factor, cy + vy * factor)
+                    }
+                    LiquifyMode.TwirlLeft,
+                    LiquifyMode.TwirlRight -> {
+                        val direction = if (mode == LiquifyMode.TwirlLeft) -1f else 1f
+                        val angle = direction * .90f * amount
+                        val cosA = cos(angle)
+                        val sinA = sin(angle)
+                        sample(
+                            cx + vx * cosA - vy * sinA,
+                            cy + vx * sinA + vy * cosA,
+                        )
+                    }
+                    LiquifyMode.Smooth -> {
+                        val reach = max(1f, radius * .12f)
+                        val samples = listOf(
+                            sample(x + .5f, y + .5f),
+                            sample(x + .5f - reach, y + .5f),
+                            sample(x + .5f + reach, y + .5f),
+                            sample(x + .5f, y + .5f - reach),
+                            sample(x + .5f, y + .5f + reach),
+                        )
+                        IntArray(4) { channel ->
+                            samples.sumOf { it[channel] } / samples.size
+                        }
                     }
                 }
-                val sampled = sample(sourcePoint.first, sourcePoint.second)
                 val current = pixel(x, y)
                 val mix = (falloff * safePressure).coerceIn(0f, 1f)
                 val (bytes, offset) = writable(x, y)
