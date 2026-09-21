@@ -713,6 +713,78 @@ class EditorState(
         return true
     }
 
+    fun promoteWorkbenchReference(id: String): Boolean {
+        val reference = workbenchItems.firstOrNull { it.id == id } as? WorkbenchItem.Reference ?: return false
+        insertImage(
+            ImportedImage(
+                reference.name.ifBlank { "Workbench reference" },
+                reference.pixelWidth,
+                reference.pixelHeight,
+                reference.argb.copyOf(),
+            ),
+        )
+        workbenchPanelVisible = false
+        statusMessage = "Workbench reference promoted to artwork — Transform active"
+        return true
+    }
+
+    fun rotateWorkbenchReference(id: String): Boolean {
+        val reference = workbenchItems.firstOrNull { it.id == id } as? WorkbenchItem.Reference ?: return false
+        if (reference.locked) {
+            statusMessage = "Unlock this Workbench reference before rotating it"
+            return false
+        }
+        val rotated = IntArray(reference.argb.size)
+        for (y in 0 until reference.pixelHeight) {
+            for (x in 0 until reference.pixelWidth) {
+                val newX = reference.pixelHeight - 1 - y
+                val newY = x
+                rotated[newY * reference.pixelHeight + newX] =
+                    reference.argb[y * reference.pixelWidth + x]
+            }
+        }
+        val next = reference.copy(
+            pixelWidth = reference.pixelHeight,
+            pixelHeight = reference.pixelWidth,
+            argb = rotated,
+            width = reference.height,
+            height = reference.width,
+        )
+        updateWorkbench(
+            workbenchItems.map { if (it.id == id) next else it },
+            "Workbench reference rotated 90°",
+        )
+        return true
+    }
+
+    fun duplicateWorkbenchItem(id: String): Boolean {
+        val item = workbenchItems.firstOrNull { it.id == id } ?: return false
+        val copy = when (item) {
+            is WorkbenchItem.Reference -> item.copy(
+                id = nextWorkbenchId(),
+                name = item.name + " copy",
+                argb = item.argb.copyOf(),
+                x = item.x + 28f,
+                y = item.y + 28f,
+                locked = false,
+            )
+            is WorkbenchItem.Note -> item.copy(
+                id = nextWorkbenchId(),
+                x = item.x + 28f,
+                y = item.y + 28f,
+                locked = false,
+            )
+            is WorkbenchItem.ColourCard -> item.copy(
+                id = nextWorkbenchId(),
+                x = item.x + 28f,
+                y = item.y + 28f,
+                locked = false,
+            )
+        }
+        updateWorkbench(workbenchItems + copy, "Duplicated Workbench item")
+        return true
+    }
+
     fun moveWorkbenchItem(id: String, dx: Float, dy: Float) {
         if (!dx.isFinite() || !dy.isFinite()) return
         val selected = workbenchItems.firstOrNull { it.id == id } ?: return

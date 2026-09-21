@@ -729,6 +729,52 @@ class EditorStateTest {
     }
 
     @Test
+    fun workbench_reference_rotate_duplicate_and_promote_are_isolated_until_promotion() {
+        val initial = CanvasDocument(
+            id = "desk-ref",
+            width = 32,
+            height = 32,
+            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        val reference = WorkbenchItem.Reference(
+            id = "ref-test",
+            name = "Mood",
+            pixelWidth = 2,
+            pixelHeight = 1,
+            argb = intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+            x = 100f,
+            y = 40f,
+            width = 200f,
+            height = 100f,
+        )
+        val encoded = WorkbenchCodec.encode(listOf(reference))
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsWorkbench = true
+            override fun loadWorkbench(documentId: String): ByteArray? = encoded
+            override fun saveWorkbench(documentId: String, bytes: ByteArray): SaveResult = SaveResult.Success
+        }
+        val working = EditorState(DocumentHistory(initial), actions)
+        val before = working.document
+
+        assertTrue(working.rotateWorkbenchReference("ref-test"))
+        val rotated = working.workbenchItems.first() as WorkbenchItem.Reference
+        assertEquals(1, rotated.pixelWidth)
+        assertEquals(2, rotated.pixelHeight)
+        assertEquals(before, working.document)
+
+        assertTrue(working.duplicateWorkbenchItem("ref-test"))
+        assertEquals(2, working.workbenchItems.size)
+        assertEquals(before, working.document)
+
+        assertTrue(working.promoteWorkbenchReference("ref-test"))
+        assertEquals(2, working.document.layers.size)
+        assertEquals("Mood", working.document.layers.last().name)
+        assertEquals(Tool.MoveSelection, working.tool)
+        assertNotNull(working.transformSession)
+    }
+
+    @Test
     fun local_versions_create_and_restore_with_a_safety_snapshot() {
         val saved = mutableListOf<Pair<LocalVersionEntry, LoadResult.Success>>()
         var clock = 1000L

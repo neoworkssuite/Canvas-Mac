@@ -166,10 +166,26 @@ fun WorkbenchPanel(state: EditorState, modifier: Modifier = Modifier, onClose: (
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                            if (item is WorkbenchItem.ColourCard) {
-                                TextButton(onClick = { state.useWorkbenchColour(item.id) }) {
-                                    Text("Use", color = NeoCanvasColors.accent, fontSize = 8.sp)
+                            when (item) {
+                                is WorkbenchItem.Reference -> {
+                                    TextButton(onClick = { state.promoteWorkbenchReference(item.id) }) {
+                                        Text("Promote", color = NeoCanvasColors.accent, fontSize = 8.sp)
+                                    }
+                                    if (!item.locked) {
+                                        TextButton(onClick = { state.rotateWorkbenchReference(item.id) }) {
+                                            Text("Rotate", color = NeoCanvasColors.accent, fontSize = 8.sp)
+                                        }
+                                    }
                                 }
+                                is WorkbenchItem.ColourCard -> {
+                                    TextButton(onClick = { state.useWorkbenchColour(item.id) }) {
+                                        Text("Use", color = NeoCanvasColors.accent, fontSize = 8.sp)
+                                    }
+                                }
+                                is WorkbenchItem.Note -> Unit
+                            }
+                            TextButton(onClick = { state.duplicateWorkbenchItem(item.id) }) {
+                                Text("Copy", color = NeoCanvasColors.muted, fontSize = 8.sp)
                             }
                             TextButton(onClick = { state.deleteWorkbenchItem(item.id) }) {
                                 Text("Delete", color = NeoCanvasColors.muted, fontSize = 8.sp)
