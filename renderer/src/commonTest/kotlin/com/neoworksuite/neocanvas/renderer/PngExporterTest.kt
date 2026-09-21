@@ -25,6 +25,65 @@ class PngExporterTest {
         assertEquals(178, screen[0].toInt() and 255)
     }
 
+    @Test
+    fun layer_mask_and_group_visibility_affect_flattened_output() {
+        val paintAddress = TileAddress("paint", 0, 0)
+        val maskAddress = TileAddress("paint-mask", 0, 0)
+        val paint = tile(255, 0, 0, 255)
+        val mask = tile(255, 255, 255, 255).also {
+            it[0] = 0
+            it[1] = 0
+            it[2] = 0
+        }
+        val visibleDocument = CanvasDocument(
+            "mask",
+            2,
+            1,
+            layers = listOf(
+                Layer(
+                    "paint",
+                    "Paint",
+                    payload = LayerPayload.Raster(setOf(paintAddress)),
+                    groupId = "group",
+                    mask = com.neoworksuite.neocanvas.core.model.LayerMask(
+                        "paint-mask",
+                        setOf(maskAddress),
+                    ),
+                ),
+            ),
+            groups = listOf(
+                com.neoworksuite.neocanvas.core.model.LayerGroup(
+                    "group",
+                    "Character",
+                    opacity = .5f,
+                ),
+            ),
+        )
+        val rendered = PngExporter.render(
+            visibleDocument,
+            mapOf(paintAddress to paint, maskAddress to mask),
+        )
+        assertEquals(0, rendered.rgbaAt(0, 0)[3].toInt() and 255)
+        assertEquals(128, rendered.rgbaAt(1, 0)[3].toInt() and 255)
+
+        val hidden = visibleDocument.copy(
+            groups = listOf(
+                com.neoworksuite.neocanvas.core.model.LayerGroup(
+                    "group",
+                    "Character",
+                    visible = false,
+                ),
+            ),
+        )
+        assertEquals(
+            0,
+            PngExporter.render(
+                hidden,
+                mapOf(paintAddress to paint, maskAddress to mask),
+            ).rgbaAt(1, 0)[3].toInt() and 255,
+        )
+    }
+
     @Test fun clipping_mask_uses_alpha_of_layer_below() {
         val base = tile(10, 20, 30, 0)
         val baseOpaque = base.copyOf().also {

@@ -13,15 +13,22 @@ class CanvasDocument(
     val width: Int,
     val height: Int,
     layers: List<Layer> = emptyList(),
+    groups: List<LayerGroup> = emptyList(),
 ) {
-    /** A collection snapshot, isolated from caller-owned mutable layer lists. */
+    /** Collection snapshots isolated from caller-owned mutable collections. */
     val layers: List<Layer> = immutableListSnapshot(layers)
+    val groups: List<LayerGroup> = immutableListSnapshot(groups)
 
     init {
         require(id.isNotBlank()) { "Document id must not be blank." }
         require(width > 0) { "Canvas width must be positive." }
         require(height > 0) { "Canvas height must be positive." }
         require(this.layers.map(Layer::id).distinct().size == this.layers.size) { "Layer ids must be unique." }
+        require(this.groups.map(LayerGroup::id).distinct().size == this.groups.size) { "Layer group ids must be unique." }
+        val groupIds = this.groups.mapTo(linkedSetOf(), LayerGroup::id)
+        require(this.layers.all { it.groupId == null || it.groupId in groupIds }) {
+            "Every grouped layer must reference a group in the document."
+        }
     }
 
     companion object {
@@ -54,21 +61,25 @@ class CanvasDocument(
         width: Int = this.width,
         height: Int = this.height,
         layers: List<Layer> = this.layers,
-    ): CanvasDocument = CanvasDocument(id, width, height, layers)
+        groups: List<LayerGroup> = this.groups,
+    ): CanvasDocument = CanvasDocument(id, width, height, layers, groups)
 
     override fun equals(other: Any?): Boolean = other is CanvasDocument &&
         id == other.id &&
         width == other.width &&
         height == other.height &&
-        layers == other.layers
+        layers == other.layers &&
+        groups == other.groups
 
     override fun hashCode(): Int {
         var result = id.hashCode()
         result = 31 * result + width
         result = 31 * result + height
         result = 31 * result + layers.hashCode()
+        result = 31 * result + groups.hashCode()
         return result
     }
 
-    override fun toString(): String = "CanvasDocument(id=$id, width=$width, height=$height, layers=$layers)"
+    override fun toString(): String =
+        "CanvasDocument(id=$id, width=$width, height=$height, layers=$layers, groups=$groups)"
 }

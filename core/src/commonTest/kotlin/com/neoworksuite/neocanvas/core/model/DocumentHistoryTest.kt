@@ -111,6 +111,37 @@ class DocumentHistoryTest {
     }
 
     @Test
+    fun groups_and_masks_are_undoable_document_metadata() {
+        val history = historyWithTwoLayers()
+
+        history.execute(AddLayerGroup("group-1", "Characters"))
+        history.execute(SetLayerGroupMembership("layer-2", "group-1"))
+        history.execute(SetLayerGroupOpacity("group-1", .6f))
+        history.execute(AddLayerMask("layer-2", "mask-layer-2"))
+        history.execute(
+            ApplyLayerMaskPatch(
+                "layer-2",
+                "mask-layer-2",
+                addedTileAddresses = setOf(TileAddress("mask-layer-2", 0, 0)),
+            ),
+        )
+
+        assertEquals("group-1", history.current.layers[1].groupId)
+        assertEquals(.6f, history.current.groups.single().opacity)
+        assertEquals(
+            setOf(TileAddress("mask-layer-2", 0, 0)),
+            history.current.layers[1].mask!!.tileAddresses,
+        )
+
+        assertTrue(history.undo())
+        assertTrue(history.current.layers[1].mask!!.tileAddresses.isEmpty())
+
+        history.execute(DeleteLayerGroup("group-1"))
+        assertTrue(history.current.groups.isEmpty())
+        assertEquals(null, history.current.layers[1].groupId)
+    }
+
+    @Test
     fun duplicate_creates_an_independent_raster_layer_after_source() {
         val history = DocumentHistory(
             CanvasDocument.blank(100, 100).copy(

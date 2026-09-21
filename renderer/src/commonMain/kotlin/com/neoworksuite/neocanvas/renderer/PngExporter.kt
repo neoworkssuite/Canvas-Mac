@@ -41,24 +41,56 @@ object PngExporter {
 
     fun render(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): PngImage {
         val output = ByteArray(document.width * document.height * 4)
+        val groupsById = document.groups.associateBy { it.id }
         document.layers.forEachIndexed { index, layer ->
-            if (!layer.visible || layer.opacity <= 0f) return@forEachIndexed
+            val group = layer.groupId?.let(groupsById::get)
+            val effectiveOpacity = layer.opacity * (group?.opacity ?: 1f)
+            if (!layer.visible || group?.visible == false || effectiveOpacity <= 0f) return@forEachIndexed
             val raster = layer.payload as? LayerPayload.Raster ?: return@forEachIndexed
             val clippingBase = if (layer.clipping && index > 0) document.layers[index - 1] else null
             val clippingRaster = clippingBase?.payload as? LayerPayload.Raster
             raster.tileAddresses.forEach { address ->
                 val sourcePixels = tiles[address] ?: return@forEach
                 require(sourcePixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
+                val maskedPixels = applyLayerMask(sourcePixels, layer.mask, address, tiles)
                 val pixels = if (layer.clipping) {
                     val basePixels = clippingRaster?.let {
-                        tiles[TileAddress(clippingBase!!.id, address.x, address.y)]
+                        val raw = tiles[TileAddress(clippingBase!!.id, address.x, address.y)]
+                        raw?.let { applyLayerMask(it, clippingBase.mask, address, tiles) }
                     }
-                    clipAlpha(sourcePixels, basePixels)
-                } else sourcePixels
-                compositeTile(output, document.width, document.height, address, pixels, layer.opacity, layer.blendMode)
+                    clipAlpha(maskedPixels, basePixels)
+                } else maskedPixels
+                compositeTile(output, document.width, document.height, address, pixels, effectiveOpacity, layer.blendMode)
             }
         }
         return PngImage(document.width, document.height, output)
+    }
+
+    private fun applyLayerMask(
+        source: ByteArray,
+        mask: com.neoworksuite.neocanvas.core.model.LayerMask?,
+        address: TileAddress,
+        tiles: Map<TileAddress, ByteArray>,
+    ): ByteArray {
+        if (mask == null || !mask.enabled) return source
+        val maskPixels = tiles[TileAddress(mask.id, address.x, address.y)]
+        if (maskPixels == null && !mask.inverted) return source
+        val output = source.copyOf()
+        var offset = 0
+        while (offset < output.size) {
+            val rawMask = maskPixels?.get(offset)?.toInt()?.and(255) ?: 255
+            val maskValue = if (mask.inverted) 255 - rawMask else rawMask
+            val sourceAlpha = output[offset + 3].toInt() and 255
+            val maskedAlpha = (sourceAlpha * maskValue + 127) / 255
+            output[offset + 3] = maskedAlpha.toByte()
+            if (maskedAlpha == 0) {
+                output[offset] = 0
+                output[offset + 1] = 0
+                output[offset + 2] = 0
+            }
+            offset += 4
+        }
+        return output
     }
 
     private fun clipAlpha(source: ByteArray, mask: ByteArray?): ByteArray {

@@ -141,6 +141,132 @@ class ApplyRasterPatch(
         "ApplyRasterPatch(layerId=$layerId, addedTileAddresses=$addedTileAddresses, removedTileAddresses=$removedTileAddresses)"
 }
 
+data class AddLayerGroup(
+    val groupId: String,
+    val name: String,
+) : DocumentCommand {
+    init {
+        require(groupId.isNotBlank())
+        require(name.isNotBlank())
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        require(document.groups.none { it.id == groupId }) { "A group with id '$groupId' already exists." }
+        return document.copy(groups = document.groups + LayerGroup(groupId, name))
+    }
+}
+
+data class RenameLayerGroup(val groupId: String, val name: String) : DocumentCommand {
+    init { require(name.isNotBlank()) }
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceGroup(groupId) { it.copy(name = name.trim()) }
+}
+
+data class SetLayerGroupVisibility(val groupId: String, val visible: Boolean) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceGroup(groupId) { it.copy(visible = visible) }
+}
+
+data class SetLayerGroupOpacity(val groupId: String, val opacity: Float) : DocumentCommand {
+    init { require(opacity in 0f..1f) }
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceGroup(groupId) { it.copy(opacity = opacity) }
+}
+
+data class SetLayerGroupLocked(val groupId: String, val locked: Boolean) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceGroup(groupId) { it.copy(locked = locked) }
+}
+
+data class SetLayerGroupCollapsed(val groupId: String, val collapsed: Boolean) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceGroup(groupId) { it.copy(collapsed = collapsed) }
+}
+
+data class SetLayerGroupMembership(val layerId: String, val groupId: String?) : DocumentCommand {
+    init { require(groupId == null || groupId.isNotBlank()) }
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        if (groupId != null) require(document.groups.any { it.id == groupId }) { "Layer group does not exist." }
+        return document.replaceLayer(layerId) { it.copy(groupId = groupId) }
+    }
+}
+
+data class DeleteLayerGroup(val groupId: String) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument {
+        require(document.groups.any { it.id == groupId }) { "Layer group does not exist." }
+        return document.copy(
+            layers = document.layers.map { if (it.groupId == groupId) it.copy(groupId = null) else it },
+            groups = document.groups.filterNot { it.id == groupId },
+        )
+    }
+}
+
+data class AddLayerMask(
+    val layerId: String,
+    val maskId: String,
+) : DocumentCommand {
+    init {
+        require(layerId.isNotBlank())
+        require(maskId.isNotBlank())
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument = document.replaceLayer(layerId) { layer ->
+        require(layer.mask == null) { "Layer already has a mask." }
+        require(document.layers.none { it.id == maskId || it.mask?.id == maskId }) { "Mask id must be unique." }
+        layer.copy(mask = LayerMask(maskId))
+    }
+}
+
+data class RemoveLayerMask(val layerId: String) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceLayer(layerId) { it.copy(mask = null) }
+}
+
+data class SetLayerMaskEnabled(val layerId: String, val enabled: Boolean) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceLayer(layerId) { layer ->
+            val mask = requireNotNull(layer.mask) { "Layer has no mask." }
+            layer.copy(mask = mask.copy(enabled = enabled))
+        }
+}
+
+data class SetLayerMaskInverted(val layerId: String, val inverted: Boolean) : DocumentCommand {
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceLayer(layerId) { layer ->
+            val mask = requireNotNull(layer.mask) { "Layer has no mask." }
+            layer.copy(mask = mask.copy(inverted = inverted))
+        }
+}
+
+class ApplyLayerMaskPatch(
+    val layerId: String,
+    val maskId: String,
+    addedTileAddresses: Set<TileAddress> = emptySet(),
+    removedTileAddresses: Set<TileAddress> = emptySet(),
+) : DocumentCommand {
+    val addedTileAddresses = immutableSetSnapshot(addedTileAddresses)
+    val removedTileAddresses = immutableSetSnapshot(removedTileAddresses)
+
+    init {
+        require(layerId.isNotBlank() && maskId.isNotBlank())
+        require((this.addedTileAddresses + this.removedTileAddresses).all { it.layerId == maskId }) {
+            "Mask patch tile addresses must belong to the mask id."
+        }
+        require(this.addedTileAddresses.intersect(this.removedTileAddresses).isEmpty())
+    }
+
+    override fun apply(document: CanvasDocument): CanvasDocument =
+        document.replaceLayer(layerId) { layer ->
+            val mask = requireNotNull(layer.mask) { "Layer has no mask." }
+            require(mask.id == maskId) { "Mask id does not match layer mask." }
+            val addresses = mask.tileAddresses.toMutableSet().apply {
+                removeAll(removedTileAddresses)
+                addAll(addedTileAddresses)
+            }
+            layer.copy(mask = mask.copy(tileAddresses = addresses))
+        }
+}
+
 data class MoveLayer(val layerId: String, val targetIndex: Int) : DocumentCommand {
     override fun apply(document: CanvasDocument): CanvasDocument {
         val sourceIndex = document.layers.indexOfLayer(layerId)
@@ -232,6 +358,12 @@ data class DeleteLayer(val layerId: String) : DocumentCommand {
         val index = document.layers.indexOfLayer(layerId)
         return document.copy(layers = document.layers.toMutableList().apply { removeAt(index) })
     }
+}
+
+private fun CanvasDocument.replaceGroup(groupId: String, update: (LayerGroup) -> LayerGroup): CanvasDocument {
+    val index = groups.indexOfFirst { it.id == groupId }
+    require(index >= 0) { "No group with id '$groupId' exists." }
+    return copy(groups = groups.toMutableList().apply { set(index, update(this[index])) })
 }
 
 private fun CanvasDocument.replaceLayer(layerId: String, update: (Layer) -> Layer): CanvasDocument {
