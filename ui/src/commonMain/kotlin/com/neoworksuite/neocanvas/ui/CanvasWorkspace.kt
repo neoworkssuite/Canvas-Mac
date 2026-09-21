@@ -61,6 +61,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.ShapeKind
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -68,6 +70,7 @@ import kotlin.math.sin
 import kotlinx.coroutines.delay
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
+private enum class ObjectDrag { None, Move, Scale, Rotate }
 
 /** Bounded document viewport. Strokes map to document pixels before the shared rasterizer stores them. */
 @Composable
@@ -86,6 +89,7 @@ fun CanvasWorkspace(
     var quickShapeRevision by remember { mutableIntStateOf(0) }
     var quickShapeRawPoints by remember { mutableStateOf<List<DrawPoint>>(emptyList()) }
     var quickShapeSnapped by remember { mutableStateOf(false) }
+    var objectGesturePreview by remember { mutableStateOf<LayerPayload?>(null) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -257,6 +261,7 @@ fun CanvasWorkspace(
                     state.smudgeStrength,
                     state.fingerPaintingEnabled,
                     state.quickShapeEnabled,
+                    state.objectEditorVisible,
                     document.id,
                     viewport,
                 ) {
@@ -295,11 +300,44 @@ fun CanvasWorkspace(
                     val initial = point(down.position, if (down.type == PointerType.Stylus) down.pressure else 1f)
                     if (state.tool != Tool.Pan && (initial.x < 0f || initial.y < 0f ||
                         initial.x >= document.width || initial.y >= document.height)) return@awaitEachGesture
+
+                    val initialOffset = Offset(initial.x, initial.y)
+                    val startingObjectLayer = state.activeObjectLayer?.takeIf { state.objectEditorVisible }
+                    val startingObjectPayload = startingObjectLayer?.payload?.takeIf {
+                        it is LayerPayload.TextObject || it is LayerPayload.ShapeObject
+                    }
+                    val startingObjectGeometry = startingObjectPayload?.editableObjectGeometry()
+                    val objectHandleRadius = 18f / gestureScale
+                    val objectDrag = when {
+                        startingObjectGeometry == null -> ObjectDrag.None
+                        (initialOffset - startingObjectGeometry.rotationHandle(32f / gestureScale)).getDistance() <= objectHandleRadius ->
+                            ObjectDrag.Rotate
+                        startingObjectGeometry.scaleHandles().any { (initialOffset - it).getDistance() <= objectHandleRadius } ->
+                            ObjectDrag.Scale
+                        startingObjectGeometry.contains(initialOffset, objectHandleRadius) -> ObjectDrag.Move
+                        else -> ObjectDrag.None
+                    }
+                    val objectGroupLocked = startingObjectLayer?.groupId?.let { groupId ->
+                        document.groups.firstOrNull { it.id == groupId }?.locked
+                    } == true
+                    if (startingObjectLayer != null && (startingObjectLayer.locked || objectGroupLocked)) {
+                        state.statusMessage = "Unlock this object before transforming it"
+                        down.consume()
+                        return@awaitEachGesture
+                    }
+                    if (startingObjectPayload != null && objectDrag == ObjectDrag.None) {
+                        down.consume()
+                        return@awaitEachGesture
+                    }
+
                     down.consume()
                     try {
                         inProgress.clear()
                         moveDelta = Offset.Zero
-                        val startingTransform = state.transformSession
+                        if (startingObjectPayload != null && objectDrag != ObjectDrag.None) {
+                            objectGesturePreview = startingObjectPayload
+                        }
+                        val startingTransform = if (objectDrag == ObjectDrag.None) state.transformSession else null
                         val startingBounds = startingTransform?.targetBounds(document.width, document.height)
                         val transformCenter = startingBounds?.let { Offset((it.left + it.right) / 2f, (it.top + it.bottom) / 2f) }
                         val handleRadius = 18f / gestureScale
@@ -317,7 +355,9 @@ fun CanvasWorkspace(
                         if (startingTransform != null && transformDrag == TransformDrag.None) return@awaitEachGesture
                         val startDistance = transformCenter?.let { (Offset(initial.x, initial.y) - it).getDistance().coerceAtLeast(.001f) } ?: 1f
                         val startAngle = transformCenter?.let { atan2(initial.y - it.y, initial.x - it.x) } ?: 0f
-                        movingSelection = startingTransform == null && state.tool == Tool.MoveSelection &&
+                        val objectCenter = startingObjectGeometry?.center
+                        val objectStartDistance = objectCenter?.let { (initialOffset - it).getDistance().coerceAtLeast(.001f) } ?: 1f
+                        movingSelection = startingTransform == null && startingObjectPayload == null && state.tool == Tool.MoveSelection &&
                             (state.selection?.contains(initial.x.toInt(), initial.y.toInt()) == true)
                         inProgress += initial
                         quickShapeSnapped = false
@@ -337,7 +377,37 @@ fun CanvasWorkspace(
                             }
                             val amount = change.position - previous
                             val currentPoint = point(change.position, 1f)
-                            if (startingTransform != null && transformCenter != null) {
+                            val currentObjectPoint = Offset(currentPoint.x, currentPoint.y)
+                            if (startingObjectPayload != null && objectCenter != null && objectDrag != ObjectDrag.None) {
+                                objectGesturePreview = when (objectDrag) {
+                                    ObjectDrag.Move -> transformEditableObject(
+                                        startingObjectPayload,
+                                        translation = currentObjectPoint - initialOffset,
+                                        scale = 1f,
+                                        rotationDelta = 0f,
+                                        documentWidth = document.width,
+                                        documentHeight = document.height,
+                                    )
+                                    ObjectDrag.Scale -> transformEditableObject(
+                                        startingObjectPayload,
+                                        translation = Offset.Zero,
+                                        scale = ((currentObjectPoint - objectCenter).getDistance() / objectStartDistance)
+                                            .takeIf { it.isFinite() }?.coerceIn(.05f, 20f) ?: 1f,
+                                        rotationDelta = 0f,
+                                        documentWidth = document.width,
+                                        documentHeight = document.height,
+                                    )
+                                    ObjectDrag.Rotate -> transformEditableObject(
+                                        startingObjectPayload,
+                                        translation = Offset.Zero,
+                                        scale = 1f,
+                                        rotationDelta = angleDeltaDegrees(initialOffset - objectCenter, currentObjectPoint - objectCenter),
+                                        documentWidth = document.width,
+                                        documentHeight = document.height,
+                                    )
+                                    ObjectDrag.None -> startingObjectPayload
+                                }
+                            } else if (startingTransform != null && transformCenter != null) {
                                 when (transformDrag) {
                                     TransformDrag.Move -> state.updateTransform(
                                         translationX = startingTransform.translationX + currentPoint.x - initial.x,
@@ -381,7 +451,9 @@ fun CanvasWorkspace(
                             if (!change.pressed) break
                         }
                         if (cancelled) return@awaitEachGesture
-                        if (startingTransform != null) {
+                        if (startingObjectPayload != null && objectDrag != ObjectDrag.None) {
+                            objectGesturePreview?.let { state.commitActiveObjectTransform(it) }
+                        } else if (startingTransform != null) {
                             // The preview remains pending until the explicit Apply or Cancel action.
                         } else if (state.tool == Tool.Fill || state.tool == Tool.Eyedropper) {
                             if ((previous - down.position).getDistance() <= viewConfiguration.touchSlop)
@@ -399,6 +471,7 @@ fun CanvasWorkspace(
                         inProgress.clear()
                         moveDelta = Offset.Zero
                         movingSelection = false
+                        objectGesturePreview = null
                     }
                 }
             }.pointerInput(Unit) {
@@ -427,6 +500,8 @@ fun CanvasWorkspace(
                     transformPreview ?: movePreview ?: state.effectPreviewPatch ?: strokePreview,
                     tileImages,
                     textMeasurer,
+                    editableObjectPreviewLayerId = if (objectGesturePreview != null) state.activeLayerId else null,
+                    editableObjectPreview = objectGesturePreview,
                 )
 
                 if (state.gridGuideVisible) {
@@ -467,6 +542,15 @@ fun CanvasWorkspace(
                     symmetry == com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Both) {
                     drawLine(guideColor, Offset(0f, document.height / 2f),
                         Offset(document.width.toFloat(), document.height / 2f), 1f / scale)
+                }
+                if (state.objectEditorVisible) {
+                    val activeObjectLayer = state.activeObjectLayer
+                    val groupVisible = activeObjectLayer?.groupId?.let { groupId ->
+                        document.groups.firstOrNull { it.id == groupId }?.visible
+                    } != false
+                    if (activeObjectLayer != null && activeObjectLayer.visible && groupVisible) {
+                        drawEditableObjectControls(objectGesturePreview ?: activeObjectLayer.payload, scale)
+                    }
                 }
                 drawRect(NeoCanvasColors.canvasEdge, size = Size(document.width.toFloat(), document.height.toFloat()), style = Stroke(1f / scale))
                 val liveSelection = if (
@@ -848,6 +932,8 @@ private fun DrawScope.drawStoredTiles(
     preview: com.neoworksuite.neocanvas.renderer.RasterPatch?,
     images: TileImageCache,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    editableObjectPreviewLayerId: String? = null,
+    editableObjectPreview: LayerPayload? = null,
 ) {
     val groupsById = state.document.groups.associateBy { it.id }
     state.document.layers.forEachIndexed { index, layer ->
@@ -855,7 +941,10 @@ private fun DrawScope.drawStoredTiles(
         val effectiveOpacity = layer.opacity * (group?.opacity ?: 1f)
         if (!layer.visible || group?.visible == false || effectiveOpacity <= 0f) return@forEachIndexed
         val blendMode = layerBlendMode(layer.blendMode)
-        when (val payload = layer.payload) {
+        val renderedPayload = if (layer.id == editableObjectPreviewLayerId && editableObjectPreview != null) {
+            editableObjectPreview
+        } else layer.payload
+        when (val payload = renderedPayload) {
             is com.neoworksuite.neocanvas.core.model.LayerPayload.Raster -> {
                 val clippingBase = if (layer.clipping && index > 0) state.document.layers[index - 1] else null
                 val layerPreview = preview?.takeIf { patch -> patch.keys.any { it.layerId == layer.id } }
@@ -1048,6 +1137,157 @@ internal object NeoCanvasColors {
     val disabled = Color(0xFF53606E)
 }
 
+
+private data class EditableObjectGeometry(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    val rotationDegrees: Float,
+    val isLine: Boolean = false,
+    val strokeWidth: Float = 0f,
+) {
+    val center: Offset get() = Offset(x + width / 2f, y + height / 2f)
+
+    private fun rotated(point: Offset): Offset = center + rotateOffset(point - center, rotationDegrees)
+
+    fun outlineCorners(): List<Offset> = listOf(
+        Offset(x, y),
+        Offset(x + width, y),
+        Offset(x + width, y + height),
+        Offset(x, y + height),
+    ).map(::rotated)
+
+    fun scaleHandles(): List<Offset> = if (isLine) {
+        listOf(rotated(Offset(x, y)), rotated(Offset(x + width, y + height)))
+    } else outlineCorners()
+
+    fun rotationHandle(distance: Float): Offset {
+        val top = minOf(y, y + height)
+        return rotated(Offset(x + width / 2f, top - distance))
+    }
+
+    fun contains(point: Offset, padding: Float): Boolean {
+        val local = center + rotateOffset(point - center, -rotationDegrees)
+        if (isLine) {
+            return distanceToSegment(local, Offset(x, y), Offset(x + width, y + height)) <=
+                padding + strokeWidth.coerceAtLeast(1f) / 2f
+        }
+        val left = minOf(x, x + width) - padding
+        val right = maxOf(x, x + width) + padding
+        val top = minOf(y, y + height) - padding
+        val bottom = maxOf(y, y + height) + padding
+        return local.x in left..right && local.y in top..bottom
+    }
+}
+
+private fun LayerPayload.editableObjectGeometry(): EditableObjectGeometry? = when (this) {
+    is LayerPayload.TextObject -> EditableObjectGeometry(x, y, width, height, rotationDegrees)
+    is LayerPayload.ShapeObject -> EditableObjectGeometry(
+        x = x,
+        y = y,
+        width = width,
+        height = height,
+        rotationDegrees = rotationDegrees,
+        isLine = kind == ShapeKind.Line,
+        strokeWidth = strokeWidth,
+    )
+    is LayerPayload.Raster -> null
+}
+
+private fun transformEditableObject(
+    payload: LayerPayload,
+    translation: Offset,
+    scale: Float,
+    rotationDelta: Float,
+    documentWidth: Int,
+    documentHeight: Int,
+): LayerPayload {
+    val safeScale = scale.takeIf { it.isFinite() && it > 0f }?.coerceIn(.05f, 20f) ?: 1f
+    return when (payload) {
+        is LayerPayload.TextObject -> {
+            val newWidth = (payload.width * safeScale).coerceIn(20f, maxOf(20f, documentWidth * 2f))
+            val newHeight = (payload.height * safeScale).coerceIn(20f, maxOf(20f, documentHeight * 2f))
+            val centerX = payload.x + payload.width / 2f + translation.x
+            val centerY = payload.y + payload.height / 2f + translation.y
+            payload.copy(
+                x = (centerX - newWidth / 2f).coerceIn(-newWidth, documentWidth.toFloat()),
+                y = (centerY - newHeight / 2f).coerceIn(-newHeight, documentHeight.toFloat()),
+                width = newWidth,
+                height = newHeight,
+                fontSize = (payload.fontSize * safeScale).coerceIn(6f, 512f),
+                rotationDegrees = normalizeViewRotation(payload.rotationDegrees + rotationDelta),
+            )
+        }
+
+        is LayerPayload.ShapeObject -> {
+            val newWidth = signedObjectScale(payload.width, safeScale, 8f, maxOf(8f, documentWidth * 2f))
+            val newHeight = if (payload.kind == ShapeKind.Line) {
+                signedObjectScale(payload.height, safeScale, 0f, maxOf(8f, documentHeight * 2f))
+            } else {
+                signedObjectScale(payload.height, safeScale, 8f, maxOf(8f, documentHeight * 2f))
+            }
+            val centerX = payload.x + payload.width / 2f + translation.x
+            val centerY = payload.y + payload.height / 2f + translation.y
+            payload.copy(
+                x = (centerX - newWidth / 2f).coerceIn(-abs(newWidth), documentWidth.toFloat()),
+                y = (centerY - newHeight / 2f).coerceIn(-abs(newHeight), documentHeight.toFloat()),
+                width = newWidth,
+                height = newHeight,
+                strokeWidth = (payload.strokeWidth * safeScale).coerceIn(0f, 128f),
+                rotationDegrees = normalizeViewRotation(payload.rotationDegrees + rotationDelta),
+            )
+        }
+
+        is LayerPayload.Raster -> payload
+    }
+}
+
+private fun signedObjectScale(value: Float, factor: Float, minMagnitude: Float, maxMagnitude: Float): Float {
+    if (value == 0f && minMagnitude == 0f) return 0f
+    val sign = if (value < 0f) -1f else 1f
+    return sign * (abs(value) * factor).coerceIn(minMagnitude, maxMagnitude)
+}
+
+private fun distanceToSegment(point: Offset, start: Offset, end: Offset): Float {
+    val segment = end - start
+    val lengthSquared = segment.x * segment.x + segment.y * segment.y
+    if (lengthSquared <= .0001f) return (point - start).getDistance()
+    val relative = point - start
+    val t = ((relative.x * segment.x + relative.y * segment.y) / lengthSquared).coerceIn(0f, 1f)
+    return (point - (start + segment * t)).getDistance()
+}
+
+private fun DrawScope.drawEditableObjectControls(payload: LayerPayload, scale: Float) {
+    val geometry = payload.editableObjectGeometry() ?: return
+    val accent = NeoCanvasColors.accent
+    val outline = geometry.outlineCorners()
+    val width = 1.25f / scale
+    val radius = 6f / scale
+
+    if (geometry.isLine) {
+        val handles = geometry.scaleHandles()
+        if (handles.size == 2) drawLine(accent.copy(alpha = .72f), handles[0], handles[1], width)
+    } else {
+        outline.indices.forEach { index ->
+            drawLine(accent.copy(alpha = .78f), outline[index], outline[(index + 1) % outline.size], width)
+        }
+    }
+
+    geometry.scaleHandles().forEach { handle ->
+        drawCircle(Color.Black, radius * 1.5f, handle)
+        drawCircle(accent, radius, handle)
+    }
+
+    val topCenter = geometry.center + rotateOffset(
+        Offset(0f, minOf(geometry.y, geometry.y + geometry.height) - geometry.center.y),
+        geometry.rotationDegrees,
+    )
+    val rotateHandle = geometry.rotationHandle(32f / scale)
+    drawLine(accent, topCenter, rotateHandle, width)
+    drawCircle(Color.Black, radius * 1.5f, rotateHandle)
+    drawCircle(accent, radius, rotateHandle)
+}
 
 private fun applyViewportTransform(
     state: EditorState,

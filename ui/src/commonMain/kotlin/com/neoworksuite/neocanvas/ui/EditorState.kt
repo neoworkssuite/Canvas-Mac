@@ -816,6 +816,25 @@ class EditorState(
         }
     }
 
+    fun commitActiveObjectTransform(payload: LayerPayload): Boolean {
+        val layer = activeObjectLayer ?: return false
+        if (layer.locked || isGroupLocked(layer)) {
+            statusMessage = "Unlock this object before transforming it"
+            return false
+        }
+        val command = when {
+            layer.payload is LayerPayload.TextObject && payload is LayerPayload.TextObject ->
+                UpdateTextLayer(layer.id, payload)
+            layer.payload is LayerPayload.ShapeObject && payload is LayerPayload.ShapeObject ->
+                UpdateShapeLayer(layer.id, payload)
+            else -> return false
+        }
+        if (layer.payload == payload) return true
+        execute(command)
+        statusMessage = "Object transformed"
+        return true
+    }
+
     private fun shapeLayerName(kind: ShapeKind): String = when (kind) {
         ShapeKind.Rectangle -> "Rectangle"
         ShapeKind.Ellipse -> "Ellipse"

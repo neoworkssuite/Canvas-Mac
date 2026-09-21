@@ -110,6 +110,11 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
 
         if (text != null || shape != null) {
             Text("POSITION & GEOMETRY", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
+            Text(
+                "On canvas: drag to move · corner handles resize · top handle rotates",
+                color = NeoCanvasColors.muted,
+                fontSize = 9.sp,
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 ObjectAction("←", Modifier.weight(1f)) { state.moveActiveObject(-10f, 0f) }
                 ObjectAction("↑", Modifier.weight(1f)) { state.moveActiveObject(0f, -10f) }

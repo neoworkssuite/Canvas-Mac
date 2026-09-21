@@ -669,6 +669,46 @@ class EditorStateTest {
     }
 
     @Test
+    fun direct_object_transform_commits_once_and_is_undoable() {
+        val initial = CanvasDocument(
+            id = "direct-object-transform",
+            width = 800,
+            height = 600,
+            layers = listOf(
+                Layer(
+                    "text-1",
+                    "Title",
+                    payload = LayerPayload.TextObject(
+                        text = "NeoCanvas",
+                        x = 100f,
+                        y = 80f,
+                        width = 320f,
+                        height = 120f,
+                        fontSize = 48f,
+                    ),
+                ),
+            ),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        state.activeLayerId = "text-1"
+        assertTrue(state.openObjectEditor("text-1"))
+
+        val transformed = state.activeTextObject!!.copy(
+            x = 160f,
+            y = 125f,
+            width = 400f,
+            height = 150f,
+            fontSize = 60f,
+            rotationDegrees = 22f,
+        )
+        assertTrue(state.commitActiveObjectTransform(transformed))
+        assertEquals(transformed, state.activeTextObject)
+
+        assertTrue(state.undo())
+        assertEquals(initial.layers.single().payload, state.activeTextObject)
+    }
+
+    @Test
     fun raster_tools_ignore_editable_object_layers() {
         val initial = CanvasDocument(
             id = "object-raster-guard",
