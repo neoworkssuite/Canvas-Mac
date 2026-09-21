@@ -104,6 +104,9 @@ fun CanvasWorkspace(
     var quickMenuCandidate by remember { mutableStateOf<Offset?>(null) }
     var quickMenuAnchor by remember { mutableStateOf<Offset?>(null) }
     var clipboardMenuVisible by remember { mutableStateOf(false) }
+    var rapidHistoryFingerCount by remember { mutableIntStateOf(0) }
+    var rapidHistoryRevision by remember { mutableIntStateOf(0) }
+    var rapidHistoryTriggered by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -126,6 +129,20 @@ fun CanvasWorkspace(
         if (!quickMenuPointerDown || quickMenuRevision != revision) return@LaunchedEffect
         quickMenuAnchor = quickMenuCandidate
         if (quickMenuAnchor != null) state.statusMessage = "QuickMenu — choose an action"
+    }
+
+    LaunchedEffect(rapidHistoryFingerCount, rapidHistoryRevision) {
+        val fingers = rapidHistoryFingerCount
+        if (fingers != 2 && fingers != 3) return@LaunchedEffect
+        val revision = rapidHistoryRevision
+        delay(550)
+        while (rapidHistoryFingerCount == fingers && rapidHistoryRevision == revision) {
+            val changed = if (fingers == 2) state.undo() else state.redo()
+            if (!changed) break
+            rapidHistoryTriggered = true
+            state.statusMessage = if (fingers == 2) "Rapid Undo" else "Rapid Redo"
+            delay(140)
+        }
     }
 
     Box(
@@ -193,6 +210,9 @@ fun CanvasWorkspace(
                         var stylusSeen = firstDown.type == PointerType.Stylus
                         var threeFingerStart: Offset? = null
                         var threeFingerEnd: Offset? = null
+                        rapidHistoryTriggered = false
+                        rapidHistoryFingerCount = 0
+                        rapidHistoryRevision++
 
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -205,6 +225,19 @@ fun CanvasWorkspace(
 
                             event.changes.filter { it.type != PointerType.Stylus && (it.pressed || it.previousPressed) }
                                 .forEach { touchTravel += (it.position - it.previousPosition).getDistance() }
+
+                            val rapidFingers = if (shouldArmRapidHistoryGesture(
+                                    fingerCount = touches.size,
+                                    touchTravel = touchTravel,
+                                    touchSlop = viewConfiguration.touchSlop,
+                                    stylusSeen = stylusSeen,
+                                    transformStarted = transformStarted,
+                                )
+                            ) touches.size else 0
+                            if (rapidFingers != rapidHistoryFingerCount) {
+                                rapidHistoryFingerCount = rapidFingers
+                                rapidHistoryRevision++
+                            }
 
                             if (touches.size >= 2) {
                                 // Multi-touch always belongs to canvas navigation/shortcuts, never to a brush stroke.
@@ -266,8 +299,12 @@ fun CanvasWorkspace(
                             if (!anyTouchPressed && multiTouchStartedAt != 0L) {
                                 val duration = (lastEventTime - multiTouchStartedAt).coerceAtLeast(0L)
                                 val tapTravelLimit = viewConfiguration.touchSlop * maxOf(2, maxTouchCount) * 1.5f
+                                rapidHistoryFingerCount = 0
+                                rapidHistoryRevision++
 
-                                if (isThreeFingerClipboardSwipe(
+                                if (rapidHistoryTriggered) {
+                                    // Hold-to-repeat already performed the history action; do not add the tap action.
+                                } else if (isThreeFingerClipboardSwipe(
                                         maxTouchCount = maxTouchCount,
                                         durationMillis = duration,
                                         start = threeFingerStart,
@@ -1934,6 +1971,18 @@ private fun applyViewportTransform(
     state.panX = nextCanvasCenter.x - baseCenter.x
     state.panY = nextCanvasCenter.y - baseCenter.y
     state.rotateViewBy(rotationChange)
+}
+
+internal fun shouldArmRapidHistoryGesture(
+    fingerCount: Int,
+    touchTravel: Float,
+    touchSlop: Float,
+    stylusSeen: Boolean,
+    transformStarted: Boolean,
+): Boolean {
+    if (stylusSeen || transformStarted || fingerCount !in 2..3) return false
+    if (!touchTravel.isFinite() || !touchSlop.isFinite() || touchSlop <= 0f) return false
+    return touchTravel <= touchSlop * fingerCount * 1.5f
 }
 
 internal fun isThreeFingerClipboardSwipe(
