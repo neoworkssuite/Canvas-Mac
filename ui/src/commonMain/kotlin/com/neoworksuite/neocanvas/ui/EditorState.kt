@@ -651,6 +651,7 @@ class EditorState(
 
     var selectedObjectLayerIds: Set<String> by mutableStateOf(emptySet())
         private set
+    var objectArrangePicking: Boolean by mutableStateOf(false)
 
     val selectedObjectCount: Int
         get() = document.layers.count { layer ->
@@ -684,6 +685,15 @@ class EditorState(
     fun clearObjectArrangeSelection() {
         selectedObjectLayerIds = emptySet()
         statusMessage = "Arrange selection cleared"
+    }
+
+    fun toggleObjectArrangePicking() {
+        objectArrangePicking = !objectArrangePicking
+        statusMessage = if (objectArrangePicking) {
+            "Arrange Pick on Canvas — tap editable objects to mark or unmark them"
+        } else {
+            "Arrange Pick off"
+        }
     }
 
     private fun mutableActiveObjectLayer(action: String = "editing it"): Layer? {
@@ -1642,6 +1652,7 @@ class EditorState(
         dormantLayerIds = emptySet()
         maskEditingLayerId = null
         selectedObjectLayerIds = emptySet()
+        objectArrangePicking = false
         resetEditableStrokes()
     }
 

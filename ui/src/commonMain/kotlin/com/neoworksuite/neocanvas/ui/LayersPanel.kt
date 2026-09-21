@@ -85,13 +85,17 @@ fun LayersPanel(state: EditorState, modifier: Modifier = Modifier) {
                 letterSpacing = .5.sp,
             )
             LayerMemoryMenu(state)
+            LayerTrayAction(
+                if (state.objectArrangePicking) "Pick ✓" else "Pick",
+                Modifier.padding(start = 5.dp),
+            ) { state.toggleObjectArrangePicking() }
             LayerTrayAction("Group +", Modifier.padding(start = 5.dp)) { state.addGroupFromActive() }
             Text("＋", color = NeoCanvasColors.ink, fontSize = 20.sp,
                 modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(9.dp)).background(NeoCanvasColors.accent)
                     .clickable { state.addLayer() }.padding(horizontal = 10.dp, vertical = 3.dp)
                     .semantics { contentDescription = "New layer" })
         }
-        if (state.selectedObjectCount > 0) {
+        if (state.selectedObjectCount > 0 || state.objectArrangePicking) {
             ObjectArrangeBar(state)
         }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -114,8 +118,12 @@ private fun ObjectArrangeBar(state: EditorState) {
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                state.selectedObjectCount.toString() + " OBJECT" +
-                    if (state.selectedObjectCount == 1) " MARKED" else "S MARKED",
+                if (state.objectArrangePicking && state.selectedObjectCount == 0) {
+                    "PICK ON CANVAS"
+                } else {
+                    state.selectedObjectCount.toString() + " OBJECT" +
+                        if (state.selectedObjectCount == 1) " MARKED" else "S MARKED"
+                },
                 color = NeoCanvasColors.accent,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
@@ -135,7 +143,12 @@ private fun ObjectArrangeBar(state: EditorState) {
                 LayerTrayAction("Bottom", Modifier.weight(1f)) { state.arrangeSelectedObjects(ObjectCanvasAlignment.Bottom) }
             }
         } else {
-            Text("Mark another editable Text or Shape layer.", color = NeoCanvasColors.faint, fontSize = 9.sp)
+            Text(
+                if (state.objectArrangePicking) "Tap editable Text or Shape objects directly on the canvas."
+                else "Mark another editable Text or Shape layer.",
+                color = NeoCanvasColors.faint,
+                fontSize = 9.sp,
+            )
         }
         if (state.selectedObjectCount >= 3) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

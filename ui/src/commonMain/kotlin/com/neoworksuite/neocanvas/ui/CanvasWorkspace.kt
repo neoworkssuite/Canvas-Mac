@@ -265,6 +265,7 @@ fun CanvasWorkspace(
                     state.fingerPaintingEnabled,
                     state.quickShapeEnabled,
                     state.objectEditorVisible,
+                    state.objectArrangePicking,
                     document.id,
                     viewport,
                 ) {
@@ -305,6 +306,31 @@ fun CanvasWorkspace(
                         initial.x >= document.width || initial.y >= document.height)) return@awaitEachGesture
 
                     val initialOffset = Offset(initial.x, initial.y)
+
+                    if (state.objectArrangePicking) {
+                        var moved = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                            change.consume()
+                            if (!change.pressed) break
+                        }
+                        if (!moved) {
+                            val hit = editableObjectLayerAtPoint(
+                                document = document,
+                                point = initialOffset,
+                                padding = 8f / gestureScale,
+                            )
+                            if (hit != null) {
+                                state.toggleObjectArrangeSelection(hit)
+                            } else {
+                                state.statusMessage = "No editable Text or Shape object under that point"
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
+
                     val arrangeGroupsById = document.groups.associateBy { it.id }
                     val startingGroupLayers = document.layers.filter { layer ->
                         layer.id in state.selectedObjectLayerIds &&
@@ -1486,6 +1512,20 @@ private data class EditableObjectGeometry(
         val bottom = maxOf(y, y + height) + padding
         return local.x in left..right && local.y in top..bottom
     }
+}
+
+internal fun editableObjectLayerAtPoint(
+    document: com.neoworksuite.neocanvas.core.model.CanvasDocument,
+    point: Offset,
+    padding: Float = 0f,
+): String? {
+    val groupsById = document.groups.associateBy { it.id }
+    return document.layers.asReversed().firstOrNull { layer ->
+        val group = layer.groupId?.let(groupsById::get)
+        if (!layer.visible || group?.visible == false) return@firstOrNull false
+        val geometry = layer.payload.editableObjectGeometry() ?: return@firstOrNull false
+        geometry.contains(point, padding)
+    }?.id
 }
 
 private fun LayerPayload.editableObjectGeometry(): EditableObjectGeometry? = when (this) {
