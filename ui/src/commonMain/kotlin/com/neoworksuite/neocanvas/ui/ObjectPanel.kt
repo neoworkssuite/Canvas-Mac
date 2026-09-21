@@ -181,6 +181,32 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 color = NeoCanvasColors.muted,
                 fontSize = 9.sp,
             )
+            Text("ALIGN TO CANVAS", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                ObjectAction("Left", Modifier.weight(1f), enabled = !locked) {
+                    state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Left)
+                }
+                ObjectAction("Centre", Modifier.weight(1f), enabled = !locked) {
+                    state.alignActiveObjectToCanvas(ObjectCanvasAlignment.CenterHorizontal)
+                }
+                ObjectAction("Right", Modifier.weight(1f), enabled = !locked) {
+                    state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Right)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                ObjectAction("Top", Modifier.weight(1f), enabled = !locked) {
+                    state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Top)
+                }
+                ObjectAction("Middle", Modifier.weight(1f), enabled = !locked) {
+                    state.alignActiveObjectToCanvas(ObjectCanvasAlignment.CenterVertical)
+                }
+                ObjectAction("Bottom", Modifier.weight(1f), enabled = !locked) {
+                    state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Bottom)
+                }
+            }
+            ObjectAction("Centre on Canvas", Modifier.fillMaxWidth(), enabled = !locked) {
+                state.alignActiveObjectToCanvas(ObjectCanvasAlignment.CenterBoth)
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 ObjectAction("←", Modifier.weight(1f), enabled = !locked) { state.moveActiveObject(-10f, 0f) }
                 ObjectAction("↑", Modifier.weight(1f), enabled = !locked) { state.moveActiveObject(0f, -10f) }

@@ -806,6 +806,67 @@ class EditorStateTest {
     }
 
     @Test
+    fun editable_objects_align_to_visual_canvas_bounds_and_undo() {
+        val text = LayerPayload.TextObject(
+            text = "Rotate",
+            x = 110f,
+            y = 90f,
+            width = 200f,
+            height = 80f,
+            rotationDegrees = 90f,
+        )
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "object-align",
+            width = 600,
+            height = 400,
+            layers = listOf(Layer("text-1", "Title", payload = text)),
+        )))
+        state.activeLayerId = "text-1"
+        assertTrue(state.openObjectEditor("text-1"))
+
+        assertTrue(state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Left))
+        val leftAligned = state.activeTextObject!!
+        // A 90-degree rotation swaps the visual half-extents, so x itself should not be zero.
+        assertEquals(40f, leftAligned.x, .01f)
+        assertEquals("Aligned object left", state.statusMessage)
+
+        assertTrue(state.alignActiveObjectToCanvas(ObjectCanvasAlignment.CenterBoth))
+        val centred = state.activeTextObject!!
+        assertEquals(300f, centred.x + centred.width / 2f, .01f)
+        assertEquals(200f, centred.y + centred.height / 2f, .01f)
+        assertEquals("Centred object on canvas", state.statusMessage)
+
+        assertTrue(state.undo())
+        assertEquals(leftAligned, state.activeTextObject)
+    }
+
+    @Test
+    fun editable_object_alignment_respects_group_lock() {
+        val shape = LayerPayload.ShapeObject(
+            kind = ShapeKind.Rectangle,
+            x = 40f,
+            y = 40f,
+            width = 80f,
+            height = 60f,
+        )
+        val initial = CanvasDocument(
+            id = "locked-align",
+            width = 300,
+            height = 200,
+            layers = listOf(Layer("shape-1", "Shape", payload = shape)),
+        )
+        val state = EditorState(DocumentHistory(initial))
+        state.activeLayerId = "shape-1"
+        assertTrue(state.addGroupFromActive())
+        val groupId = state.document.groups.single().id
+        state.toggleGroupLocked(groupId)
+
+        assertFalse(state.alignActiveObjectToCanvas(ObjectCanvasAlignment.Right))
+        assertEquals(shape, state.activeShapeObject)
+        assertEquals("Unlock this object before aligning it", state.statusMessage)
+    }
+
+    @Test
     fun raster_tools_ignore_editable_object_layers() {
         val initial = CanvasDocument(
             id = "object-raster-guard",

@@ -57,6 +57,7 @@ import com.neoworksuite.neocanvas.renderer.TileKey
 import com.neoworksuite.neocanvas.renderer.TileStore
 
 enum class Tool { Brush, Eraser, Smudge, Pan, Fill, Eyedropper, Select, MoveSelection }
+enum class ObjectCanvasAlignment { Left, CenterHorizontal, Right, Top, CenterVertical, Bottom, CenterBoth }
 enum class InspectorPanel { Layers, Brushes, Colors, Effects }
 enum class PendingDocumentAction { New, Open, Close }
 data class DrawPoint(val x: Float, val y: Float, val pressure: Float = 1f)
@@ -825,6 +826,96 @@ class EditorState(
             }
             is LayerPayload.Raster -> Unit
         }
+    }
+
+    fun alignActiveObjectToCanvas(alignment: ObjectCanvasAlignment): Boolean {
+        val layer = mutableActiveObjectLayer("aligning it") ?: return false
+        val payload = layer.payload
+        if (payload !is LayerPayload.TextObject && payload !is LayerPayload.ShapeObject) return false
+
+        val bounds = editableObjectVisualBounds(payload)
+        val dx = when (alignment) {
+            ObjectCanvasAlignment.Left -> -bounds.left
+            ObjectCanvasAlignment.CenterHorizontal,
+            ObjectCanvasAlignment.CenterBoth -> document.width / 2f - (bounds.left + bounds.right) / 2f
+            ObjectCanvasAlignment.Right -> document.width - bounds.right
+            else -> 0f
+        }
+        val dy = when (alignment) {
+            ObjectCanvasAlignment.Top -> -bounds.top
+            ObjectCanvasAlignment.CenterVertical,
+            ObjectCanvasAlignment.CenterBoth -> document.height / 2f - (bounds.top + bounds.bottom) / 2f
+            ObjectCanvasAlignment.Bottom -> document.height - bounds.bottom
+            else -> 0f
+        }
+        if (kotlin.math.abs(dx) < .001f && kotlin.math.abs(dy) < .001f) return true
+
+        val next = when (payload) {
+            is LayerPayload.TextObject -> payload.copy(x = payload.x + dx, y = payload.y + dy)
+            is LayerPayload.ShapeObject -> payload.copy(x = payload.x + dx, y = payload.y + dy)
+            is LayerPayload.Raster -> return false
+        }
+        val command = when (next) {
+            is LayerPayload.TextObject -> UpdateTextLayer(layer.id, next)
+            is LayerPayload.ShapeObject -> UpdateShapeLayer(layer.id, next)
+            is LayerPayload.Raster -> return false
+        }
+        execute(command)
+        statusMessage = when (alignment) {
+            ObjectCanvasAlignment.Left -> "Aligned object left"
+            ObjectCanvasAlignment.CenterHorizontal -> "Centred object horizontally"
+            ObjectCanvasAlignment.Right -> "Aligned object right"
+            ObjectCanvasAlignment.Top -> "Aligned object top"
+            ObjectCanvasAlignment.CenterVertical -> "Centred object vertically"
+            ObjectCanvasAlignment.Bottom -> "Aligned object bottom"
+            ObjectCanvasAlignment.CenterBoth -> "Centred object on canvas"
+        }
+        return true
+    }
+
+    private data class ObjectVisualBounds(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+    )
+
+    private fun editableObjectVisualBounds(payload: LayerPayload): ObjectVisualBounds {
+        val geometry = when (payload) {
+            is LayerPayload.TextObject -> floatArrayOf(
+                payload.x, payload.y, payload.width, payload.height, payload.rotationDegrees,
+            )
+            is LayerPayload.ShapeObject -> floatArrayOf(
+                payload.x, payload.y, payload.width, payload.height, payload.rotationDegrees,
+            )
+            is LayerPayload.Raster -> return ObjectVisualBounds(0f, 0f, 0f, 0f)
+        }
+        val x = geometry[0]
+        val y = geometry[1]
+        val width = geometry[2]
+        val height = geometry[3]
+        val rotation = geometry[4]
+        val centerX = x + width / 2f
+        val centerY = y + height / 2f
+        val angle = rotation * kotlin.math.PI.toFloat() / 180f
+        val cosA = kotlin.math.cos(angle)
+        val sinA = kotlin.math.sin(angle)
+        val corners = listOf(
+            x to y,
+            (x + width) to y,
+            x to (y + height),
+            (x + width) to (y + height),
+        ).map { (px, py) ->
+            val dx = px - centerX
+            val dy = py - centerY
+            (centerX + dx * cosA - dy * sinA) to (centerY + dx * sinA + dy * cosA)
+        }
+        return ObjectVisualBounds(
+            left = corners.minOf { it.first },
+            top = corners.minOf { it.second },
+            right = corners.maxOf { it.first },
+            bottom = corners.maxOf { it.second },
+        )
     }
 
     fun moveActiveObject(dx: Float, dy: Float) {
