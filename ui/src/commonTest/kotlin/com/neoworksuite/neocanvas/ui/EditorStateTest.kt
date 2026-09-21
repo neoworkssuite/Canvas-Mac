@@ -249,7 +249,7 @@ class EditorStateTest {
         )
         state.insertImage(image)
         val afterImport = state.retainedRasterHistoryBytes
-        assertEquals(8L * com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE, afterImport)
+        assertEquals(4L * com.neoworksuite.neocanvas.renderer.TileFormat.BYTES_PER_TILE, afterImport)
 
         state.cancelTransform()
         state.brushSize = 2f
