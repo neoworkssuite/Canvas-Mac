@@ -673,6 +673,51 @@ class EditorStateTest {
     }
 
     @Test
+    fun locked_editable_objects_reject_all_editor_mutations_including_group_locks() {
+        val text = LayerPayload.TextObject(
+            text = "Locked",
+            x = 100f,
+            y = 80f,
+            width = 320f,
+            height = 120f,
+            fontSize = 48f,
+        )
+        val lockedLayer = Layer("text-locked", "Locked title", payload = text, locked = true)
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "locked-object",
+            width = 800,
+            height = 600,
+            layers = listOf(lockedLayer),
+        )))
+        state.activeLayerId = lockedLayer.id
+        assertTrue(state.openObjectEditor(lockedLayer.id))
+        assertTrue(state.activeObjectLocked)
+
+        state.setActiveTextContent("Changed")
+        state.setActiveTextSize(96f)
+        state.moveActiveObject(40f, 30f)
+        state.scaleActiveObject(1.5f)
+        state.rotateActiveObject(30f)
+        assertEquals(text, state.activeTextObject)
+        assertEquals("Unlock this object before rotating it", state.statusMessage)
+
+        state.toggleLayerLock(lockedLayer.id)
+        state.setActiveTextContent("Unlocked")
+        assertEquals("Unlocked", state.activeTextObject!!.text)
+
+        state.addGroup()
+        val groupId = state.document.groups.single().id
+        state.setActiveLayerGroup(groupId)
+        state.toggleGroupLocked(groupId)
+        val beforeGroupedEdit = state.activeTextObject
+        assertTrue(state.activeObjectLocked)
+        state.setActiveTextSize(144f)
+        state.moveActiveObject(10f, 10f)
+        assertEquals(beforeGroupedEdit, state.activeTextObject)
+        assertEquals("Unlock this object before moving it", state.statusMessage)
+    }
+
+    @Test
     fun direct_object_transform_commits_once_and_is_undoable() {
         val initial = CanvasDocument(
             id = "direct-object-transform",

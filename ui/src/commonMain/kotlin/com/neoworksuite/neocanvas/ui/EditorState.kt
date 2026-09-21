@@ -639,6 +639,18 @@ class EditorState(
                 (layer.payload is LayerPayload.TextObject || layer.payload is LayerPayload.ShapeObject)
         }
 
+    val activeObjectLocked: Boolean
+        get() = activeObjectLayer?.let { it.locked || isGroupLocked(it) } ?: false
+
+    private fun mutableActiveObjectLayer(action: String = "editing it"): Layer? {
+        val layer = activeObjectLayer ?: return null
+        if (layer.locked || isGroupLocked(layer)) {
+            statusMessage = "Unlock this object before " + action
+            return null
+        }
+        return layer
+    }
+
     fun openObjectEditor(layerId: String? = activeLayerId): Boolean {
         val id = layerId ?: return false
         val layer = document.layers.firstOrNull { it.id == id } ?: return false
@@ -699,19 +711,19 @@ class EditorState(
     }
 
     fun setActiveTextContent(value: String) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
         execute(UpdateTextLayer(layer.id, payload.copy(text = value.take(10_000))))
     }
 
     fun setActiveTextSize(value: Float) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
         execute(UpdateTextLayer(layer.id, payload.copy(fontSize = value.coerceIn(6f, 512f))))
     }
 
     fun setActiveTextFontFamily(value: String) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
         val clean = value.trim()
         if (clean.isEmpty() || clean == payload.fontFamily) return
@@ -719,13 +731,13 @@ class EditorState(
     }
 
     fun setActiveTextAlignment(value: TextAlignment) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
         execute(UpdateTextLayer(layer.id, payload.copy(alignment = value)))
     }
 
     fun setActiveShapeKind(value: ShapeKind) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return
         val next = when (value) {
             ShapeKind.Line -> payload.copy(
@@ -744,7 +756,7 @@ class EditorState(
     }
 
     fun setActiveShapeStrokeWidth(value: Float) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return
         execute(UpdateShapeLayer(layer.id, payload.copy(
             strokeArgb = payload.strokeArgb ?: composeColorArgb(color),
@@ -753,21 +765,21 @@ class EditorState(
     }
 
     fun removeActiveShapeFill() {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return
         if (payload.kind == ShapeKind.Line || payload.fillArgb == null || payload.strokeArgb == null) return
         execute(UpdateShapeLayer(layer.id, payload.copy(fillArgb = null)))
     }
 
     fun removeActiveShapeStroke() {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return
         if (payload.kind == ShapeKind.Line || payload.fillArgb == null) return
         execute(UpdateShapeLayer(layer.id, payload.copy(strokeArgb = null, strokeWidth = 0f)))
     }
 
     fun useCurrentColourForActiveObject(asStroke: Boolean = false) {
-        val layer = activeObjectLayer ?: return
+        val layer = mutableActiveObjectLayer() ?: return
         val argb = composeColorArgb(color)
         when (val payload = layer.payload) {
             is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(colorArgb = argb)))
@@ -782,8 +794,8 @@ class EditorState(
     }
 
     fun moveActiveObject(dx: Float, dy: Float) {
-        val layer = activeObjectLayer ?: return
-        if (layer.locked || !dx.isFinite() || !dy.isFinite()) return
+        val layer = mutableActiveObjectLayer("moving it") ?: return
+        if (!dx.isFinite() || !dy.isFinite()) return
         when (val payload = layer.payload) {
             is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(
                 x = (payload.x + dx).coerceIn(-payload.width, document.width.toFloat()),
@@ -798,8 +810,8 @@ class EditorState(
     }
 
     fun scaleActiveObject(factor: Float) {
-        val layer = activeObjectLayer ?: return
-        if (layer.locked || !factor.isFinite() || factor <= 0f) return
+        val layer = mutableActiveObjectLayer("resizing it") ?: return
+        if (!factor.isFinite() || factor <= 0f) return
         when (val payload = layer.payload) {
             is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(
                 width = (payload.width * factor).coerceIn(20f, document.width * 2f),
@@ -818,8 +830,8 @@ class EditorState(
     }
 
     fun rotateActiveObject(deltaDegrees: Float) {
-        val layer = activeObjectLayer ?: return
-        if (layer.locked || !deltaDegrees.isFinite()) return
+        val layer = mutableActiveObjectLayer("rotating it") ?: return
+        if (!deltaDegrees.isFinite()) return
         when (val payload = layer.payload) {
             is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(
                 rotationDegrees = normalizeObjectRotation(payload.rotationDegrees + deltaDegrees),
@@ -832,11 +844,7 @@ class EditorState(
     }
 
     fun commitActiveObjectTransform(payload: LayerPayload): Boolean {
-        val layer = activeObjectLayer ?: return false
-        if (layer.locked || isGroupLocked(layer)) {
-            statusMessage = "Unlock this object before transforming it"
-            return false
-        }
+        val layer = mutableActiveObjectLayer("transforming it") ?: return false
         val command = when {
             layer.payload is LayerPayload.TextObject && payload is LayerPayload.TextObject ->
                 UpdateTextLayer(layer.id, payload)
