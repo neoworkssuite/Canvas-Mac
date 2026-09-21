@@ -651,6 +651,53 @@ class EditorStateTest {
     }
 
     @Test
+    fun version_compare_is_read_only_and_reports_structure_changes() {
+        val saved = mutableListOf<Pair<LocalVersionEntry, LoadResult.Success>>()
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override val supportsVersions = true
+            override fun listVersions(documentId: String): List<LocalVersionEntry> = saved.map { it.first }
+            override fun loadVersion(documentId: String, versionId: String): LoadResult =
+                saved.firstOrNull { it.first.id == versionId }?.second
+                    ?: LoadResult.Failure("Missing version")
+        }
+
+        val current = CanvasDocument(
+            id = "compare-test",
+            width = 64,
+            height = 48,
+            layers = listOf(
+                Layer("layer-1", "Paint", payload = LayerPayload.Raster()),
+                Layer("layer-2", "Details", payload = LayerPayload.Raster()),
+            ),
+        )
+        val versionDocument = CanvasDocument(
+            id = "compare-test",
+            width = 32,
+            height = 32,
+            layers = listOf(Layer("layer-1", "Paint", payload = LayerPayload.Raster())),
+        )
+        val entry = LocalVersionEntry("1000__Sketch.neoversion", "Sketch", 1000L)
+        saved += entry to LoadResult.Success(versionDocument, emptyMap())
+
+        val state = EditorState(DocumentHistory(current), actions)
+        state.openVersions()
+        val before = state.document
+
+        assertTrue(state.compareVersion(entry.id))
+
+        val comparison = assertNotNull(state.versionComparison)
+        assertEquals(before, state.document)
+        assertEquals(64, comparison.currentWidth)
+        assertEquals(48, comparison.currentHeight)
+        assertEquals(32, comparison.versionWidth)
+        assertEquals(32, comparison.versionHeight)
+        assertEquals(2, comparison.currentLayerCount)
+        assertEquals(1, comparison.versionLayerCount)
+        assertTrue(comparison.dimensionsChanged)
+        assertEquals(1, comparison.layerDelta)
+    }
+
+    @Test
     fun version_tree_branch_restores_source_and_persists_branch_start() {
         data class Stored(val entry: LocalVersionEntry, val load: LoadResult.Success)
         val saved = mutableListOf<Stored>()

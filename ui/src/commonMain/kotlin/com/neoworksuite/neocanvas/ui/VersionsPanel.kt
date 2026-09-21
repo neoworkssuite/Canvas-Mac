@@ -1,5 +1,6 @@
 package com.neoworksuite.neocanvas.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -25,6 +27,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -138,6 +145,13 @@ fun VersionsPanel(
             }
         }
 
+        state.versionComparison?.let { comparison ->
+            VersionComparisonCard(
+                comparison = comparison,
+                onClose = state::closeVersionComparison,
+            )
+        }
+
         state.versionError?.let { error ->
             Text(
                 error,
@@ -168,6 +182,7 @@ fun VersionsPanel(
                         version = version,
                         number = state.versions.size - index,
                         newest = index == 0,
+                        onCompare = { state.compareVersion(version.id) },
                         onRestore = { state.restoreVersion(version.id) },
                         onBranch = { branchSource = version; branchName = "" },
                         onDelete = { state.deleteVersion(version.id) },
@@ -189,6 +204,7 @@ private fun VersionTimelineRow(
     version: LocalVersionEntry,
     number: Int,
     newest: Boolean,
+    onCompare: () -> Unit,
     onRestore: () -> Unit,
     onBranch: () -> Unit,
     onDelete: () -> Unit,
@@ -226,6 +242,9 @@ private fun VersionTimelineRow(
                 letterSpacing = .6.sp,
             )
         }
+        TextButton(onClick = onCompare) {
+            Text("Compare", color = NeoCanvasColors.accent, fontSize = 10.sp)
+        }
         TextButton(onClick = onRestore) {
             Text("Restore", color = NeoCanvasColors.accent, fontSize = 10.sp)
         }
@@ -236,4 +255,152 @@ private fun VersionTimelineRow(
             Text("Delete", color = NeoCanvasColors.muted, fontSize = 10.sp)
         }
     }
+}
+
+
+@Composable
+private fun VersionComparisonCard(
+    comparison: VersionComparison,
+    onClose: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(NeoCanvasColors.panelRaised)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "COMPARE · " + comparison.version.label,
+                    color = NeoCanvasColors.paper,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    comparison.version.branch.uppercase() + " · READ ONLY",
+                    color = NeoCanvasColors.faint,
+                    fontSize = 8.sp,
+                    letterSpacing = .6.sp,
+                )
+            }
+            TextButton(onClick = onClose) {
+                Text("Close", color = NeoCanvasColors.muted, fontSize = 9.sp)
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            VersionPreview(
+                label = "CURRENT",
+                image = comparison.currentThumbnail,
+                info = comparison.currentWidth.toString() + " × " + comparison.currentHeight +
+                    " · " + comparison.currentLayerCount + " layers",
+                modifier = Modifier.weight(1f),
+            )
+            VersionPreview(
+                label = comparison.version.label.uppercase(),
+                image = comparison.versionThumbnail,
+                info = comparison.versionWidth.toString() + " × " + comparison.versionHeight +
+                    " · " + comparison.versionLayerCount + " layers",
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        val sizeText = if (comparison.dimensionsChanged) {
+            "Canvas changed: " + comparison.versionWidth + "×" + comparison.versionHeight +
+                " → " + comparison.currentWidth + "×" + comparison.currentHeight
+        } else {
+            "Canvas size unchanged"
+        }
+        val layersText = when {
+            comparison.layerDelta > 0 -> "+" + comparison.layerDelta + " layers in current"
+            comparison.layerDelta < 0 -> (-comparison.layerDelta).toString() + " fewer layers in current"
+            else -> "Layer count unchanged"
+        }
+        Text(
+            sizeText + " · " + layersText,
+            color = NeoCanvasColors.faint,
+            fontSize = 9.sp,
+        )
+    }
+}
+
+@Composable
+private fun VersionPreview(
+    label: String,
+    image: com.neoworksuite.neocanvas.renderer.PngImage,
+    info: String,
+    modifier: Modifier = Modifier,
+) {
+    val bitmap = remember(image) { versionPreviewBitmap(image) }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            label,
+            color = NeoCanvasColors.faint,
+            fontSize = 8.sp,
+            letterSpacing = .6.sp,
+            maxLines = 1,
+        )
+        Box(
+            Modifier.fillMaxWidth()
+                .height(132.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(NeoCanvasColors.workspace),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = label + " version preview",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Text(
+            info,
+            color = NeoCanvasColors.muted,
+            fontSize = 8.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun versionPreviewBitmap(
+    source: com.neoworksuite.neocanvas.renderer.PngImage,
+): ImageBitmap {
+    val image = ImageBitmap(source.width, source.height)
+    val canvas = Canvas(image)
+    val paint = Paint().apply { isAntiAlias = false }
+
+    fun packed(x: Int, y: Int): Int {
+        val offset = (y * source.width + x) * 4
+        return ((source.rgba[offset + 3].toInt() and 255) shl 24) or
+            ((source.rgba[offset].toInt() and 255) shl 16) or
+            ((source.rgba[offset + 1].toInt() and 255) shl 8) or
+            (source.rgba[offset + 2].toInt() and 255)
+    }
+
+    for (y in 0 until source.height) {
+        var x = 0
+        while (x < source.width) {
+            val start = x
+            val color = packed(x, y)
+            x++
+            while (x < source.width && packed(x, y) == color) x++
+            if ((color ushr 24) != 0) {
+                paint.color = Color(color)
+                canvas.drawRect(
+                    start.toFloat(),
+                    y.toFloat(),
+                    x.toFloat(),
+                    (y + 1).toFloat(),
+                    paint,
+                )
+            }
+        }
+    }
+    return image
 }

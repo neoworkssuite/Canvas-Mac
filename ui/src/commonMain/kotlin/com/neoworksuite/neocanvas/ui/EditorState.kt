@@ -69,6 +69,8 @@ class EditorState(
         private set
     var versionError: String? by mutableStateOf(null)
         private set
+    var versionComparison: VersionComparison? by mutableStateOf(null)
+        private set
     var activeVersionBranch: String by mutableStateOf("Main")
         private set
     private var activeVersionParentId: String? = null
@@ -95,6 +97,63 @@ class EditorState(
     fun closeVersions() {
         versionsVisible = false
         versionError = null
+        versionComparison = null
+    }
+
+    fun compareVersion(versionId: String): Boolean {
+        val target = versions.firstOrNull { it.id == versionId } ?: return false
+        val loaded = try {
+            fileActions.loadVersion(document.id, versionId)
+        } catch (error: Exception) {
+            LoadResult.Failure(error.message ?: "Could not load local version")
+        }
+
+        if (loaded !is LoadResult.Success) {
+            versionError = when (loaded) {
+                is LoadResult.Failure -> loaded.message
+                is LoadResult.Corrupt -> loaded.message
+                is LoadResult.Incompatible -> loaded.message
+                else -> "Could not load local version"
+            }
+            versionComparison = null
+            return false
+        }
+
+        return try {
+            val currentThumb = com.neoworksuite.neocanvas.renderer.GalleryThumbnail.render(
+                document,
+                tilesForDocument(),
+                maxWidth = 320,
+                maxHeight = 220,
+            )
+            val versionThumb = com.neoworksuite.neocanvas.renderer.GalleryThumbnail.render(
+                loaded.document,
+                loaded.tiles,
+                maxWidth = 320,
+                maxHeight = 220,
+            )
+            versionComparison = VersionComparison(
+                version = target,
+                currentThumbnail = currentThumb,
+                versionThumbnail = versionThumb,
+                currentWidth = document.width,
+                currentHeight = document.height,
+                versionWidth = loaded.document.width,
+                versionHeight = loaded.document.height,
+                currentLayerCount = document.layers.size,
+                versionLayerCount = loaded.document.layers.size,
+            )
+            versionError = null
+            true
+        } catch (error: Exception) {
+            versionError = "Could not compare version: " + (error.message ?: "preview error")
+            versionComparison = null
+            false
+        }
+    }
+
+    fun closeVersionComparison() {
+        versionComparison = null
     }
 
     fun createVersion(label: String): Boolean {
@@ -134,6 +193,7 @@ class EditorState(
     }
 
     fun restoreVersion(versionId: String): Boolean {
+        versionComparison = null
         if (!supportsVersions || versions.none { it.id == versionId }) return false
         val target = versions.firstOrNull { it.id == versionId } ?: return false
         val safety = try {
@@ -198,6 +258,7 @@ class EditorState(
     }
 
     fun branchFromVersion(versionId: String, branchName: String): Boolean {
+        versionComparison = null
         if (!supportsVersions || !fileActions.supportsVersionBranches) {
             versionError = "Version branching is unavailable on this device."
             return false
@@ -278,6 +339,7 @@ class EditorState(
     }
 
     fun deleteVersion(versionId: String): Boolean {
+        if (versionComparison?.version?.id == versionId) versionComparison = null
         if (!supportsVersions || versions.none { it.id == versionId }) return false
         val result = try {
             fileActions.deleteVersion(document.id, versionId)
