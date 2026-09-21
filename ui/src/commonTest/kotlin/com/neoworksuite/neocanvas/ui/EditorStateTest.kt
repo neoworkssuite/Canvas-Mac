@@ -657,6 +657,7 @@ class EditorStateTest {
         var clock = 2000L
         val actions = object : EditorFileActions by UnavailableEditorFileActions {
             override val supportsVersions = true
+            override val supportsVersionBranches = true
             override fun listVersions(documentId: String): List<LocalVersionEntry> =
                 saved.map { it.entry }.sortedByDescending { it.createdAtEpochMillis }
 
