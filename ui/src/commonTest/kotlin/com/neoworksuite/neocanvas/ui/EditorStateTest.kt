@@ -405,7 +405,13 @@ class EditorStateTest {
                 return if (removed) SaveResult.Success else SaveResult.Failure("Missing version")
             }
         }
-        val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)), actions)
+        val initial = CanvasDocument(
+            id = "version-test",
+            width = 16,
+            height = 16,
+            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+        )
+        val state = EditorState(DocumentHistory(initial), actions)
 
         assertTrue(state.createVersion("Sketch"))
         val sketchId = state.versions.single().id
