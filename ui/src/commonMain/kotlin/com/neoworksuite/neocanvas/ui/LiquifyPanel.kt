@@ -57,6 +57,7 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
             LiquifyModeButton("Twirl R", LiquifyMode.TwirlRight, state, Modifier.weight(1f))
             LiquifyModeButton("Smooth", LiquifyMode.Smooth, state, Modifier.weight(1f))
         }
+        LiquifyModeButton("Reconstruct", LiquifyMode.Reconstruct, state, Modifier.fillMaxWidth())
 
         LiquifySlider(
             label = "Size",
@@ -72,6 +73,11 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
             display = (state.liquifyStrength * 100f).toInt().toString() + "%",
             onValueChange = { state.liquifyStrength = it },
         )
+        LiquifyActionButton(
+            label = "Reset Liquify Session",
+            enabled = state.hasLiquifyBaseline,
+            onClick = { state.resetLiquifyToSessionStart() },
+        )
 
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
@@ -86,6 +92,7 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
                     LiquifyMode.TwirlLeft -> "TWIRL LEFT · rotate pixels anticlockwise under the brush"
                     LiquifyMode.TwirlRight -> "TWIRL RIGHT · rotate pixels clockwise under the brush"
                     LiquifyMode.Smooth -> "SMOOTH · soften local distortion and hard transitions"
+                    LiquifyMode.Reconstruct -> "RECONSTRUCT · locally restore pixels toward the session start"
                 },
                 color = NeoCanvasColors.paper,
                 fontSize = 10.sp,
@@ -100,7 +107,8 @@ fun LiquifyPanel(state: EditorState, modifier: Modifier = Modifier) {
         }
 
         Text(
-            "Liquify previews live while you drag. Lift Pencil to commit; Undo restores the previous raster state.",
+            "Liquify previews live while you drag. Lift Pencil to commit; Reconstruct restores locally, " +
+                "Reset restores the session baseline, and Undo restores the previous raster state.",
             color = NeoCanvasColors.faint,
             fontSize = 9.sp,
         )
@@ -130,6 +138,28 @@ private fun LiquifyModeButton(
             color = if (selected) NeoCanvasColors.ink else NeoCanvasColors.muted,
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
+    }
+}
+
+@Composable
+private fun LiquifyActionButton(
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+            .background(if (enabled) NeoCanvasColors.panelRaised else NeoCanvasColors.chrome)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (enabled) NeoCanvasColors.muted else NeoCanvasColors.disabled,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
         )
     }
 }

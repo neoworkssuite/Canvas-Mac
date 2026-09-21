@@ -103,6 +103,38 @@ class RasterLiquifyTest {
     }
 
     @Test
+    fun reconstruct_moves_a_warped_layer_back_toward_the_reference() {
+        val baseline = storeWithBlock(left = 10, top = 12, right = 18, bottom = 20)
+        val pushedPatch = RasterLiquify.stroke(
+            baseline, "paint", listOf(RasterPoint(14f, 16f), RasterPoint(28f, 16f)),
+            size = 28f, strength = 1f, mode = LiquifyMode.Push,
+            canvasWidth = 64, canvasHeight = 64,
+        )
+        val warped = TileStore(baseline.snapshot()).apply { applyPatch(pushedPatch) }
+        val baselineTile = baseline.snapshot().getValue(TileKey("paint", 0, 0))
+        val warpedTile = warped.snapshot().getValue(TileKey("paint", 0, 0))
+        val beforeDifference = baselineTile.indices.count { baselineTile[it] != warpedTile[it] }
+        assertTrue(beforeDifference > 0)
+
+        val reconstructPatch = RasterLiquify.stroke(
+            existing = warped,
+            layerId = "paint",
+            points = listOf(RasterPoint(20f, 16f)),
+            size = 36f,
+            strength = 1f,
+            mode = LiquifyMode.Reconstruct,
+            canvasWidth = 64,
+            canvasHeight = 64,
+            reference = baseline.snapshot(),
+        )
+        assertFalse(reconstructPatch.keys.isEmpty())
+        val reconstructed = TileStore(warped.snapshot()).apply { applyPatch(reconstructPatch) }
+        val reconstructedTile = reconstructed.snapshot().getValue(TileKey("paint", 0, 0))
+        val afterDifference = baselineTile.indices.count { baselineTile[it] != reconstructedTile[it] }
+        assertTrue(afterDifference < beforeDifference)
+    }
+
+    @Test
     fun liquify_respects_selection_acceptance() {
         val store = storeWithBlock()
         val before = store.snapshot()

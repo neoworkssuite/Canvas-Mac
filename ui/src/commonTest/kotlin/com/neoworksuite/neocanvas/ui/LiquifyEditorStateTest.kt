@@ -63,6 +63,33 @@ class LiquifyEditorStateTest {
     }
 
     @Test
+    fun liquify_reset_restores_session_baseline_and_is_undoable() {
+        val state = stateWithPixels()
+        assertTrue(state.activateLiquifyTool())
+        val baseline = state.tileStore.snapshot()
+        state.liquifyMode = LiquifyMode.Push
+        state.liquifySize = 24f
+        state.liquifyStrength = 1f
+
+        state.recordStroke(
+            listOf(DrawPoint(16f, 16f), DrawPoint(30f, 16f)),
+            stabilize = false,
+        )
+        val warped = state.tileStore.snapshot()
+        assertTrue(baseline.any { (key, pixels) -> warped[key]?.contentEquals(pixels) == false })
+
+        assertTrue(state.resetLiquifyToSessionStart())
+        val reset = state.tileStore.snapshot()
+        assertTrue(baseline.keys == reset.keys)
+        assertTrue(baseline.all { (key, pixels) -> reset[key]?.contentEquals(pixels) == true })
+
+        assertTrue(state.undo())
+        val restoredWarp = state.tileStore.snapshot()
+        assertTrue(warped.keys == restoredWarp.keys)
+        assertTrue(warped.all { (key, pixels) -> restoredWarp[key]?.contentEquals(pixels) == true })
+    }
+
+    @Test
     fun liquify_refuses_editable_object_layers() {
         val state = EditorState(DocumentHistory(CanvasDocument(
             id = "liquify-text",

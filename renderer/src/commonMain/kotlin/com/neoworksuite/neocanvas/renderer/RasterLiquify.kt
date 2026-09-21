@@ -15,6 +15,7 @@ enum class LiquifyMode(val displayName: String) {
     TwirlLeft("Twirl Left"),
     TwirlRight("Twirl Right"),
     Smooth("Smooth"),
+    Reconstruct("Reconstruct"),
 }
 
 /**
@@ -33,6 +34,7 @@ object RasterLiquify {
         mode: LiquifyMode,
         canvasWidth: Int,
         canvasHeight: Int,
+        reference: Map<TileKey, ByteArray> = emptyMap(),
         acceptsPixel: (Int, Int) -> Boolean = { _, _ -> true },
     ): RasterPatch {
         require(layerId.isNotBlank())
@@ -41,6 +43,10 @@ object RasterLiquify {
         require(canvasWidth > 0 && canvasHeight > 0)
         if (points.isEmpty() || strength <= 0f) return RasterPatch.of(emptyMap())
         if (mode == LiquifyMode.Push && points.size < 2) return RasterPatch.of(emptyMap())
+        if (mode == LiquifyMode.Reconstruct && reference.isEmpty()) return RasterPatch.of(emptyMap())
+        require(reference.keys.all { it.layerId == layerId }) {
+            "Liquify reference tiles must belong to the active layer."
+        }
 
         val source = existing.snapshot().filterKeys { it.layerId == layerId }
         val working = linkedMapOf<TileKey, ByteArray>()
@@ -68,7 +74,7 @@ object RasterLiquify {
             )
         }
 
-        fun sample(x: Float, y: Float): IntArray {
+        fun sampleWith(reader: (Int, Int) -> IntArray, x: Float, y: Float): IntArray {
             val sx = x.coerceIn(0f, (canvasWidth - 1).toFloat())
             val sy = y.coerceIn(0f, (canvasHeight - 1).toFloat())
             val x0 = floor(sx).toInt()
@@ -77,16 +83,36 @@ object RasterLiquify {
             val y1 = min(canvasHeight - 1, y0 + 1)
             val tx = sx - x0
             val ty = sy - y0
-            val p00 = pixel(x0, y0)
-            val p10 = pixel(x1, y0)
-            val p01 = pixel(x0, y1)
-            val p11 = pixel(x1, y1)
+            val p00 = reader(x0, y0)
+            val p10 = reader(x1, y0)
+            val p01 = reader(x0, y1)
+            val p11 = reader(x1, y1)
             return IntArray(4) { channel ->
                 val top = p00[channel] * (1f - tx) + p10[channel] * tx
                 val bottom = p01[channel] * (1f - tx) + p11[channel] * tx
                 (top * (1f - ty) + bottom * ty).toInt().coerceIn(0, 255)
             }
         }
+
+        fun sample(x: Float, y: Float): IntArray = sampleWith(::pixel, x, y)
+
+        fun referencePixel(x: Int, y: Int): IntArray {
+            if (x !in 0 until canvasWidth || y !in 0 until canvasHeight) {
+                return intArrayOf(0, 0, 0, 0)
+            }
+            val tileKey = key(x, y)
+            val bytes = reference[tileKey] ?: return intArrayOf(0, 0, 0, 0)
+            val offset = index(x, y, tileKey)
+            return intArrayOf(
+                bytes[offset].toInt() and 255,
+                bytes[offset + 1].toInt() and 255,
+                bytes[offset + 2].toInt() and 255,
+                bytes[offset + 3].toInt() and 255,
+            )
+        }
+
+        fun referenceSample(x: Float, y: Float): IntArray =
+            sampleWith(::referencePixel, x, y)
 
         fun dab(cx: Float, cy: Float, ux: Float, uy: Float, pressure: Float) {
             val safePressure = pressure.coerceIn(.05f, 1f)
@@ -156,9 +182,13 @@ object RasterLiquify {
                             samples.sumOf { it[channel] } / samples.size
                         }
                     }
+                    LiquifyMode.Reconstruct -> referenceSample(x + .5f, y + .5f)
                 }
                 val current = pixel(x, y)
-                val mix = (falloff * safePressure).coerceIn(0f, 1f)
+                val mix = when (mode) {
+                    LiquifyMode.Smooth, LiquifyMode.Reconstruct -> amount.coerceIn(0f, 1f)
+                    else -> (falloff * safePressure).coerceIn(0f, 1f)
+                }
                 val (bytes, offset) = writable(x, y)
                 for (channel in 0..3) {
                     bytes[offset + channel] = (

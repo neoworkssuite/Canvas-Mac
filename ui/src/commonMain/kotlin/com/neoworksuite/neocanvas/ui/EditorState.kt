@@ -629,6 +629,12 @@ class EditorState(
     var liquifySize: Float by mutableFloatStateOf(120f)
     var liquifyStrength: Float by mutableFloatStateOf(.65f)
     var liquifyMode: LiquifyMode by mutableStateOf(LiquifyMode.Push)
+    private var liquifyBaselineLayerId: String? = null
+    private var liquifyBaseline: Map<TileKey, ByteArray> = emptyMap()
+    val hasLiquifyBaseline: Boolean
+        get() = tool == Tool.Liquify &&
+            liquifyBaselineLayerId == activeLayerId &&
+            liquifyBaseline.isNotEmpty()
     var stabilization: Float by mutableFloatStateOf(0f)
     var symmetry: com.neoworksuite.neocanvas.renderer.DrawingSymmetry by mutableStateOf(com.neoworksuite.neocanvas.renderer.DrawingSymmetry.None)
     var tool: Tool by mutableStateOf(Tool.Brush)
@@ -1757,6 +1763,7 @@ class EditorState(
         maskEditingLayerId = null
         selectedObjectLayerIds = emptySet()
         objectArrangePicking = false
+        clearLiquifySession()
         resetEditableStrokes()
     }
 
@@ -2587,7 +2594,13 @@ class EditorState(
     fun activateTool(next: Tool) {
         if (inspectorVisible && inspectorPanel == InspectorPanel.Effects) hideInspector()
         if (inspectorVisible && inspectorPanel == InspectorPanel.Liquify && next != Tool.Liquify) hideInspector()
+        if (next != Tool.Liquify) clearLiquifySession()
         tool = next
+    }
+
+    private fun clearLiquifySession() {
+        liquifyBaselineLayerId = null
+        liquifyBaseline = emptyMap()
     }
 
     fun activateLiquifyTool(): Boolean {
@@ -2600,11 +2613,41 @@ class EditorState(
             statusMessage = "Liquify is unavailable while editing a layer mask"
             return false
         }
+        if (!wakeLayer(layer.id)) return false
+        liquifyBaselineLayerId = layer.id
+        liquifyBaseline = tileStore.snapshotLayer(layer.id)
         selectedObjectLayerIds = emptySet()
         objectArrangePicking = false
         activateTool(Tool.Liquify)
         showInspector(InspectorPanel.Liquify)
         statusMessage = "Liquify " + liquifyMode.displayName.lowercase() + " — drag on canvas"
+        return true
+    }
+
+    fun resetLiquifyToSessionStart(): Boolean {
+        val layerId = activeLayerId ?: return false
+        if (tool != Tool.Liquify || liquifyBaselineLayerId != layerId) {
+            statusMessage = "Start Liquify on this layer before resetting it"
+            return false
+        }
+        if (!wakeLayer(layerId)) return false
+        val baseline = liquifyBaseline
+        val before = tileStore.snapshot()
+        val currentLayer = tileStore.snapshotLayer(layerId)
+        val patch = com.neoworksuite.neocanvas.renderer.RasterPatch.of(
+            replacements = baseline,
+            removals = currentLayer.keys - baseline.keys,
+        )
+        if (tileStore.applyPatch(patch).isEmpty()) {
+            statusMessage = "Liquify is already at the session start"
+            return true
+        }
+        val currentKeys = tileStore.keys
+        execute(
+            ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys),
+            before,
+        )
+        statusMessage = "Liquify reset to session start"
         return true
     }
 
@@ -3033,6 +3076,7 @@ class EditorState(
             mode = liquifyMode,
             canvasWidth = document.width,
             canvasHeight = document.height,
+            reference = if (liquifyBaselineLayerId == layerId) liquifyBaseline else emptyMap(),
             acceptsPixel = { x, y -> selection?.contains(x, y) ?: true },
         )
     }
