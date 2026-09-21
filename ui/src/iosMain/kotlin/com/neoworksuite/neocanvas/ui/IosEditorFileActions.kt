@@ -75,6 +75,7 @@ internal class IosEditorFileActions(
     override val supportsSaveAs: Boolean = true
     override val supportsRecovery: Boolean = true
     override val supportsVersions: Boolean = true
+    override val supportsVersionBranches: Boolean = true
     override val supportsWorkbench: Boolean = true
     override val supportsDeepLayers: Boolean = true
     override val supportsPsdImport: Boolean = true
