@@ -114,6 +114,9 @@ object NeoCanvasPackage {
                         height = layerObject.float("height"),
                         rotationDegrees = layerObject.float("rotationDegrees"),
                         alignment = TextAlignment.valueOf(layerObject.string("alignment")),
+                        bold = if ("bold" in layerObject.fields) layerObject.boolean("bold") else false,
+                        italic = if ("italic" in layerObject.fields) layerObject.boolean("italic") else false,
+                        lineSpacing = if ("lineSpacing" in layerObject.fields) layerObject.float("lineSpacing") else 1.2f,
                     )
                 }
                 "shape" -> {
@@ -130,6 +133,7 @@ object NeoCanvasPackage {
                         strokeArgb = if (strokeEnabled) layerObject.int("strokeArgb") else null,
                         strokeWidth = layerObject.float("strokeWidth"),
                         rotationDegrees = layerObject.float("rotationDegrees"),
+                        cornerRadius = if ("cornerRadius" in layerObject.fields) layerObject.float("cornerRadius") else 0f,
                     )
                 }
                 else -> throw PackageIncompatibleException("Unsupported layer type.")
@@ -237,6 +241,9 @@ object NeoCanvasPackage {
                     append(",\"width\":").append(payload.width).append(",\"height\":").append(payload.height)
                     append(",\"rotationDegrees\":").append(payload.rotationDegrees)
                     append(",\"alignment\":\"").append(payload.alignment.name).append('"')
+                    append(",\"bold\":").append(payload.bold)
+                    append(",\"italic\":").append(payload.italic)
+                    append(",\"lineSpacing\":").append(payload.lineSpacing)
                 }
                 is LayerPayload.ShapeObject -> {
                     append(",\"type\":\"shape\"")
@@ -249,6 +256,7 @@ object NeoCanvasPackage {
                     append(",\"strokeArgb\":").append(payload.strokeArgb ?: 0)
                     append(",\"strokeWidth\":").append(payload.strokeWidth)
                     append(",\"rotationDegrees\":").append(payload.rotationDegrees)
+                    append(",\"cornerRadius\":").append(payload.cornerRadius)
                 }
             }
             append('}')

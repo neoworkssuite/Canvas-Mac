@@ -140,6 +140,9 @@ class NeoCanvasPackageTest {
                     x = 100f, y = 90f, width = 720f, height = 160f,
                     rotationDegrees = -4f,
                     alignment = TextAlignment.Center,
+                    bold = true,
+                    italic = true,
+                    lineSpacing = 1.65f,
                 )),
                 Layer("shape-1", "Frame", payload = LayerPayload.ShapeObject(
                     kind = ShapeKind.Rectangle,
@@ -148,6 +151,7 @@ class NeoCanvasPackageTest {
                     strokeArgb = 0xff00aaff.toInt(),
                     strokeWidth = 8f,
                     rotationDegrees = 2f,
+                    cornerRadius = 28f,
                 )),
             ),
         )
@@ -156,10 +160,14 @@ class NeoCanvasPackageTest {
         val text = assertIs<LayerPayload.TextObject>(loaded.document.layers[0].payload)
         assertEquals("Own your software again.", text.text)
         assertEquals(TextAlignment.Center, text.alignment)
+        assertTrue(text.bold)
+        assertTrue(text.italic)
+        assertEquals(1.65f, text.lineSpacing)
         val shape = assertIs<LayerPayload.ShapeObject>(loaded.document.layers[1].payload)
         assertEquals(ShapeKind.Rectangle, shape.kind)
         assertEquals(null, shape.fillArgb)
         assertEquals(8f, shape.strokeWidth)
+        assertEquals(28f, shape.cornerRadius)
 
         val legacy = assertIs<LoadResult.Success>(NeoCanvasPackage.readMembers(mapOf(
             "manifest.json" to manifest(formatVersion = 1).encodeToByteArray(),

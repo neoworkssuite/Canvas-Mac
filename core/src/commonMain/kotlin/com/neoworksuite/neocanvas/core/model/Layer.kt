@@ -42,6 +42,9 @@ sealed interface LayerPayload {
         val height: Float = 160f,
         val rotationDegrees: Float = 0f,
         val alignment: TextAlignment = TextAlignment.Left,
+        val bold: Boolean = false,
+        val italic: Boolean = false,
+        val lineSpacing: Float = 1.2f,
     ) : LayerPayload {
         init {
             require(text.length <= 10_000)
@@ -50,6 +53,7 @@ sealed interface LayerPayload {
             require(x.isFinite() && y.isFinite())
             require(width.isFinite() && height.isFinite() && width > 0f && height > 0f)
             require(rotationDegrees.isFinite())
+            require(lineSpacing.isFinite() && lineSpacing in .7f..3f)
         }
     }
 
@@ -63,6 +67,7 @@ sealed interface LayerPayload {
         val strokeArgb: Int? = null,
         val strokeWidth: Float = 0f,
         val rotationDegrees: Float = 0f,
+        val cornerRadius: Float = 0f,
     ) : LayerPayload {
         init {
             require(x.isFinite() && y.isFinite() && width.isFinite() && height.isFinite())
@@ -74,6 +79,7 @@ sealed interface LayerPayload {
             require(strokeWidth.isFinite() && strokeWidth >= 0f)
             if (strokeArgb != null) require(strokeWidth > 0f)
             require(rotationDegrees.isFinite())
+            require(cornerRadius.isFinite() && cornerRadius >= 0f)
         }
     }
 }
