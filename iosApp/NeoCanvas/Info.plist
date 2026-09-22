@@ -17,6 +17,9 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
 
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
 
@@ -31,6 +34,9 @@
 
     <key>LSRequiresIPhoneOS</key>
     <true/>
+
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 
     <key>UIFileSharingEnabled</key>
     <true/>

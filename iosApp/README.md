@@ -1,44 +1,47 @@
 # NeoCanvas iPad Host
 
-This directory contains the native Apple host for NeoCanvas.
-
-NeoCanvas itself remains in Kotlin Multiplatform.
-
-The iOS host performs only Apple-specific startup and integration.
+This directory contains the native Apple host for **NeoCanvas**. The creative engine and most UI remain in Kotlin Multiplatform; SwiftUI provides the Apple application shell and platform integrations.
 
 ## Architecture
 
+```text
 SwiftUI
-    |
-UIViewControllerRepresentable
-    |
-NeoCanvasKit
-    |
-MainViewController()
-    |
-NeoCanvasApp()
+  └─ UIViewControllerRepresentable
+      └─ NeoCanvasKit
+          └─ MainViewController()
+              └─ NeoCanvasApp()
+```
 
-## Generate Xcode project
+## Generate the Xcode project
 
 On macOS:
 
-    brew install xcodegen
+```bash
+brew install xcodegen
+./scripts/prepare-ios.sh
+```
 
-    cd iosApp
-    xcodegen generate
+The preparation script:
 
-This produces:
+- builds the iOS asset catalog from the checked-in NeoCanvas logo;
+- generates `iosApp/NeoCanvas.xcodeproj`;
+- keeps the app bundle ID at `com.neoworksuite.neocanvas`;
+- leaves signing under Xcode's automatic signing configuration.
 
-    NeoCanvas.xcodeproj
+The Xcode build phase invokes `:ui:embedAndSignAppleFrameworkForXcode` and embeds NeoCanvasKit.
 
-The Xcode build phase invokes:
+## Release packaging
 
-    :ui:embedAndSignAppleFrameworkForXcode
+The iPad host includes:
 
-which builds and embeds the Kotlin NeoCanvas framework.
+- AppIcon generated from the suite artwork;
+- `PrivacyInfo.xcprivacy` declaring the app's local-only/no-tracking data posture;
+- Files-visible local NeoCanvas documents;
+- Photos import permission text;
+- native JPEG, PDF, TIFF and PSD export support;
+- portrait and landscape orientations;
+- unsigned ARM64 device builds in CI for release validation.
 
-## First milestone
+NeoCanvas is designed to work without an account, telemetry, cloud storage or advertising SDKs. Release CI verifies that the privacy manifest and compiled asset catalog are present in the built iPad app.
 
-The initial Apple host launches the existing shared NeoCanvas interface.
-
-Apple Files, Photos and Pencil platform services are added separately.
+Before App Store submission, update `Configuration/Config.xcconfig` with the intended marketing/build version and create the signed Archive using the NeoWorksSuite Apple Developer account.

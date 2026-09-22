@@ -155,6 +155,12 @@ jobs:
           echo "Info.plist:"
           plutil -p "$APP/Info.plist" | head -80
 
+          echo
+          echo "Release resources:"
+          test -f "$APP/PrivacyInfo.xcprivacy"
+          test -f "$APP/Assets.car"
+          plutil -lint "$APP/PrivacyInfo.xcprivacy"
+
       - name: Upload iPad simulator build
         uses: actions/upload-artifact@v4
         with:
@@ -218,6 +224,13 @@ jobs:
           echo
           echo "Embedded frameworks:"
           find "$APP" -maxdepth 3 -type d -name "*.framework" -print
+
+          echo
+          echo "Privacy manifest and compiled assets:"
+          test -f "$APP/PrivacyInfo.xcprivacy"
+          test -f "$APP/Assets.car"
+          plutil -lint "$APP/PrivacyInfo.xcprivacy"
+          plutil -p "$APP/Info.plist" | grep -q 'ITSAppUsesNonExemptEncryption.*false'
 
       - name: Upload unsigned physical iPad build
         uses: actions/upload-artifact@v4
