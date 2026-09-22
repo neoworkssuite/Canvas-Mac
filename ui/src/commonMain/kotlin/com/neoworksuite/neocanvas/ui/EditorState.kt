@@ -3835,6 +3835,22 @@ class EditorState(
         documentRevision++
         activeLayerId = activeLayerId?.takeIf { id -> document.layers.any { it.id == id } } ?: document.layers.lastOrNull()?.id
     }
+    fun openProjectWebsite(): Boolean =
+        openExternalResource(NeoCanvasReleaseInfo.websiteUrl, "NeoWorks website")
+
+    fun openCommunitySupport(): Boolean =
+        openExternalResource(NeoCanvasReleaseInfo.communityUrl, "NeoWorks Community")
+
+    private fun openExternalResource(url: String, label: String): Boolean {
+        val opened = try {
+            fileActions.openExternalUrl(url)
+        } catch (_: Exception) {
+            false
+        }
+        if (!opened) statusMessage = label + ": " + url
+        return opened
+    }
+
     private fun nextGroupId(): String {
         var ordinal = document.groups.size + 1
         while (document.groups.any { it.id == "group-$ordinal" }) ordinal++

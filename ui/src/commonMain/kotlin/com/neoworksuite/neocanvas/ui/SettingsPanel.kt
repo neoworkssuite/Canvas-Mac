@@ -130,6 +130,52 @@ fun SettingsPanel(
         TextButton(onClick = { state.resetPreferences() }) {
             Text("Reset preferences", color = NeoCanvasColors.accent)
         }
+
+        SettingsSection("ABOUT & SUPPORT")
+        Column(
+            Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                "NeoCanvas " + NeoCanvasReleaseInfo.marketingVersion +
+                    " (build " + NeoCanvasReleaseInfo.buildNumber + ")",
+                color = NeoCanvasColors.paper,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                NeoCanvasReleaseInfo.stage,
+                color = NeoCanvasColors.muted,
+                fontSize = 11.sp,
+            )
+        }
+
+        Column(
+            Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text("Privacy by design", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "No account, advertising SDK, telemetry service or cloud storage is required. " +
+                    "Artwork stays on this device unless you explicitly import, export or open an external link.",
+                color = NeoCanvasColors.muted,
+                fontSize = 11.sp,
+            )
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            TextButton(
+                onClick = { state.openProjectWebsite() },
+                modifier = Modifier.weight(1f),
+            ) { Text("NeoWorks website", color = NeoCanvasColors.accent) }
+            TextButton(
+                onClick = { state.openCommunitySupport() },
+                modifier = Modifier.weight(1f),
+            ) { Text("Community support", color = NeoCanvasColors.accent) }
+        }
     }
 }
 

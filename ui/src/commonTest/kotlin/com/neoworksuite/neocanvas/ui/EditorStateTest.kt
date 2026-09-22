@@ -1099,6 +1099,26 @@ class EditorStateTest {
     }
 
     @Test
+    fun commercial_support_links_use_host_bridge_and_fall_back_to_visible_url() {
+        val opened = mutableListOf<String>()
+        var allowOpen = true
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override fun openExternalUrl(url: String): Boolean {
+                opened += url
+                return allowOpen
+            }
+        }
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(64, 64)), actions)
+
+        assertTrue(state.openProjectWebsite())
+        assertEquals(NeoCanvasReleaseInfo.websiteUrl, opened.last())
+
+        allowOpen = false
+        assertFalse(state.openCommunitySupport())
+        assertTrue(state.statusMessage?.contains(NeoCanvasReleaseInfo.communityUrl) == true)
+    }
+
+    @Test
     fun raster_tools_ignore_editable_object_layers() {
         val initial = CanvasDocument(
             id = "object-raster-guard",
