@@ -78,6 +78,7 @@ internal class IosEditorFileActions(
 
     private val libraryDirectory: String get() = join(documentsRoot, "NeoCanvas")
     private val recoveryDirectory: String get() = join(libraryDirectory, "Recovery")
+    private val trashDirectory: String get() = join(libraryDirectory, ".trash")
     private val versionsDirectory: String get() = join(libraryDirectory, "Versions")
     private val workbenchDirectory: String get() = join(libraryDirectory, "Workbench")
     private val deepLayersDirectory: String get() = join(libraryDirectory, "DeepLayers")
@@ -104,6 +105,7 @@ internal class IosEditorFileActions(
     init {
         ensureDirectory(libraryDirectory)
         ensureDirectory(recoveryDirectory)
+        ensureDirectory(trashDirectory)
         ensureDirectory(versionsDirectory)
         ensureDirectory(workbenchDirectory)
         ensureDirectory(deepLayersDirectory)
@@ -182,12 +184,19 @@ internal class IosEditorFileActions(
 
     override fun deleteLocalDocument(name: String): SaveResult {
         if (!isSafeLocalName(name)) return SaveResult.Failure("Invalid artwork name.")
-        val path = join(libraryDirectory, name)
-        if (!fm.fileExistsAtPath(path)) return SaveResult.Failure("Artwork was not found.")
-        return if (fm.removeItemAtPath(path, null)) {
+        val source = join(libraryDirectory, name)
+        if (!fm.fileExistsAtPath(source)) return SaveResult.Failure("Artwork was not found.")
+        ensureDirectory(trashDirectory)
+        var stamp = time(null)
+        var target = join(trashDirectory, stamp.toString() + "-" + name)
+        while (fm.fileExistsAtPath(target)) {
+            stamp++
+            target = join(trashDirectory, stamp.toString() + "-" + name)
+        }
+        return if (fm.moveItemAtPath(source, target, null)) {
             if (currentDocumentName == name) currentDocumentName = null
             SaveResult.Success
-        } else SaveResult.Failure("Could not delete artwork.")
+        } else SaveResult.Failure("Could not move artwork to NeoCanvas trash.")
     }
 
     override fun localDocumentThumbnail(name: String): ByteArray? {
