@@ -25,6 +25,8 @@
 
 ## Manual physical-iPad acceptance
 
+> NeoCanvas 1.0 is intentionally scoped to iPad only. Do not enable iPhone distribution until a separate iPhone layout/input acceptance gate exists.
+
 - [ ] Create, draw, save, close and reopen a new artwork.
 - [ ] Force-close with unsaved edits and verify recovery.
 - [ ] Test Apple Pencil pressure, fast strokes and large brushes.

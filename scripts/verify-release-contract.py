@@ -48,6 +48,10 @@ if not build.isdigit() or int(build) < 1:
 if bundle != "com.neoworksuite.neocanvas":
     fail(f"unexpected bundle identifier {bundle!r}")
 
+target_family = config.get("TARGETED_DEVICE_FAMILY", "")
+if target_family != "2":
+    fail(f"NeoCanvas 1.0 must remain iPad-only until iPhone has its own acceptance gate; got {target_family!r}")
+
 release_info = release_info_path.read_text(encoding="utf-8")
 if kotlin_constant(release_info, "marketingVersion") != marketing:
     fail("in-app marketingVersion does not match Config.xcconfig")
@@ -97,6 +101,8 @@ if not isinstance(privacy.get("NSPrivacyAccessedAPITypes"), list):
 project_yml = project_yml_path.read_text(encoding="utf-8")
 if f"PRODUCT_BUNDLE_IDENTIFIER: {bundle}" not in project_yml:
     fail("project.yml bundle identifier does not match Config.xcconfig")
+if 'TARGETED_DEVICE_FAMILY: "2"' not in project_yml:
+    fail("project.yml must scope NeoCanvas 1.0 to iPad")
 if "ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon" not in project_yml:
     fail("project.yml does not select the AppIcon asset catalog")
 if "CODE_SIGN_STYLE: Automatic" not in project_yml:
