@@ -140,7 +140,6 @@ fun GalleryScreen(
                         selected.forEach { apply(actions.duplicateLocalDocument(it), "Duplicated artwork") }
                         selected = emptySet()
                     }
-                    GalleryAction("Share") { message = "Open an artwork and use Export PNG to share a flattened copy" }
                     GalleryAction("Delete", danger = true) { deleteTargets = selected }
                 }
             }

@@ -77,10 +77,10 @@ object PngExporter {
                         require(sourcePixels.size == TileFormat.BYTES_PER_TILE) { "Tile $address is not 256×256 RGBA." }
                         val maskedPixels = applyLayerMask(sourcePixels, layer.mask, address, tiles)
                         val pixels = if (layer.clipping) {
-                            val basePixels = clippingRaster?.let {
-                                val raw = tiles[TileAddress(clippingBase!!.id, address.x, address.y)]
+                            val basePixels = if (clippingRaster != null && clippingBase != null) {
+                                val raw = tiles[TileAddress(clippingBase.id, address.x, address.y)]
                                 raw?.let { applyLayerMask(it, clippingBase.mask, address, tiles) }
-                            }
+                            } else null
                             clipAlpha(maskedPixels, basePixels)
                         } else maskedPixels
                         compositeTile(output, document.width, document.height, address, pixels, effectiveOpacity, layer.blendMode)
