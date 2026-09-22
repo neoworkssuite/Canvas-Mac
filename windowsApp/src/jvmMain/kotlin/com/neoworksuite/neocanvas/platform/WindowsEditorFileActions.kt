@@ -67,6 +67,30 @@ class WindowsEditorFileActions(
         if (name != File(name).name) return@runCatching null
         com.neoworksuite.neocanvas.core.store.NeoCanvasPackage.readThumbnail(File(libraryDirectory, name).readBytes())
     }.getOrNull()
+    private val galleryStackFile get() = File(libraryDirectory, "gallery-stack.txt")
+    override fun loadGalleryStack(): Set<String> = runCatching {
+        if (!galleryStackFile.exists()) emptySet()
+        else galleryStackFile.readLines()
+            .map(String::trim)
+            .filter { it.isNotBlank() && it == File(it).name && it.endsWith(".neocanvas", true) }
+            .toCollection(linkedSetOf())
+    }.getOrDefault(emptySet())
+    override fun saveGalleryStack(members: Set<String>): SaveResult = try {
+        libraryDirectory.mkdirs()
+        val safe = members.filter { it.isNotBlank() && it == File(it).name && it.endsWith(".neocanvas", true) }
+            .distinct()
+            .sortedBy(String::lowercase)
+        val temporary = File(libraryDirectory, "gallery-stack.tmp")
+        temporary.writeText(safe.joinToString("\n"))
+        java.nio.file.Files.move(
+            temporary.toPath(),
+            galleryStackFile.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+        )
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save Gallery stack: " + (error.message ?: "storage error"))
+    }
     private inline fun mutateLocal(name: String, action: (File) -> SaveResult): SaveResult {
         if (name != File(name).name) return SaveResult.Failure("Invalid artwork name.")
         val source = File(libraryDirectory, name)

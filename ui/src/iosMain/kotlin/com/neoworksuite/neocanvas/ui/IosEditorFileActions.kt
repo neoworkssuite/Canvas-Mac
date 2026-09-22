@@ -86,6 +86,7 @@ internal class IosEditorFileActions(
     private val palettePath: String get() = join(libraryDirectory, "palette.txt")
     private val brushLibraryPath: String get() = join(libraryDirectory, "brush-library.txt")
     private val preferencesPath: String get() = join(libraryDirectory, "preferences.txt")
+    private val galleryStackPath: String get() = join(libraryDirectory, "gallery-stack.txt")
     private val recoveryPath: String get() = join(recoveryDirectory, "last-session.neocanvas")
 
     override val supportsLocalLibrary: Boolean = true
@@ -203,6 +204,27 @@ internal class IosEditorFileActions(
         if (!isSafeLocalName(name)) return null
         val bytes = NSData.dataWithContentsOfFile(join(libraryDirectory, name))?.toByteArray() ?: return null
         return runCatching { NeoCanvasPackage.readThumbnail(bytes) }.getOrNull()
+    }
+
+    override fun loadGalleryStack(): Set<String> {
+        val data = NSData.dataWithContentsOfFile(galleryStackPath)?.toByteArray() ?: return emptySet()
+        return runCatching {
+            data.decodeToString()
+                .lineSequence()
+                .map(String::trim)
+                .filter { isSafeLocalName(it) }
+                .toCollection(linkedSetOf())
+        }.getOrDefault(emptySet())
+    }
+
+    override fun saveGalleryStack(members: Set<String>): SaveResult {
+        ensureDirectory(libraryDirectory)
+        val safe = members.filter(::isSafeLocalName).distinct().sortedBy(String::lowercase)
+        return if (writeBytes(galleryStackPath, safe.joinToString("\n").encodeToByteArray())) {
+            SaveResult.Success
+        } else {
+            SaveResult.Failure("Could not save Gallery stack on this iPad.")
+        }
     }
 
     override fun save(

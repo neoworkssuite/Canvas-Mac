@@ -16,6 +16,9 @@ interface EditorFileActions {
     fun duplicateLocalDocument(name: String): SaveResult = SaveResult.Failure("Local library unavailable.")
     fun deleteLocalDocument(name: String): SaveResult = SaveResult.Failure("Local library unavailable.")
     fun localDocumentThumbnail(name: String): ByteArray? = null
+    fun loadGalleryStack(): Set<String> = emptySet()
+    fun saveGalleryStack(members: Set<String>): SaveResult =
+        SaveResult.Failure("Gallery stack storage is unavailable in this host.")
     val supportsSaveAs: Boolean get() = false
     fun resetDocumentTarget() {}
     fun saveAs(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =

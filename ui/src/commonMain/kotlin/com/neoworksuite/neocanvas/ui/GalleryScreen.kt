@@ -62,10 +62,42 @@ fun GalleryScreen(
     var deleteTargets by remember { mutableStateOf(emptySet<String>()) }
     var preview by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
-    var stackMembers by remember { mutableStateOf(emptySet<String>()) }
+    var stackMembers by remember {
+        mutableStateOf(
+            reconcileGalleryStack(
+                runCatching { actions.loadGalleryStack() }.getOrDefault(emptySet()),
+                documents,
+            ),
+        )
+    }
     var stackOpen by remember { mutableStateOf(false) }
 
-    fun refresh() { documents = runCatching { actions.listLocalDocuments() }.getOrDefault(emptyList()) }
+    fun saveStack(next: Set<String>, success: String): Boolean {
+        val clean = reconcileGalleryStack(next, documents)
+        val result = try {
+            actions.saveGalleryStack(clean)
+        } catch (error: Exception) {
+            SaveResult.Failure(error.message ?: "Could not save Gallery stack.")
+        }
+        return if (result == SaveResult.Success) {
+            stackMembers = clean
+            message = success
+            true
+        } else {
+            message = (result as SaveResult.Failure).message
+            false
+        }
+    }
+
+    fun refresh() {
+        documents = runCatching { actions.listLocalDocuments() }.getOrDefault(emptyList())
+        val clean = reconcileGalleryStack(stackMembers, documents)
+        if (clean != stackMembers) {
+            stackMembers = clean
+            runCatching { actions.saveGalleryStack(clean) }
+        }
+        if (stackMembers.isEmpty()) stackOpen = false
+    }
     fun apply(result: SaveResult, success: String) {
         message = if (result == SaveResult.Success) success else (result as SaveResult.Failure).message
         if (result == SaveResult.Success) refresh()
@@ -99,7 +131,10 @@ fun GalleryScreen(
                 ) {
                     Text("${selected.size} selected", color = NeoCanvasColors.paper, modifier = Modifier.weight(1f))
                     if (!stackOpen && selected.size > 1) GalleryAction("Stack") {
-                        stackMembers = selected; selected = emptySet(); selecting = false; message = "Created local stack"
+                        if (saveStack(selected, "Created local stack")) {
+                            selected = emptySet()
+                            selecting = false
+                        }
                     }
                     GalleryAction("Duplicate") {
                         selected.forEach { apply(actions.duplicateLocalDocument(it), "Duplicated artwork") }
@@ -196,8 +231,22 @@ fun GalleryScreen(
             text = { OutlinedTextField(renameText, { renameText = it }, singleLine = true, label = { Text("Name") }) },
             confirmButton = { TextButton(onClick = {
                 val result = actions.renameLocalDocument(original, renameText)
-                if (result == SaveResult.Success) renameTarget = null
-                apply(result, "Renamed artwork")
+                if (result == SaveResult.Success) {
+                    val renamed = renameText.trim() + ".neocanvas"
+                    val nextStack = renameGalleryStackMember(stackMembers, original, renamed)
+                    renameTarget = null
+                    documents = runCatching { actions.listLocalDocuments() }.getOrDefault(documents)
+                    stackMembers = reconcileGalleryStack(nextStack, documents)
+                    val stackResult = runCatching { actions.saveGalleryStack(stackMembers) }
+                        .getOrElse { SaveResult.Failure(it.message ?: "Could not update Gallery stack.") }
+                    message = if (stackResult == SaveResult.Success) {
+                        "Renamed artwork"
+                    } else {
+                        "Artwork renamed · " + (stackResult as SaveResult.Failure).message
+                    }
+                } else {
+                    message = (result as SaveResult.Failure).message
+                }
             }) { Text("Rename") } },
             dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } },
         )
@@ -207,8 +256,19 @@ fun GalleryScreen(
         title = { Text("Delete ${deleteTargets.size} artwork${if (deleteTargets.size == 1) "" else "s"}?", color = NeoCanvasColors.paper) },
         text = { Text("The local document will be moved to NeoCanvas trash.", color = NeoCanvasColors.muted) },
         confirmButton = { TextButton(onClick = {
-            deleteTargets.forEach { apply(actions.deleteLocalDocument(it), "Moved artwork to local trash") }
-            selected = emptySet(); deleteTargets = emptySet()
+            var lastFailure: String? = null
+            deleteTargets.forEach { name ->
+                val result = actions.deleteLocalDocument(name)
+                if (result is SaveResult.Failure) lastFailure = result.message
+            }
+            documents = runCatching { actions.listLocalDocuments() }.getOrDefault(documents)
+            val clean = reconcileGalleryStack(stackMembers, documents)
+            stackMembers = clean
+            runCatching { actions.saveGalleryStack(clean) }
+            if (stackMembers.isEmpty()) stackOpen = false
+            message = lastFailure ?: "Moved artwork to local trash"
+            selected = emptySet()
+            deleteTargets = emptySet()
         }) { Text("Delete", color = Color(0xFFFF7777)) } },
         dismissButton = { TextButton(onClick = { deleteTargets = emptySet() }) { Text("Cancel") } },
     )
@@ -234,6 +294,20 @@ private fun KickstarterGalleryBanner(onOpen: () -> Unit) {
         Button(onClick = onOpen) { Text("View Kickstarter") }
     }
 }
+
+internal fun reconcileGalleryStack(
+    members: Set<String>,
+    documents: Collection<String>,
+): Set<String> {
+    val available = documents.toSet()
+    return members.filterTo(linkedSetOf()) { it in available }
+}
+
+internal fun renameGalleryStackMember(
+    members: Set<String>,
+    oldName: String,
+    newName: String,
+): Set<String> = members.mapTo(linkedSetOf()) { if (it == oldName) newName else it }
 
 private fun Set<String>.toggle(value: String) = if (value in this) this - value else this + value
 private fun List<String>.circularNeighbour(value: String, delta: Int): String {
