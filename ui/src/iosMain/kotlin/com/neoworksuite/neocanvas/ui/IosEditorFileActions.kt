@@ -71,6 +71,7 @@ internal class IosEditorFileActions(
     private val fm: NSFileManager get() = NSFileManager.defaultManager
     private var activeImagePickerDelegate: ImagePickerDelegate? = null
     private var activePsdPickerDelegate: PsdPickerDelegate? = null
+    private var activeNeoCanvasPickerDelegate: NeoCanvasPickerDelegate? = null
     private var currentDocumentName: String? = null
     private val updateLookupQueue = NSOperationQueue()
 
@@ -554,6 +555,32 @@ internal class IosEditorFileActions(
         return true
     }
 
+    override fun openDocumentFile(onResult: (Result<LoadResult?>) -> Unit) {
+        val host = presenter()
+        if (host == null) {
+            onResult(Result.failure(IllegalStateException("The iPad file picker is not ready yet.")))
+            return
+        }
+
+        val picker = UIDocumentPickerViewController(
+            documentTypes = listOf("public.data"),
+            inMode = UIDocumentPickerMode.UIDocumentPickerModeImport,
+        ).apply {
+            allowsMultipleSelection = false
+            modalPresentationStyle = UIModalPresentationFullScreen
+        }
+        val delegate = NeoCanvasPickerDelegate(
+            onResult = { result ->
+                if (result.getOrNull() is LoadResult.Success) currentDocumentName = null
+                onResult(result)
+            },
+            onFinished = { activeNeoCanvasPickerDelegate = null },
+        )
+        activeNeoCanvasPickerDelegate = delegate
+        picker.delegate = delegate
+        host.presentViewController(picker, animated = true, completion = null)
+    }
+
     override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
         val host = presenter()
         if (host == null) {
@@ -803,6 +830,43 @@ private fun wrapEditableText(value: String, font: Font, maxWidth: Float): List<S
         output += current
     }
     return output
+}
+
+private class NeoCanvasPickerDelegate(
+    private val onResult: (Result<LoadResult?>) -> Unit,
+    private val onFinished: () -> Unit,
+) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(
+        controller: UIDocumentPickerViewController,
+        didPickDocumentsAtURLs: List<*>,
+    ) {
+        val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+        controller.dismissViewControllerAnimated(true, null)
+        if (url == null) {
+            finish(Result.failure(IllegalStateException("No NeoCanvas file was selected.")))
+            return
+        }
+        finish(runCatching {
+            val selectedPath = url.path
+                ?: error("iPadOS could not resolve the selected file path.")
+            if (!selectedPath.endsWith(".neocanvas", ignoreCase = true)) {
+                error("Choose a .neocanvas artwork file.")
+            }
+            val data = NSData.dataWithContentsOfFile(selectedPath)
+                ?: error("iPadOS could not read the selected NeoCanvas file.")
+            NeoCanvasPackage.read(data.toByteArray())
+        })
+    }
+
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+        controller.dismissViewControllerAnimated(true, null)
+        finish(Result.success(null))
+    }
+
+    private fun finish(result: Result<LoadResult?>) {
+        onResult(result)
+        onFinished()
+    }
 }
 
 private class PsdPickerDelegate(

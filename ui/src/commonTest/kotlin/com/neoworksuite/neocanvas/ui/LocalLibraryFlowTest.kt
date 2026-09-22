@@ -51,4 +51,34 @@ class LocalLibraryFlowTest {
         assertFalse(state.namingLocalCopy)
         assertFalse(state.hasUnsavedChanges)
     }
+
+
+    @Test
+    fun external_document_picker_bridge_opens_selected_document() {
+        val selected = CanvasDocument.blank(80, 40)
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override fun openDocumentFile(onResult: (Result<LoadResult?>) -> Unit) {
+                onResult(Result.success(LoadResult.Success(selected, emptyMap())))
+            }
+        }
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)), actions)
+        var opened = false
+
+        state.importDocumentFromPicker { opened = it }
+
+        assertTrue(opened)
+        assertEquals(80, state.document.width)
+        assertEquals(40, state.document.height)
+    }
+
+    @Test
+    fun redo_becomes_available_immediately_after_undo() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
+        state.addLayer()
+        assertTrue(state.canUndo)
+        assertTrue(state.undo())
+        assertTrue(state.canRedo)
+        assertTrue(state.redo())
+        assertTrue(state.canUndo)
+    }
 }

@@ -344,13 +344,14 @@ private fun GalleryArtworkCard(
         Column(
             Modifier.fillMaxWidth().offset(x = if (revealed) (-190).dp else 0.dp)
                 .clip(RoundedCornerShape(16.dp)).background(if (selected) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
+                .clickable(onClick = onOpen)
                 .pointerInput(name) {
                     detectHorizontalDragGestures(
                         onDragEnd = { revealed = drag < -30f; drag = 0f },
                         onHorizontalDrag = { _, amount -> drag += amount },
                     )
                 }
-                .clickable(onClick = onOpen).semantics { contentDescription = "Artwork ${name.removeSuffix(".neocanvas")}" },
+                .semantics { contentDescription = "Artwork ${name.removeSuffix(".neocanvas")}" },
         ) {
             Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Color(0xFFF1EEE8)), contentAlignment = Alignment.Center) {
                 if (thumbnail != null) Image(thumbnail, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -361,8 +362,25 @@ private fun GalleryArtworkCard(
                     Text(if (selected) "✓" else "", color = NeoCanvasColors.ink)
                 }
             }
-            Text(name.removeSuffix(".neocanvas"), color = if (selected) NeoCanvasColors.ink else NeoCanvasColors.paper,
-                fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    name.removeSuffix(".neocanvas"),
+                    color = if (selected) NeoCanvasColors.ink else NeoCanvasColors.paper,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!selecting) {
+                    Text(
+                        "Open",
+                        color = if (selected) NeoCanvasColors.ink else NeoCanvasColors.accent,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable(onClick = onOpen).padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+            }
         }
     }
 }

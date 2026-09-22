@@ -441,6 +441,25 @@ class EditorState(
         return result is LoadResult.Success
     }
 
+    fun importDocumentFromPicker(onFinished: (Boolean) -> Unit = {}) {
+        fileActions.openDocumentFile { result ->
+            result.fold(
+                onSuccess = { loaded ->
+                    if (loaded == null) {
+                        onFinished(false)
+                    } else {
+                        acceptOpenResult(loaded)
+                        onFinished(loaded is LoadResult.Success)
+                    }
+                },
+                onFailure = { error ->
+                    statusMessage = "Could not open file: " + (error.message ?: "unknown file error")
+                    onFinished(false)
+                },
+            )
+        }
+    }
+
     val supportsPsdImport: Boolean get() = fileActions.supportsPsdImport
     val supportsPsdExport: Boolean get() = fileActions.supportsPsdExport
     val supportsJpegExport: Boolean get() = fileActions.supportsJpegExport
@@ -2838,8 +2857,8 @@ class EditorState(
     }
 
     val document: CanvasDocument get() { documentRevision; return history.current }
-    val canUndo: Boolean get() = history.canUndo
-    val canRedo: Boolean get() = history.canRedo
+    val canUndo: Boolean get() { documentRevision; return history.canUndo }
+    val canRedo: Boolean get() { documentRevision; return history.canRedo }
 
     fun selectBrush(selection: BrushDefinition) {
         brush = selection
