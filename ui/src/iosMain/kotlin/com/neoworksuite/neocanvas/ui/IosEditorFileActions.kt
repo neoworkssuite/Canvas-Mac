@@ -31,7 +31,6 @@ import org.jetbrains.skia.TextLine
 import platform.Foundation.NSURL
 import platform.Foundation.NSData
 import platform.Foundation.NSOperationQueue
-import platform.Foundation.NSURLSession
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -73,6 +72,7 @@ internal class IosEditorFileActions(
     private var activeImagePickerDelegate: ImagePickerDelegate? = null
     private var activePsdPickerDelegate: PsdPickerDelegate? = null
     private var currentDocumentName: String? = null
+    private val updateLookupQueue = NSOperationQueue()
 
     private val documentsRoot: String
         get() = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
@@ -531,22 +531,16 @@ internal class IosEditorFileActions(
             return
         }
 
-        NSURLSession.sharedSession.dataTaskWithURL(lookup) { data, _, error ->
-            val result = when {
-                error != null -> Result.failure<AppUpdateInfo?>(
-                    IllegalStateException(error.localizedDescription ?: "App Store lookup failed.")
-                )
-                data == null -> Result.failure<AppUpdateInfo?>(
-                    IllegalStateException("App Store returned no update data.")
-                )
-                else -> runCatching {
-                    parseAppStoreLookup(data.toByteArray().decodeToString())
-                }
+        updateLookupQueue.addOperationWithBlock {
+            val result = runCatching {
+                val data = NSData.dataWithContentsOfURL(lookup)
+                    ?: error("App Store returned no update data.")
+                parseAppStoreLookup(data.toByteArray().decodeToString())
             }
             NSOperationQueue.mainQueue.addOperationWithBlock {
                 onResult(result)
             }
-        }.resume()
+        }
     }
 
     override fun openExternalUrl(url: String): Boolean {
