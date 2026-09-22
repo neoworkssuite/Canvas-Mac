@@ -30,7 +30,6 @@ import org.jetbrains.skia.Surface
 import org.jetbrains.skia.TextLine
 import platform.Foundation.NSURL
 import platform.Foundation.NSData
-import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -67,13 +66,13 @@ import platform.posix.time
  */
 internal class IosEditorFileActions(
     private val presenter: () -> UIViewController?,
+    private val updateLookup: NativeUpdateLookup?,
 ) : EditorFileActions {
     private val fm: NSFileManager get() = NSFileManager.defaultManager
     private var activeImagePickerDelegate: ImagePickerDelegate? = null
     private var activePsdPickerDelegate: PsdPickerDelegate? = null
     private var activeNeoCanvasPickerDelegate: NeoCanvasPickerDelegate? = null
     private var currentDocumentName: String? = null
-    private val updateLookupQueue = NSOperationQueue()
 
     private val documentsRoot: String
         get() = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
@@ -525,22 +524,22 @@ internal class IosEditorFileActions(
     }
 
     override fun checkForUpdate(onResult: (Result<AppUpdateInfo?>) -> Unit) {
-        val lookup = NSURL.URLWithString(
-            "https://itunes.apple.com/lookup?bundleId=com.neoworksuite.neocanvas"
-        ) ?: run {
-            onResult(Result.failure(IllegalStateException("Could not build App Store update URL.")))
+        val lookup = updateLookup
+        if (lookup == null) {
+            onResult(Result.failure(IllegalStateException("App Store update service is unavailable.")))
             return
         }
-
-        updateLookupQueue.addOperationWithBlock {
-            val result = runCatching {
-                val data = NSData(contentsOfURL = lookup)
-                    ?: error("App Store returned no update data.")
-                parseAppStoreLookup(data.toByteArray().decodeToString())
+        lookup.check { json, errorMessage ->
+            val result = when {
+                errorMessage != null -> Result.failure<AppUpdateInfo?>(
+                    IllegalStateException(errorMessage)
+                )
+                json == null -> Result.failure<AppUpdateInfo?>(
+                    IllegalStateException("App Store returned no update data.")
+                )
+                else -> runCatching { parseAppStoreLookup(json) }
             }
-            NSOperationQueue.mainQueue.addOperationWithBlock {
-                onResult(result)
-            }
+            onResult(result)
         }
     }
 
