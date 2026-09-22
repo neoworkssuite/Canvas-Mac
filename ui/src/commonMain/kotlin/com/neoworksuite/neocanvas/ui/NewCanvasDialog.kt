@@ -159,7 +159,7 @@ internal fun NewCanvasDialog(state: EditorState) {
 
                 Text(
                     if (valid) {
-                        ((w.toLong() * h) / 100_000L) / 10f
+                        (((w.toLong() * h) / 100_000L) / 10f)
                             .let { pixels -> pixels.toString() + " MP · local canvas" }
                     } else {
                         "Use 1–8192 pixels per side, up to 16 million pixels total."
