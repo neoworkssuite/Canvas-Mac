@@ -41,11 +41,16 @@ internal data class NewCanvasPreset(val name: String, val width: Int, val height
 internal val newCanvasPresets = listOf(
     NewCanvasPreset("Sketch", 2048, 1536),
     NewCanvasPreset("iPad", 2732, 2048),
+    NewCanvasPreset("Photo", 4032, 3024),
     NewCanvasPreset("Square", 2048, 2048),
     NewCanvasPreset("Full HD", 1920, 1080),
     NewCanvasPreset("4K", 3840, 2160),
     NewCanvasPreset("A4 Print", 2480, 3508),
+    NewCanvasPreset("US Letter", 2550, 3300),
+    NewCanvasPreset("Poster", 3000, 4000),
+    NewCanvasPreset("Social Square", 1080, 1080),
     NewCanvasPreset("Social Portrait", 1080, 1350),
+    NewCanvasPreset("Social Landscape", 1200, 628),
     NewCanvasPreset("Story", 1080, 1920),
 )
 
