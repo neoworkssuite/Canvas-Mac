@@ -37,7 +37,9 @@
 - [ ] Test Gallery rename, duplicate, Stack and trash deletion.
 - [ ] Export PNG, JPEG, PDF, TIFF and PSD and open each output.
 - [ ] Import a representative PSD and image.
-- [ ] Confirm no unexpected network/account requirement.
+- [ ] Confirm no account requirement; with update checks enabled, verify the only automatic network request is the App Store version lookup.
+- [ ] Test automatic update prompt with a newer mocked App Store response and verify Open App Store / Later.
+- [ ] Test manual Check for Updates in Settings.
 
 ## App Store handoff
 

@@ -77,7 +77,20 @@ fun NeoCanvasApp(
             if (state.autoRecoveryEnabled) state.autosaveRecovery()
         }
     }
-    LaunchedEffect(state.statusMessage, state.showStatusMessages) {
+    LaunchedEffect(
+        state.recoveryChecking,
+        state.recoveryCandidate,
+        state.automaticUpdateChecksEnabled,
+    ) {
+        if (!state.recoveryChecking &&
+            state.recoveryCandidate == null &&
+            state.automaticUpdateChecksEnabled
+        ) {
+            delay(1_800)
+            state.checkForUpdates()
+        }
+    }
+        LaunchedEffect(state.statusMessage, state.showStatusMessages) {
         val message = state.statusMessage ?: return@LaunchedEffect
         if (!state.showStatusMessages) return@LaunchedEffect
         val important = message.contains("fail", ignoreCase = true) ||
@@ -106,7 +119,30 @@ fun NeoCanvasApp(
             },
         )
     }
-    if (state.pendingDocumentAction != null) {
+    state.updateAvailable?.let { update ->
+        if (!state.recoveryChecking && state.recoveryCandidate == null && state.pendingDocumentAction == null) {
+            AlertDialog(
+                onDismissRequest = state::dismissUpdateNotice,
+                containerColor = NeoCanvasColors.panel,
+                title = { Text("NeoCanvas " + update.version + " is available", color = NeoCanvasColors.paper) },
+                text = {
+                    Text(
+                        update.releaseNotes?.take(700)
+                            ?: "A newer NeoCanvas release is available from the App Store.",
+                        color = NeoCanvasColors.muted,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { state.openAvailableUpdate() }) { Text("Open App Store") }
+                },
+                dismissButton = {
+                    TextButton(onClick = state::dismissUpdateNotice) { Text("Later") }
+                },
+            )
+        }
+    }
+
+        if (state.pendingDocumentAction != null) {
         AlertDialog(
             onDismissRequest = { state.cancelDocumentAction() },
             containerColor = NeoCanvasColors.panel,

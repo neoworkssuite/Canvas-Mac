@@ -98,6 +98,7 @@ class EditorState(
     val supportsSaveAs: Boolean get() = fileActions.supportsSaveAs
     val supportsLocalLibrary: Boolean get() = fileActions.supportsLocalLibrary
     val supportsVersions: Boolean get() = fileActions.supportsVersions
+    val supportsUpdateChecks: Boolean get() = fileActions.supportsUpdateChecks
 
     var versionsVisible by mutableStateOf(false)
         private set
@@ -2637,6 +2638,7 @@ class EditorState(
     var autoRecoveryEnabled: Boolean by mutableStateOf(true)
     var showStatusMessages: Boolean by mutableStateOf(true)
     var quickShapeEnabled: Boolean by mutableStateOf(true)
+    var automaticUpdateChecksEnabled: Boolean by mutableStateOf(true)
     var eyedropperSampleMerged: Boolean by mutableStateOf(true)
     var eyedropperReturnAfterSample: Boolean by mutableStateOf(true)
     private var eyedropperReturnTool: Tool = Tool.Brush
@@ -2650,6 +2652,7 @@ class EditorState(
         autoRecoveryEnabled = true
         showStatusMessages = true
         quickShapeEnabled = true
+        automaticUpdateChecksEnabled = true
         eyedropperSampleMerged = true
         eyedropperReturnAfterSample = true
         gridGuideVisible = false
@@ -2672,6 +2675,7 @@ class EditorState(
                     "autoRecoveryEnabled" to autoRecoveryEnabled.toString(),
                     "showStatusMessages" to showStatusMessages.toString(),
                     "quickShapeEnabled" to quickShapeEnabled.toString(),
+                    "automaticUpdateChecksEnabled" to automaticUpdateChecksEnabled.toString(),
                     "eyedropperSampleMerged" to eyedropperSampleMerged.toString(),
                     "eyedropperReturnAfterSample" to eyedropperReturnAfterSample.toString(),
                     "gridGuideVisible" to gridGuideVisible.toString(),
@@ -2701,6 +2705,8 @@ class EditorState(
             autoRecoveryEnabled = preferences["autoRecoveryEnabled"]?.toBoolean() ?: autoRecoveryEnabled
             showStatusMessages = preferences["showStatusMessages"]?.toBoolean() ?: showStatusMessages
             quickShapeEnabled = preferences["quickShapeEnabled"]?.toBoolean() ?: quickShapeEnabled
+            automaticUpdateChecksEnabled =
+                preferences["automaticUpdateChecksEnabled"]?.toBoolean() ?: automaticUpdateChecksEnabled
             eyedropperSampleMerged =
                 preferences["eyedropperSampleMerged"]?.toBoolean() ?: eyedropperSampleMerged
             eyedropperReturnAfterSample =
@@ -2770,6 +2776,58 @@ class EditorState(
         recentColors = emptyList()
         persistPreferences()
         statusMessage = "Cleared recent colours"
+    }
+
+    var updateAvailable: AppUpdateInfo? by mutableStateOf(null)
+        private set
+    var updateCheckInProgress: Boolean by mutableStateOf(false)
+        private set
+    private var updateCheckedThisSession: Boolean = false
+
+    fun checkForUpdates(manual: Boolean = false) {
+        if (!supportsUpdateChecks) {
+            if (manual) statusMessage = "Update checks are unavailable on this device"
+            return
+        }
+        if (updateCheckInProgress || (!manual && updateCheckedThisSession)) return
+        updateCheckInProgress = true
+        if (!manual) updateCheckedThisSession = true
+        fileActions.checkForUpdate { result ->
+            updateCheckInProgress = false
+            result.fold(
+                onSuccess = { latest ->
+                    if (latest != null &&
+                        compareReleaseVersions(latest.version, NeoCanvasReleaseInfo.marketingVersion) > 0
+                    ) {
+                        updateAvailable = latest
+                        if (manual) statusMessage = "NeoCanvas " + latest.version + " is available"
+                    } else if (manual) {
+                        statusMessage = "NeoCanvas is up to date"
+                    }
+                },
+                onFailure = { error ->
+                    if (manual) {
+                        statusMessage = "Could not check for updates: " +
+                            (error.message ?: "network unavailable")
+                    }
+                },
+            )
+        }
+    }
+
+    fun dismissUpdateNotice() {
+        updateAvailable = null
+    }
+
+    fun openAvailableUpdate(): Boolean {
+        val update = updateAvailable ?: return false
+        val opened = fileActions.openExternalUrl(update.storeUrl)
+        statusMessage = if (opened) {
+            "Opening the App Store for NeoCanvas " + update.version
+        } else {
+            "Could not open the App Store"
+        }
+        return opened
     }
 
     private fun updatePalette(next: List<String>) {

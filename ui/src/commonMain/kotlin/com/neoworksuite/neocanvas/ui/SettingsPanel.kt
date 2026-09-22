@@ -120,6 +120,25 @@ fun SettingsPanel(
             state.autoRecoveryEnabled,
         ) { state.autoRecoveryEnabled = it; state.persistPreferences() }
 
+        SettingsSection("UPDATES")
+        SettingsToggle(
+            "Automatic update checks",
+            "Ask Apple’s App Store service for the latest NeoCanvas version once per app session. No artwork or account data is sent.",
+            state.automaticUpdateChecksEnabled,
+        ) {
+            state.automaticUpdateChecksEnabled = it
+            state.persistPreferences()
+        }
+        TextButton(
+            enabled = state.supportsUpdateChecks && !state.updateCheckInProgress,
+            onClick = { state.checkForUpdates(manual = true) },
+        ) {
+            Text(
+                if (state.updateCheckInProgress) "Checking…" else "Check for updates now",
+                color = if (state.supportsUpdateChecks) NeoCanvasColors.accent else NeoCanvasColors.disabled,
+            )
+        }
+
         SettingsSection("INTERFACE")
         SettingsToggle(
             "Status messages",
@@ -157,7 +176,8 @@ fun SettingsPanel(
             Text("Privacy by design", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Text(
                 "No account, advertising SDK, telemetry service or cloud storage is required. " +
-                    "Artwork stays on this device unless you explicitly import, export or open an external link.",
+                    "Artwork stays on this device unless you explicitly import or export it. " +
+                    "When update checks are enabled, NeoCanvas asks Apple’s App Store service only for the latest app version; no artwork is sent.",
                 color = NeoCanvasColors.muted,
                 fontSize = 11.sp,
             )

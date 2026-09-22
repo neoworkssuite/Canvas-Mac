@@ -90,6 +90,10 @@ interface EditorFileActions {
     fun loadBrushLibrary(): ByteArray? = null
     fun saveBrushLibrary(bytes: ByteArray): SaveResult = SaveResult.Failure("Brush library storage is unavailable in this host.")
     fun openExternalUrl(url: String): Boolean = false
+    val supportsUpdateChecks: Boolean get() = false
+    fun checkForUpdate(onResult: (Result<AppUpdateInfo?>) -> Unit) {
+        onResult(Result.success(null))
+    }
     fun loadPreferences(): Map<String, String> = emptyMap()
     fun savePreferences(values: Map<String, String>): SaveResult =
         SaveResult.Failure("Preference storage is unavailable in this host.")
