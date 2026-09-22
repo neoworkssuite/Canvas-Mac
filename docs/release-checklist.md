@@ -25,11 +25,11 @@ Evidence recorded 2026-09-22:
 - [x] Failed Save keeps recovery available.
 - [x] Start fresh retires an offered recovery snapshot.
 - [ ] Gallery Delete moves artwork to local trash.
-- [x] Gallery Stack survives relaunch and reconciles rename/delete.
+- [ ] Gallery Stack survives relaunch and reconciles rename/delete.
 - [x] Save/load round-trip retains raster, editable objects, masks and groups.
 - [ ] Undo/redo tested after brush, erase, Smudge, Liquify, transforms and Arrange.
 
-The checked data-safety items are covered by the shared regression suite in Run #265. Gallery trash behavior and the full cross-tool Undo/Redo matrix remain physical-iPad acceptance items.
+The checked recovery and save/load items are covered by the shared regression suite in Run #265. Gallery trash, Gallery Stack relaunch persistence and the full cross-tool Undo/Redo matrix remain physical-iPad acceptance items.
 
 ## Manual physical-iPad acceptance
 
