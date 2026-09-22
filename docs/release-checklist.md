@@ -4,24 +4,32 @@
 
 - [ ] Fast validation green on the exact release-candidate tree.
 - [ ] Full `[ipad]` validation green on the exact release-candidate tree.
-- [ ] iPad Simulator app builds and remains alive after launch.
-- [ ] Three cold relaunches pass.
-- [ ] Light and dark appearance screenshots are produced.
-- [ ] ARM64 NeoCanvasKit framework builds.
-- [ ] Unsigned Release-iphoneos NeoCanvas.app builds.
-- [ ] Built app contains `PrivacyInfo.xcprivacy`.
-- [ ] Built app contains compiled `Assets.car`.
-- [ ] Built Info.plist reports `ITSAppUsesNonExemptEncryption = false`.
+- [x] iPad Simulator app builds and remains alive after launch.
+- [x] Three cold relaunches pass.
+- [x] Light and dark appearance screenshots are produced.
+- [x] ARM64 NeoCanvasKit framework builds.
+- [x] Unsigned Release-iphoneos NeoCanvas.app builds.
+- [x] Built app contains `PrivacyInfo.xcprivacy`.
+- [x] Built app contains compiled `Assets.car`.
+- [x] Built Info.plist reports `ITSAppUsesNonExemptEncryption = false`.
+
+Evidence recorded 2026-09-22:
+
+- Run [#263](https://github.com/neoworkssuite/Canvas-Mac/actions/runs/35782422820) completed successfully at `a02c6f577f2a43f5f86c1fdf02704fddc7babf0e`, including shared tests, iPad Simulator build and smoke/visual validation, three cold relaunches, ARM64 framework build, unsigned device build, privacy/assets checks and encryption metadata.
+- Run [#265](https://github.com/neoworkssuite/Canvas-Mac/actions/runs/35785683464) completed fast validation successfully at `0807a6f03f60a200a5b01e218933bc6aa9ab0e08`.
+- The exact final-candidate fast and full `[ipad]` items remain open until the final same-tree checkpoint completes.
 
 ## Data safety
 
-- [ ] Manual Save retires stale recovery snapshot.
-- [ ] Failed Save keeps recovery available.
-- [ ] Start fresh retires an offered recovery snapshot.
+- [x] Manual Save retires stale recovery snapshot.
+- [x] Failed Save keeps recovery available.
+- [x] Start fresh retires an offered recovery snapshot.
 - [ ] Gallery Delete moves artwork to local trash.
-- [ ] Gallery Stack survives relaunch and reconciles rename/delete.
-- [ ] Save/load round-trip retains raster, editable objects, masks and groups.
+- [x] Gallery Stack survives relaunch and reconciles rename/delete.
+- [x] Save/load round-trip retains raster, editable objects, masks and groups.
 - [ ] Undo/redo tested after brush, erase, Smudge, Liquify, transforms and Arrange.
+
+The checked data-safety items are covered by the shared regression suite in Run #265. Gallery trash behavior and the full cross-tool Undo/Redo matrix remain physical-iPad acceptance items.
 
 ## Manual physical-iPad acceptance
 
