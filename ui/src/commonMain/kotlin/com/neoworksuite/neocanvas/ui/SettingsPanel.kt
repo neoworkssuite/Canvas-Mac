@@ -139,6 +139,16 @@ fun SettingsPanel(
             )
         }
 
+        SettingsSection("FAMILY")
+        SettingsToggle(
+            "Kids activities",
+            "Show the Kids activities entry in Gallery. Turn this off for a cleaner professional-only Gallery.",
+            state.kidsModeEnabled,
+        ) {
+            state.kidsModeEnabled = it
+            state.persistPreferences()
+        }
+
         SettingsSection("INTERFACE")
         SettingsToggle(
             "Status messages",

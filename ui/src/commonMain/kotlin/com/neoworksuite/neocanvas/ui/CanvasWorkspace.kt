@@ -811,6 +811,19 @@ fun CanvasWorkspace(
                 }
             },
         ) {
+            val backdropSpacing = 42.dp.toPx()
+            val backdropColor = Color.White.copy(alpha = .055f)
+            var backdropX = backdropSpacing
+            while (backdropX < size.width) {
+                drawLine(backdropColor, Offset(backdropX, 0f), Offset(backdropX, size.height), 1.dp.toPx())
+                backdropX += backdropSpacing
+            }
+            var backdropY = backdropSpacing
+            while (backdropY < size.height) {
+                drawLine(backdropColor, Offset(0f, backdropY), Offset(size.width, backdropY), 1.dp.toPx())
+                backdropY += backdropSpacing
+            }
+
             withTransform({
                 translate(origin.x, origin.y)
                 scale(scale, scale, pivot = Offset.Zero)

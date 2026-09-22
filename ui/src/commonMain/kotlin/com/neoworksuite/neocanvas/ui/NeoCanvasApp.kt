@@ -167,6 +167,7 @@ fun NeoCanvasApp(
                     if (opened) destination = AppDestination.Editor
                 }
             },
+            kidsModeEnabled = state.kidsModeEnabled,
             onKids = { destination = AppDestination.Kids },
             onOpen = { name -> if (state.openFromGallery(name)) destination = AppDestination.Editor },
         )

@@ -51,6 +51,7 @@ fun GalleryScreen(
     actions: EditorFileActions,
     onNew: () -> Unit,
     onImportDocument: () -> Unit,
+    kidsModeEnabled: Boolean,
     onKids: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
@@ -120,7 +121,7 @@ fun GalleryScreen(
                 if (stackOpen) GalleryAction("Back") { stackOpen = false; selected = emptySet() }
                 GalleryAction(if (selecting) "Done" else "Select") { selecting = !selecting; if (!selecting) selected = emptySet() }
                 GalleryAction("Open file") { onImportDocument() }
-                GalleryAction("Kids") { onKids() }
+                if (kidsModeEnabled) GalleryAction("Kids") { onKids() }
                 Button(onClick = onNew) { Text("+  New artwork") }
             }
 
@@ -159,10 +160,15 @@ fun GalleryScreen(
                 ) {
                     Image(neoCanvasIcon(), null, Modifier.size(112.dp))
                     Text("Your Gallery is ready", color = NeoCanvasColors.paper, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Create a canvas or open Kids activities. Everything stays local.", color = NeoCanvasColors.muted, modifier = Modifier.padding(10.dp))
+                    Text(
+                        if (kidsModeEnabled) "Create a canvas or open Kids activities. Everything stays local."
+                        else "Create a canvas. Everything stays local.",
+                        color = NeoCanvasColors.muted,
+                        modifier = Modifier.padding(10.dp),
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = onNew) { Text("Create artwork") }
-                        Button(onClick = onKids) { Text("Kids activities") }
+                        if (kidsModeEnabled) Button(onClick = onKids) { Text("Kids activities") }
                     }
                 }
             } else {

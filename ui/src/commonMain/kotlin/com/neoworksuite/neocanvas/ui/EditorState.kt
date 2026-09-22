@@ -2657,6 +2657,7 @@ class EditorState(
     var autoRecoveryEnabled: Boolean by mutableStateOf(true)
     var showStatusMessages: Boolean by mutableStateOf(true)
     var quickShapeEnabled: Boolean by mutableStateOf(true)
+    var kidsModeEnabled: Boolean by mutableStateOf(true)
     var automaticUpdateChecksEnabled: Boolean by mutableStateOf(true)
     var eyedropperSampleMerged: Boolean by mutableStateOf(true)
     var eyedropperReturnAfterSample: Boolean by mutableStateOf(true)
@@ -2671,6 +2672,7 @@ class EditorState(
         autoRecoveryEnabled = true
         showStatusMessages = true
         quickShapeEnabled = true
+        kidsModeEnabled = true
         automaticUpdateChecksEnabled = true
         eyedropperSampleMerged = true
         eyedropperReturnAfterSample = true
@@ -2694,6 +2696,7 @@ class EditorState(
                     "autoRecoveryEnabled" to autoRecoveryEnabled.toString(),
                     "showStatusMessages" to showStatusMessages.toString(),
                     "quickShapeEnabled" to quickShapeEnabled.toString(),
+                    "kidsModeEnabled" to kidsModeEnabled.toString(),
                     "automaticUpdateChecksEnabled" to automaticUpdateChecksEnabled.toString(),
                     "eyedropperSampleMerged" to eyedropperSampleMerged.toString(),
                     "eyedropperReturnAfterSample" to eyedropperReturnAfterSample.toString(),
@@ -2724,6 +2727,7 @@ class EditorState(
             autoRecoveryEnabled = preferences["autoRecoveryEnabled"]?.toBoolean() ?: autoRecoveryEnabled
             showStatusMessages = preferences["showStatusMessages"]?.toBoolean() ?: showStatusMessages
             quickShapeEnabled = preferences["quickShapeEnabled"]?.toBoolean() ?: quickShapeEnabled
+            kidsModeEnabled = preferences["kidsModeEnabled"]?.toBoolean() ?: kidsModeEnabled
             automaticUpdateChecksEnabled =
                 preferences["automaticUpdateChecksEnabled"]?.toBoolean() ?: automaticUpdateChecksEnabled
             eyedropperSampleMerged =
@@ -3784,7 +3788,22 @@ class EditorState(
         clearSelection()
         resetView()
         history.reset(CanvasDocument.blank(width, height).copy(
-            layers = listOf(Layer("layer-1", "Sketch", payload = LayerPayload.Raster())),
+            layers = listOf(
+                Layer(
+                    id = "background",
+                    name = "Background",
+                    payload = LayerPayload.ShapeObject(
+                        kind = ShapeKind.Rectangle,
+                        x = 0f,
+                        y = 0f,
+                        width = width.toFloat(),
+                        height = height.toFloat(),
+                        fillArgb = 0xffffffff.toInt(),
+                    ),
+                    locked = true,
+                ),
+                Layer("layer-1", "Layer 1", payload = LayerPayload.Raster()),
+            ),
         ))
         tileStore.restore(emptyMap())
         resetDormantLayerState()
