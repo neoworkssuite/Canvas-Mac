@@ -3,6 +3,14 @@ import UIKit
 import Foundation
 import NeoCanvasKit
 
+private final class UpdateResultBox: @unchecked Sendable {
+    let callback: (String?, String?) -> Void
+
+    init(_ callback: @escaping (String?, String?) -> Void) {
+        self.callback = callback
+    }
+}
+
 final class AppStoreUpdateLookup: NSObject, NativeUpdateLookup {
     func check(onResult: @escaping (String?, String?) -> Void) {
         guard let url = URL(string: "https://itunes.apple.com/lookup?bundleId=com.neoworksuite.neocanvas") else {
@@ -10,16 +18,17 @@ final class AppStoreUpdateLookup: NSObject, NativeUpdateLookup {
             return
         }
 
+        let resultBox = UpdateResultBox(onResult)
         URLSession.shared.dataTask(with: url) { data, _, error in
             let json = data.flatMap { String(data: $0, encoding: .utf8) }
             let message = error?.localizedDescription
             DispatchQueue.main.async {
                 if let message {
-                    onResult(nil, message)
+                    resultBox.callback(nil, message)
                 } else if let json {
-                    onResult(json, nil)
+                    resultBox.callback(json, nil)
                 } else {
-                    onResult(nil, "App Store returned no update data.")
+                    resultBox.callback(nil, "App Store returned no update data.")
                 }
             }
         }.resume()
