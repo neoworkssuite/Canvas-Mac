@@ -161,6 +161,11 @@ jobs:
           test -f "$APP/Assets.car"
           plutil -lint "$APP/PrivacyInfo.xcprivacy"
 
+          EXPECTED_MARKETING_VERSION="$(awk -F= '/^MARKETING_VERSION/{gsub(/[[:space:]]/, "", $2); print $2}' iosApp/Configuration/Config.xcconfig)"
+          EXPECTED_BUILD_VERSION="$(awk -F= '/^CURRENT_PROJECT_VERSION/{gsub(/[[:space:]]/, "", $2); print $2}' iosApp/Configuration/Config.xcconfig)"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$APP/Info.plist")" = "$EXPECTED_MARKETING_VERSION"
+          test "$(plutil -extract CFBundleVersion raw -o - "$APP/Info.plist")" = "$EXPECTED_BUILD_VERSION"
+
       - name: Upload iPad simulator build
         uses: actions/upload-artifact@v4
         with:
@@ -231,6 +236,11 @@ jobs:
           test -f "$APP/Assets.car"
           plutil -lint "$APP/PrivacyInfo.xcprivacy"
           plutil -p "$APP/Info.plist" | grep -q 'ITSAppUsesNonExemptEncryption.*false'
+
+          EXPECTED_MARKETING_VERSION="$(awk -F= '/^MARKETING_VERSION/{gsub(/[[:space:]]/, "", $2); print $2}' iosApp/Configuration/Config.xcconfig)"
+          EXPECTED_BUILD_VERSION="$(awk -F= '/^CURRENT_PROJECT_VERSION/{gsub(/[[:space:]]/, "", $2); print $2}' iosApp/Configuration/Config.xcconfig)"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$APP/Info.plist")" = "$EXPECTED_MARKETING_VERSION"
+          test "$(plutil -extract CFBundleVersion raw -o - "$APP/Info.plist")" = "$EXPECTED_BUILD_VERSION"
 
       - name: Upload unsigned physical iPad build
         uses: actions/upload-artifact@v4

@@ -94,8 +94,8 @@ fun NeoCanvasApp(
             title = { Text(if (state.recoveryChecking) "Checking local recovery…" else "Local recovery snapshot", color = NeoCanvasColors.paper) },
             text = { Text(
                 if (state.recoveryChecking) "Checking this device for your last recovery copy."
-                else if (available) "A previous local snapshot is available. It may be older than your saved document. Recover it to inspect and save it, or start fresh. Starting fresh allows future autosaves to replace this recovery copy."
-                else "The previous recovery copy could not be opened. Starting fresh allows future autosaves to replace it. Your manually saved documents are unchanged.",
+                else if (available) "NeoCanvas found an unsaved recovery snapshot from a previous session. Recover it to inspect and save it, or start fresh to remove it. Your manually saved Gallery artwork is unchanged."
+                else "The previous recovery snapshot could not be opened. Start fresh to remove it and continue. Your manually saved Gallery artwork is unchanged.",
                 color = NeoCanvasColors.muted,
             ) },
             confirmButton = {
