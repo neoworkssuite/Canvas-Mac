@@ -44,4 +44,4 @@ The iPad host includes:
 
 NeoCanvas is designed to work without an account, telemetry, cloud storage or advertising SDKs. Release CI verifies that the privacy manifest and compiled asset catalog are present in the built iPad app.
 
-Before App Store submission, update `Configuration/Config.xcconfig` with the intended marketing/build version and create the signed Archive using the NeoWorksSuite Apple Developer account.
+The current release candidate uses marketing version **1.0.0**, build **1**. Before App Store submission, create the signed Archive using the NeoWorksSuite Apple Developer account and increment the build number for every subsequently uploaded binary.
