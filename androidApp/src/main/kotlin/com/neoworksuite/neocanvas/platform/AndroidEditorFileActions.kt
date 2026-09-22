@@ -79,6 +79,12 @@ class AndroidEditorFileActions(private val localDirectory: File,
     override fun loadRecovery(): LoadResult? = recoveryFile.let { if (it.exists()) documents.load(it.absolutePath) else null }
     override fun saveRecovery(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         documents.save(recoveryFile.absolutePath, document, tiles)
+    override fun clearRecovery(): SaveResult = try {
+        if (!recoveryFile.exists() || recoveryFile.delete()) SaveResult.Success
+        else SaveResult.Failure("Could not retire Android recovery copy.")
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not retire Android recovery copy: " + (error.message ?: "storage error"))
+    }
     override fun importImage(onResult: (Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) {
         imagePicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("Image picker unavailable.")))
     }

@@ -417,6 +417,7 @@ class EditorState(
             savedVersion = editVersion
             closeLocalLibrary()
             statusMessage = "Saved local copy: ${name.trim()}"
+            retireRecoveryAfterManualSave()
         } else if (result is SaveResult.Failure) libraryError = result.message
     }
     fun openLocalDocument(name: String) {
@@ -533,7 +534,10 @@ class EditorState(
         if (fileActions.supportsLocalLibrary) { namingLocalCopy = true; libraryError = null; return false }
         val result = fileActions.saveAs(document, tilesForDocument())
         applySaveResult(result, "Saved local document copy")
-        if (result == SaveResult.Success) savedVersion = editVersion
+        if (result == SaveResult.Success) {
+            savedVersion = editVersion
+            retireRecoveryAfterManualSave()
+        }
         return result == SaveResult.Success
     }
     var pendingDocumentAction: PendingDocumentAction? by mutableStateOf(null)
@@ -557,7 +561,34 @@ class EditorState(
         }
         recoveryChecking = false
     }
-    fun dismissRecovery() { recoveryCandidate = null }
+    fun dismissRecovery() {
+        recoveryCandidate = null
+        lastRecoveryVersion = -1
+        if (!fileActions.supportsRecovery) return
+        val result = try {
+            fileActions.clearRecovery()
+        } catch (error: Exception) {
+            SaveResult.Failure("Could not retire recovery copy: " + (error.message ?: "unknown storage error"))
+        }
+        if (result is SaveResult.Failure) {
+            statusMessage = result.message + ". Future autosaves can replace it."
+        }
+    }
+
+    private fun retireRecoveryAfterManualSave() {
+        recoveryCandidate = null
+        lastRecoveryVersion = -1
+        if (!fileActions.supportsRecovery) return
+        val savedMessage = statusMessage ?: "Saved locally"
+        val result = try {
+            fileActions.clearRecovery()
+        } catch (error: Exception) {
+            SaveResult.Failure("Could not retire recovery copy: " + (error.message ?: "unknown storage error"))
+        }
+        if (result is SaveResult.Failure) {
+            statusMessage = savedMessage + " · Recovery cleanup failed: " + result.message
+        }
+    }
     fun restoreRecovery() {
         val recovered = recoveryCandidate as? LoadResult.Success ?: return
         // Startup recovery must never silently replace work created in this session.
@@ -3576,7 +3607,10 @@ class EditorState(
     fun save(): Boolean {
         val result = fileActions.save(document, tilesForDocument())
         applySaveResult(result, "Saved locally")
-        if (result == SaveResult.Success) savedVersion = editVersion
+        if (result == SaveResult.Success) {
+            savedVersion = editVersion
+            retireRecoveryAfterManualSave()
+        }
         return result == SaveResult.Success
     }
     fun exportPng() = applySaveResult(fileActions.exportPng(document, tilesForDocument()), "Exported PNG locally")

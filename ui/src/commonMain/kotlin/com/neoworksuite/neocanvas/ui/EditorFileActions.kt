@@ -22,6 +22,7 @@ interface EditorFileActions {
         SaveResult.Failure("Save As is unavailable in this host.")
     val supportsRecovery: Boolean get() = false
     fun loadRecovery(): LoadResult? = null
+    fun clearRecovery(): SaveResult = SaveResult.Success
 
     val supportsVersions: Boolean get() = false
     val supportsVersionBranches: Boolean get() = false

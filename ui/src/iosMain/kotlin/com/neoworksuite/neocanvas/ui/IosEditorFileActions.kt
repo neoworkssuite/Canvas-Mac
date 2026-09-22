@@ -229,6 +229,15 @@ internal class IosEditorFileActions(
     override fun loadRecovery(): LoadResult? =
         if (fm.fileExistsAtPath(recoveryPath)) readPackage(recoveryPath) else null
 
+    override fun clearRecovery(): SaveResult {
+        if (!fm.fileExistsAtPath(recoveryPath)) return SaveResult.Success
+        return if (fm.removeItemAtPath(recoveryPath, null)) {
+            SaveResult.Success
+        } else {
+            SaveResult.Failure("Could not retire iPad recovery copy.")
+        }
+    }
+
     override fun listVersions(documentId: String): List<LocalVersionEntry> {
         val directory = versionDirectory(documentId)
         if (!fm.fileExistsAtPath(directory)) return emptyList()
