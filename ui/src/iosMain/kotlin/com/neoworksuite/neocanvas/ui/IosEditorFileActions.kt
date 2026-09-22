@@ -30,6 +30,8 @@ import org.jetbrains.skia.Surface
 import org.jetbrains.skia.TextLine
 import platform.Foundation.NSURL
 import platform.Foundation.NSData
+import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSURLSession
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -102,6 +104,7 @@ internal class IosEditorFileActions(
     override val supportsPdfExport: Boolean = true
     override val supportsTiffExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
+    override val supportsUpdateChecks: Boolean = true
 
     init {
         ensureDirectory(libraryDirectory)
@@ -518,6 +521,32 @@ internal class IosEditorFileActions(
         else SaveResult.Failure("Could not write PSD to iPad Documents.")
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun checkForUpdate(onResult: (Result<AppUpdateInfo?>) -> Unit) {
+        val lookup = NSURL.URLWithString(
+            "https://itunes.apple.com/lookup?bundleId=com.neoworksuite.neocanvas"
+        ) ?: run {
+            onResult(Result.failure(IllegalStateException("Could not build App Store update URL.")))
+            return
+        }
+
+        NSURLSession.sharedSession.dataTaskWithURL(lookup) { data, _, error ->
+            val result = when {
+                error != null -> Result.failure<AppUpdateInfo?>(
+                    IllegalStateException(error.localizedDescription ?: "App Store lookup failed.")
+                )
+                data == null -> Result.failure<AppUpdateInfo?>(
+                    IllegalStateException("App Store returned no update data.")
+                )
+                else -> runCatching {
+                    parseAppStoreLookup(data.toByteArray().decodeToString())
+                }
+            }
+            NSOperationQueue.mainQueue.addOperationWithBlock {
+                onResult(result)
+            }
+        }.resume()
     }
 
     override fun openExternalUrl(url: String): Boolean {
