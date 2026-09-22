@@ -533,7 +533,7 @@ internal class IosEditorFileActions(
 
         updateLookupQueue.addOperationWithBlock {
             val result = runCatching {
-                val data = NSData.dataWithContentsOfURL(lookup)
+                val data = NSData(contentsOfURL = lookup)
                     ?: error("App Store returned no update data.")
                 parseAppStoreLookup(data.toByteArray().decodeToString())
             }
