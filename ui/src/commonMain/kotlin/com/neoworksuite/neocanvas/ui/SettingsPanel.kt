@@ -1,22 +1,28 @@
 package com.neoworksuite.neocanvas.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -222,7 +228,11 @@ private fun SettingsToggle(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp),
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(NeoCanvasColors.panelRaised)
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 15.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -230,6 +240,27 @@ private fun SettingsToggle(
             Text(title, color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Text(detail, color = NeoCanvasColors.muted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.width(60.dp).height(34.dp)
+                    .clip(RoundedCornerShape(17.dp))
+                    .background(if (checked) NeoCanvasColors.accent else NeoCanvasColors.track),
+                contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+            ) {
+                Box(
+                    Modifier.padding(horizontal = 4.dp)
+                        .width(26.dp).height(26.dp)
+                        .clip(CircleShape)
+                        .background(NeoCanvasColors.paper),
+                )
+            }
+            Text(
+                if (checked) "ON" else "OFF",
+                color = if (checked) NeoCanvasColors.accent else NeoCanvasColors.faint,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
     }
 }

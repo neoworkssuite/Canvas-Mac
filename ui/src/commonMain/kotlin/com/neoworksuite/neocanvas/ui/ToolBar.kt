@@ -412,12 +412,24 @@ fun StudioRail(state: EditorState, modifier: Modifier = Modifier) {
 
 @Composable
 private fun VerticalRailControl(label: String, value: Float, range: ClosedFloatingPointRange<Float>, format: (Float) -> String, onChange: (Float) -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier.clip(RoundedCornerShape(14.dp))
+            .background(NeoCanvasColors.panelRaised)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(label, color = NeoCanvasColors.faint, fontSize = 8.sp, letterSpacing = 1.sp)
-        Text(format(value), color = NeoCanvasColors.paper, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+        Box(
+            Modifier.padding(top = 4.dp, bottom = 2.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(NeoCanvasColors.chrome)
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+        ) {
+            Text(format(value), color = NeoCanvasColors.paper, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        }
         val update: (Float, Float) -> Unit = { y, height -> onChange(verticalValueFromY(y, height, range)) }
         Canvas(
-            Modifier.width(34.dp).height(112.dp).padding(top = 4.dp)
+            Modifier.width(44.dp).height(126.dp).padding(top = 4.dp)
                 .semantics { contentDescription = "$label ${format(value)} vertical slider" }
                 .pointerInput(range) { detectTapGestures { update(it.y, size.height.toFloat()) } }
                 .pointerInput(range) {
@@ -429,13 +441,14 @@ private fun VerticalRailControl(label: String, value: Float, range: ClosedFloati
         ) {
             val fraction = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
             val x = size.width / 2f
-            val top = 8.dp.toPx()
-            val bottom = size.height - 8.dp.toPx()
+            val top = 11.dp.toPx()
+            val bottom = size.height - 11.dp.toPx()
             val thumbY = bottom - (bottom - top) * fraction
-            drawLine(NeoCanvasColors.track, Offset(x, top), Offset(x, bottom), 6.dp.toPx(), StrokeCap.Round)
-            drawLine(NeoCanvasColors.accent, Offset(x, thumbY), Offset(x, bottom), 6.dp.toPx(), StrokeCap.Round)
-            drawCircle(NeoCanvasColors.paper, 7.dp.toPx(), Offset(x, thumbY))
-            drawCircle(NeoCanvasColors.ink, 3.dp.toPx(), Offset(x, thumbY))
+            drawLine(NeoCanvasColors.track, Offset(x, top), Offset(x, bottom), 8.dp.toPx(), StrokeCap.Round)
+            drawLine(NeoCanvasColors.accent, Offset(x, thumbY), Offset(x, bottom), 8.dp.toPx(), StrokeCap.Round)
+            drawCircle(Color.Black.copy(alpha = .55f), 13.dp.toPx(), Offset(x, thumbY))
+            drawCircle(NeoCanvasColors.paper, 10.5.dp.toPx(), Offset(x, thumbY))
+            drawCircle(NeoCanvasColors.accent, 3.dp.toPx(), Offset(x, thumbY))
         }
     }
 }
