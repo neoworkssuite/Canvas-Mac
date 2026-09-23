@@ -48,25 +48,7 @@ object Rasterizer {
 
         val working = linkedMapOf<TileKey, ByteArray>()
         fun tile(key: TileKey): ByteArray = working.getOrPut(key) { existing.read(key) ?: ByteArray(TileFormat.BYTES_PER_TILE) }
-        val spacing = max(.5f, size * (brush?.let { it.spacing / it.baseSize } ?: .20f))
-        val stamps = ArrayList<RasterPoint>()
-        stamps += points.first()
-        var distanceUntilStamp = spacing.toDouble()
-        points.zipWithNext().forEach { (from, to) ->
-            val dx = to.x - from.x
-            val dy = to.y - from.y
-            val distance = sqrt(dx.toDouble() * dx + dy.toDouble() * dy)
-            if (distance == 0.0) return@forEach
-            while (distanceUntilStamp <= distance && stamps.size < 100_000) {
-                val fraction = distanceUntilStamp / distance
-                stamps += RasterPoint((from.x.toDouble() + dx * fraction).toFloat(),
-                    (from.y.toDouble() + dy * fraction).toFloat(),
-                    (from.pressure.toDouble() + (to.pressure - from.pressure) * fraction).toFloat())
-                distanceUntilStamp += spacing
-            }
-            distanceUntilStamp -= distance
-        }
-        if (stamps.last() != points.last()) stamps += points.last()
+        val stamps = interpolateStrokeStamps(points, size, brush)
         stamps.forEachIndexed { stampIndex, point ->
             val dynamics = brush?.dynamics
             val scatterRadius = size * (dynamics?.scatter ?: 0f) * .72f
@@ -96,6 +78,41 @@ object Rasterizer {
             else if (existing.read(key) != null) removals += key
         }
         return RasterPatch.of(replacements, removals)
+    }
+
+    private fun interpolateStrokeStamps(
+        points: List<RasterPoint>,
+        size: Float,
+        brush: BrushDefinition?,
+    ): List<RasterPoint> {
+        val configured = size * (brush?.let { it.spacing / it.baseSize } ?: .20f)
+        val textured = brush?.let {
+            it.tip in setOf(BrushTip.Spray, BrushTip.Chalk, BrushTip.DryPaint, BrushTip.Bristle,
+                BrushTip.Water, BrushTip.Leaf, BrushTip.Grass, BrushTip.Bark) ||
+                it.dynamics.scatter > .2f || it.dynamics.grain > .4f || it.dynamics.wetMix > .5f
+        } == true
+        // Large textured tips cover a broad area. A proportional floor avoids restamping almost
+        // identical areas while preserving the dense sampling used by precision pens and pencils.
+        val spacing = max(.5f, max(configured, if (textured && size >= 24f) size * .22f else 0f))
+        val stamps = ArrayList<RasterPoint>()
+        stamps += points.first()
+        var distanceUntilStamp = spacing.toDouble()
+        points.zipWithNext().forEach { (from, to) ->
+            val dx = to.x - from.x
+            val dy = to.y - from.y
+            val distance = sqrt(dx.toDouble() * dx + dy.toDouble() * dy)
+            if (distance == 0.0) return@forEach
+            while (distanceUntilStamp <= distance && stamps.size < 100_000) {
+                val fraction = distanceUntilStamp / distance
+                stamps += RasterPoint((from.x.toDouble() + dx * fraction).toFloat(),
+                    (from.y.toDouble() + dy * fraction).toFloat(),
+                    (from.pressure.toDouble() + (to.pressure - from.pressure) * fraction).toFloat())
+                distanceUntilStamp += spacing
+            }
+            distanceUntilStamp -= distance
+        }
+        if (stamps.last() != points.last()) stamps += points.last()
+        return stamps
     }
 
     private fun stamp(
@@ -176,6 +193,29 @@ object Rasterizer {
                 }
                 BrushTip.Spray -> if (distance <= 1f && pixelNoise > .58f) edge * pixelNoise else 0f
                 BrushTip.Pixel -> if (abs(rotatedX) <= radius && abs(rotatedY) <= radius * shapeRatio) 1f else 0f
+                BrushTip.Leaf -> {
+                    val along = abs(rotatedX / radius)
+                    val across = abs(scaledY / radius)
+                    val leafEdge = (1f - along) * .72f
+                    if (along <= 1f && across <= leafEdge) {
+                        val vein = (1f - across * 8f).coerceIn(0f, 1f) * .22f
+                        (edge * (.72f + vein))
+                    } else 0f
+                }
+                BrushTip.Grass -> {
+                    val vertical = (rotatedY / radius + 1f) * .5f
+                    val bladeWidth = (.055f + (1f - vertical.coerceIn(0f, 1f)) * .055f) * radius
+                    val bend = sin(vertical * 3.1415927f) * radius * .18f
+                    val blade = minOf(abs(rotatedX - bend), abs(rotatedX + radius * .34f), abs(rotatedX - radius * .34f))
+                    if (vertical in 0f..1f && blade <= bladeWidth) edge * (.62f + .38f * pixelNoise) else 0f
+                }
+                BrushTip.Bark -> {
+                    val inside = abs(rotatedX) <= radius && abs(rotatedY) <= radius * shapeRatio
+                    if (inside) {
+                        val ridge = abs(sin(rotatedX * .31f + pixelNoise * 2.2f))
+                        if (ridge > .34f) (.3f + ridge * .7f) * (1f - grain * .25f) else 0f
+                    } else 0f
+                }
             }
             coverage *= 1f - grain * (1f - pixelNoise) * .78f
             if (wetMix > 0f && distance <= 1f) {
@@ -225,4 +265,10 @@ object Rasterizer {
         value = (value xor (value ushr 13)) * 1274126177
         return ((value xor (value ushr 16)).ushr(8) and 0x00ffffff) / 16777215f
     }
+
+    internal fun plannedStrokeStampCount(points: List<RasterPoint>, size: Float, brush: BrushDefinition?): Int =
+        if (points.isEmpty()) 0 else interpolateStrokeStamps(points, size, brush).size
 }
+
+internal fun plannedStrokeStampCount(points: List<RasterPoint>, size: Float, brush: BrushDefinition?): Int =
+    Rasterizer.plannedStrokeStampCount(points, size, brush)

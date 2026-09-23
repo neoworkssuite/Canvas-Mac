@@ -7,12 +7,24 @@ import kotlin.test.assertTrue
 
 class BrushCatalogTest {
     @Test
-    fun library_has_eighteen_ordered_categories_with_ten_paint_brushes_each() {
-        assertEquals(18, BuiltInBrushes.categories.size)
-        assertEquals(180, BuiltInBrushes.paintBrushes.size)
+    fun library_has_twenty_one_ordered_categories_with_ten_paint_brushes_each() {
+        assertEquals(21, BuiltInBrushes.categories.size)
+        assertEquals(210, BuiltInBrushes.paintBrushes.size)
         BuiltInBrushes.categories.forEach { category ->
             assertEquals(10, BuiltInBrushes.inCategory(category.id).size, category.name)
         }
+    }
+
+    @Test
+    fun nature_categories_offer_landscape_foliage_and_tree_tools() {
+        assertEquals(
+            listOf("Landscape", "Foliage", "Trees"),
+            BuiltInBrushes.categories.takeLast(3).map { it.name },
+        )
+        assertTrue(BuiltInBrushes.inCategory("landscape").any { it.name == "Water Reflection" })
+        assertTrue(BuiltInBrushes.inCategory("foliage").any { it.name == "Leaf Cluster" && it.tip == BrushTip.Leaf })
+        assertTrue(BuiltInBrushes.inCategory("foliage").any { it.name == "Grass Tuft" && it.tip == BrushTip.Grass })
+        assertTrue(BuiltInBrushes.inCategory("trees").any { it.name == "Bark Grain" && it.tip == BrushTip.Bark })
     }
 
     @Test

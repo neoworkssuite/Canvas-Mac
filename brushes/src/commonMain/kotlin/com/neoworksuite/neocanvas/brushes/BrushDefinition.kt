@@ -6,7 +6,10 @@ enum class BrushMode {
     ERASE,
 }
 
-enum class BrushTip { Round, Pencil, SoftRound, Flat, DryPaint, Bristle, Chalk, Water, Spray, Pixel }
+enum class BrushTip {
+    Round, Pencil, SoftRound, Flat, DryPaint, Bristle, Chalk, Water, Spray, Pixel,
+    Leaf, Grass, Bark,
+}
 
 data class BrushCategory(val id: String, val name: String) {
     init {

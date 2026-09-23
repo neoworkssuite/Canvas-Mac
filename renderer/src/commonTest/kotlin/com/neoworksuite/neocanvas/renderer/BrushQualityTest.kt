@@ -43,6 +43,34 @@ class BrushQualityTest {
         assertFalse(water.contentEquals(bristle))
         assertTrue(spray.contentEquals(paint(points, base.copy(tip = BrushTip.Spray))))
     }
+
+    @Test fun leaf_grass_and_bark_tips_are_distinct_and_deterministic() {
+        val points = listOf(RasterPoint(16f, 30f), RasterPoint(48f, 30f))
+        val base = BuiltInBrushes.ink.copy(
+            spacing = 4f,
+            baseSize = 18f,
+            dynamics = BrushDynamics(grain = .25f, rotation = .8f, shapeRatio = .55f),
+        )
+        val leaf = paint(points, base.copy(tip = BrushTip.Leaf))
+        val grass = paint(points, base.copy(tip = BrushTip.Grass))
+        val bark = paint(points, base.copy(tip = BrushTip.Bark))
+
+        assertFalse(leaf.contentEquals(grass))
+        assertFalse(grass.contentEquals(bark))
+        assertTrue(leaf.contentEquals(paint(points, base.copy(tip = BrushTip.Leaf))))
+    }
+
+    @Test fun large_textured_brushes_use_a_bounded_adaptive_stamp_density() {
+        val points = listOf(RasterPoint(0f, 20f), RasterPoint(1_000f, 20f))
+        val precision = BuiltInBrushes.ink.copy(baseSize = 10f, spacing = 1f)
+        val textured = precision.copy(
+            tip = BrushTip.Leaf,
+            dynamics = BrushDynamics(grain = .5f, scatter = .6f, rotation = .8f),
+        )
+
+        assertTrue(plannedStrokeStampCount(points, 120f, textured) <= 45)
+        assertTrue(plannedStrokeStampCount(points, 6f, precision) > 100)
+    }
     private fun paint(points: List<RasterPoint>, brush: BrushDefinition): ByteArray {
         val store = TileStore()
         store.applyPatch(Rasterizer.stroke(store, "a", points, RasterColor(20, 40, 60),
