@@ -28,6 +28,8 @@ xcuserdata/
 AuthKey_*.p8
 
 # Packages
+__pycache__/
+*.py[cod]
 *.apk
 *.aab
 *.ipa

@@ -56,3 +56,22 @@ targets:
           ./gradlew :ui:embedAndSignAppleFrameworkForXcode
 
         basedOnDependencyAnalysis: false
+
+  NeoCanvasUITests:
+
+    type: bundle.ui-testing
+    platform: iOS
+
+    deploymentTarget: "15.0"
+
+    sources:
+      - path: NeoCanvasUITests
+
+    dependencies:
+      - target: NeoCanvas
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.neoworksuite.neocanvas.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: NeoCanvas

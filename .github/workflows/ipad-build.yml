@@ -6,6 +6,12 @@ on:
       - main
       - ipad-gestures-phase1
   workflow_dispatch:
+    inputs:
+      capture_manual_screenshots:
+        description: Capture and upload the NeoCanvas website/manual screenshot pack
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   fast-validation:
@@ -436,6 +442,120 @@ jobs:
         shell: bash
         env:
           UDID: ${{ steps.ipad.outputs.udid }}
+        run: |
+          if [ -n "$UDID" ]; then
+            xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          fi
+
+  manual-screenshot-pack:
+    name: Manual screenshot pack
+    needs: fast-validation
+    if: github.event_name == 'workflow_dispatch' && inputs.capture_manual_screenshots
+    runs-on: macos-26
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout NeoCanvas
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Prepare iPad project
+        run: |
+          chmod +x ./gradlew
+          chmod +x ./scripts/prepare-ios.sh
+          ./scripts/prepare-ios.sh
+
+      - name: Pick a clean iPad Simulator
+        id: manual_ipad
+        shell: bash
+        run: |
+          xcrun simctl shutdown all 2>/dev/null || true
+
+          UDID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin)["devices"]; devices=[d for group in data.values() for d in group if d.get("isAvailable") and "iPad" in d.get("name","")]; print(devices[0]["udid"] if devices else "")')"
+          if [ -z "$UDID" ]; then
+            echo "No available iPad Simulator found."
+            xcrun simctl list devices available
+            exit 1
+          fi
+
+          NAME="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; wanted=sys.argv[1]; data=json.load(sys.stdin)["devices"]; print(next((d.get("name","Unknown iPad") for group in data.values() for d in group if d.get("udid")==wanted), "Unknown iPad"))' "$UDID")"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Capturing on $NAME ($UDID)"
+
+          xcrun simctl erase "$UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
+
+      - name: Capture real NeoCanvas screens
+        shell: bash
+        env:
+          UDID: ${{ steps.manual_ipad.outputs.udid }}
+          SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/manual-screenshots
+        run: |
+          mkdir -p "$SCREENSHOT_OUTPUT_DIR"
+          cd iosApp
+
+          xcodebuild \
+            -project NeoCanvas.xcodeproj \
+            -scheme NeoCanvas \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$PWD/build/ManualScreenshotDerivedData" \
+            -resultBundlePath "$GITHUB_WORKSPACE/artifacts/NeoCanvas-Manual-Screenshots.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test \
+            -only-testing:NeoCanvasUITests/NeoCanvasManualScreenshotTests/testCaptureManualScreenshotPack
+
+      - name: Verify and index screenshot pack
+        env:
+          SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/manual-screenshots
+          DEVICE_NAME: ${{ steps.manual_ipad.outputs.name }}
+        run: |
+          python3 scripts/package-manual-screenshots.py \
+            --directory "$SCREENSHOT_OUTPUT_DIR" \
+            --commit "$GITHUB_SHA" \
+            --device "$DEVICE_NAME"
+
+          find "$SCREENSHOT_OUTPUT_DIR" -maxdepth 1 -type f -print | sort
+
+      - name: Upload NeoCanvas manual screenshot pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-Manual-Screenshot-Pack-${{ github.sha }}
+          path: artifacts/manual-screenshots/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload screenshot test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-Manual-Screenshot-Diagnostics-${{ github.sha }}
+          path: |
+            artifacts/NeoCanvas-Manual-Screenshots.xcresult
+            artifacts/manual-screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Shut down screenshot Simulator
+        if: always()
+        shell: bash
+        env:
+          UDID: ${{ steps.manual_ipad.outputs.udid }}
         run: |
           if [ -n "$UDID" ]; then
             xcrun simctl shutdown "$UDID" 2>/dev/null || true
