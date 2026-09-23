@@ -43,7 +43,7 @@ class StrokeInterpolatorTest {
 
     @Test
     fun built_in_catalog_preserves_the_original_brushes_and_dry_paint() {
-        assertEquals(181, BuiltInBrushes.all.size)
+        assertEquals(211, BuiltInBrushes.all.size)
         assertEquals(BuiltInBrushes.brushes, BuiltInBrushes.all)
         assertEquals(BrushMode.ERASE, BuiltInBrushes.eraser.mode)
     }
