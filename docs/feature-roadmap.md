@@ -43,3 +43,6 @@ NeoCanvas 1.0 is release-candidate quality only when all of the following remain
 ## After 1.0
 
 Post-1.0 work should be driven by customer value and measured product feedback rather than delaying the first commercial release. Candidates include animation/time-lapse, multipage sketchbooks, additional vector tooling, richer colour management and separately scoped 3D workflows.
+# Brush packs
+
+NeoCanvas now includes versioned image-stamp brushes, secure `.neobrushpack` import/export, iPad Files integration, and the free 18-brush Neo Nature Studio landscape collection. Future pack work may add more free first-party collections; paid packs and StoreKit unlocks remain out of scope for the first release.
