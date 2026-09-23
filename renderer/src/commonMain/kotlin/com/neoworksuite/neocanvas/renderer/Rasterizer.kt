@@ -75,11 +75,14 @@ object Rasterizer {
                 )
                 val mirrored = linkedSetOf(variedPoint)
                 if (symmetry == DrawingSymmetry.Vertical || symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(x = canvasWidth - variedPoint.x)
+                    mirrored += variedPoint.copy(x = canvasWidth - 1f - variedPoint.x)
                 if (symmetry == DrawingSymmetry.Horizontal || symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(y = canvasHeight - variedPoint.y)
+                    mirrored += variedPoint.copy(y = canvasHeight - 1f - variedPoint.y)
                 if (symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(x = canvasWidth - variedPoint.x, y = canvasHeight - variedPoint.y)
+                    mirrored += variedPoint.copy(
+                        x = canvasWidth - 1f - variedPoint.x,
+                        y = canvasHeight - 1f - variedPoint.y,
+                    )
                 mirrored.forEach { sample ->
                     stamp(::tile, layerId, sample, color, size, opacity, mode, canvasWidth, canvasHeight,
                         acceptsPixel, brush, alphaLocked, assetResolver, stampIndex, subStamp)
@@ -162,7 +165,7 @@ object Rasterizer {
                     (noise01(stampIndex, subStamp, 239) * 2f - 1f) * stampSpec.angleJitter * 3.1415927f
             else -> (stampSpec?.angleDegrees ?: 0f) / 180f * 3.1415927f
         }
-        val maskSampler = shapeAsset?.let { StampMaskSampler(it, stampSpec!!.scaleX, stampSpec.scaleY, stampAngle) }
+        val maskSampler = shapeAsset?.let { StampMaskSampler(it, stampSpec.scaleX, stampSpec.scaleY, stampAngle) }
         val stampBoundScale = stampSpec?.let { max(it.scaleX, it.scaleY) } ?: 1f
         val boundRadius = if (maskSampler != null) radius * stampBoundScale * 1.414214f
         else if (brush?.tip == BrushTip.Bark && brush.dynamics.rotation > 0f) {
