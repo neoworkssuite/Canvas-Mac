@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -278,17 +279,17 @@ private fun StudioColourButton(state: EditorState) {
                 .semantics { contentDescription = "Open Colour Studio" },
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                Modifier.size(32.dp)
-                    .border(
-                        if (active) 3.dp else 2.dp,
-                        if (active) NeoCanvasColors.accent else NeoCanvasColors.paper,
-                        CircleShape,
-                    )
-                    .padding(3.dp)
-                    .clip(CircleShape)
-                    .background(state.color),
-            )
+            Canvas(Modifier.size(36.dp)) {
+                val ring = Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red))
+                drawCircle(ring, radius = size.minDimension * .46f, style = Stroke(4.dp.toPx()))
+                drawCircle(state.color, radius = size.minDimension * .28f)
+                drawCircle(if (active) NeoCanvasColors.accent else NeoCanvasColors.paper,
+                    radius = size.minDimension * .29f, style = Stroke(if (active) 2.dp.toPx() else 1.dp.toPx()))
+                drawCircle(state.secondaryColor, radius = size.minDimension * .13f,
+                    center = Offset(size.width * .76f, size.height * .76f))
+                drawCircle(NeoCanvasColors.paper, radius = size.minDimension * .14f,
+                    center = Offset(size.width * .76f, size.height * .76f), style = Stroke(1.dp.toPx()))
+            }
         }
     }
 }

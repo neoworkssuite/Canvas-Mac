@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,19 +59,11 @@ internal val starterColourPalettes = listOf(
     StarterColourPalette("Neo Neon", listOf("#07111E", "#00E5FF", "#2563FF", "#7C3AED", "#D946EF", "#FF2D8D", "#FF8A00", "#D9FF00")),
 )
 
-private enum class ColourStudioMode(val label: String) {
-    Disc("DISC"),
-    Classic("CLASSIC"),
-    Harmony("HARMONY"),
-    Value("VALUE"),
-    Palettes("PALETTES"),
-}
-
 private enum class ValueMode { RGB, HSB, Hex }
 
 @Composable
 fun ColorPanel(state: EditorState, modifier: Modifier = Modifier) {
-    var mode by remember { mutableStateOf(ColourStudioMode.Disc) }
+    var mode by remember(state.colourStudioMode) { mutableStateOf(state.colourStudioMode) }
     var hsv by remember { mutableStateOf(colorHsv(state.color)) }
 
     LaunchedEffect(state.color) {
@@ -114,7 +107,7 @@ fun ColorPanel(state: EditorState, modifier: Modifier = Modifier) {
                         .height(34.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (mode == option) NeoCanvasColors.accent else Color.Transparent)
-                        .clickable { mode = option },
+                        .clickable { mode = option; state.setColourStudioMode(option) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -180,8 +173,9 @@ private fun ColourRole(label: String, color: Color, active: Boolean, onClick: ()
 
 @Composable
 private fun DiscMode(hsv: Hsv, choose: (Hsv) -> Unit) {
+    val zoom = remember { ColourDiscZoomState() }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        ColourWheel(hsv, Modifier.size(210.dp), choose)
+        ColourWheel(hsv, Modifier.size(190.dp), zoom, choose)
         Text(
             "H " + hsv.hue.toInt() + "°   S " + (hsv.saturation * 100).toInt() + "%   B " + (hsv.value * 100).toInt() + "%",
             color = NeoCanvasColors.muted,
@@ -245,7 +239,7 @@ private fun HarmonyMode(hsv: Hsv, choose: (Hsv) -> Unit) {
             }
         }
 
-        ColourWheel(hsv, Modifier.size(184.dp), choose)
+        ColourWheel(hsv, Modifier.size(174.dp), ColourDiscZoomState(), choose, harmony)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             colours.forEach { colour ->
@@ -603,7 +597,13 @@ private fun ColourValueSlider(label: String, value: Float, brush: Brush, onChang
 }
 
 @Composable
-private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) -> Unit) {
+private fun ColourWheel(
+    hsv: Hsv,
+    modifier: Modifier = Modifier,
+    zoomState: ColourDiscZoomState = ColourDiscZoomState(),
+    onHsv: (Hsv) -> Unit,
+    harmony: ColourHarmony? = null,
+) {
     val currentOnHsv by rememberUpdatedState(onHsv)
     Canvas(
         modifier.semantics {
@@ -634,7 +634,9 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
                     )
                 }
             }
-            detectTapGestures { select(it) }
+            detectTapGestures(onDoubleTap = { currentOnHsv(snapColourDisc(hsv)) }, onTap = { select(it) })
+        }.pointerInput(Unit) {
+            detectTransformGestures { _, _, zoom, _ -> zoomState.zoomBy(zoom) }
         }.pointerInput(hsv) {
             fun select(position: Offset) {
                 val center = Offset(size.width / 2f, size.height / 2f)
@@ -667,13 +669,14 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
         drawCircle(Brush.sweepGradient(hues), radius * .96f)
         drawCircle(NeoCanvasColors.panel, radius * .67f)
         val discRadius = radius * .62f
+        val fieldRadius = (discRadius * zoomState.scale).coerceAtMost(radius * 1.5f)
         drawCircle(
             Brush.horizontalGradient(
                 listOf(Color.White, Color.hsv(hsv.hue, 1f, 1f)),
                 startX = center.x - discRadius,
                 endX = center.x + discRadius,
             ),
-            discRadius,
+            fieldRadius,
             center,
         )
         drawCircle(
@@ -682,7 +685,7 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
                 startY = center.y - discRadius,
                 endY = center.y + discRadius,
             ),
-            discRadius,
+            fieldRadius,
             center,
         )
         val hueAngle = hsv.hue * kotlin.math.PI.toFloat() / 180f
@@ -700,5 +703,12 @@ private fun ColourWheel(hsv: Hsv, modifier: Modifier = Modifier, onHsv: (Hsv) ->
         drawCircle(Color.Black, 7.dp.toPx(), svMarker)
         drawCircle(Color.White, 4.5.dp.toPx(), svMarker)
         drawCircle(Color.hsv(hsv.hue, hsv.saturation, hsv.value), 3.dp.toPx(), svMarker)
+        harmony?.let { mode ->
+            harmonyReticlePositions(hsv.hue, mode).forEach { marker ->
+                val point = Offset(center.x + marker.x * radius * .815f, center.y + marker.y * radius * .815f)
+                drawCircle(Color.Black, 5.dp.toPx(), point)
+                drawCircle(Color.White, 3.dp.toPx(), point, style = Stroke(1.2.dp.toPx()))
+            }
+        }
     }
 }

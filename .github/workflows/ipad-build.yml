@@ -50,6 +50,14 @@ jobs:
             :renderer:desktopTest \
             :ui:desktopTest
 
+      - name: Upload Neo Nature Studio brush pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: Neo-Nature-Studio-Brush-Pack
+          path: brushes/build/brush-packs/Neo-Nature-Studio.neobrushpack
+          if-no-files-found: error
+          retention-days: 30
+
   ipad-build:
     name: Full iPad validation
     needs: fast-validation
