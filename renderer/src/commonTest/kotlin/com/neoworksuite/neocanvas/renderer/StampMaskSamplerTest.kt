@@ -40,7 +40,7 @@ class StampMaskSamplerTest {
         fun render(symmetry: DrawingSymmetry): ByteArray {
             val store = TileStore()
             store.applyPatch(Rasterizer.stroke(
-                store, "a", listOf(RasterPoint(20f, 40f), RasterPoint(60f, 40f)),
+                store, "a", listOf(RasterPoint(20.5f, 40.5f), RasterPoint(59.5f, 40.5f)),
                 RasterColor(30, 60, 90), 18f, 1f, BrushMode.PAINT, 80, 80,
                 brush = brush, symmetry = symmetry, assetResolver = resolver,
             ))

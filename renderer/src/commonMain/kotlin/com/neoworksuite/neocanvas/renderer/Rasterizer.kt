@@ -75,13 +75,13 @@ object Rasterizer {
                 )
                 val mirrored = linkedSetOf(variedPoint)
                 if (symmetry == DrawingSymmetry.Vertical || symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(x = canvasWidth - 1f - variedPoint.x)
+                    mirrored += variedPoint.copy(x = canvasWidth - variedPoint.x)
                 if (symmetry == DrawingSymmetry.Horizontal || symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(y = canvasHeight - 1f - variedPoint.y)
+                    mirrored += variedPoint.copy(y = canvasHeight - variedPoint.y)
                 if (symmetry == DrawingSymmetry.Both)
                     mirrored += variedPoint.copy(
-                        x = canvasWidth - 1f - variedPoint.x,
-                        y = canvasHeight - 1f - variedPoint.y,
+                        x = canvasWidth - variedPoint.x,
+                        y = canvasHeight - variedPoint.y,
                     )
                 mirrored.forEach { sample ->
                     stamp(::tile, layerId, sample, color, size, opacity, mode, canvasWidth, canvasHeight,
