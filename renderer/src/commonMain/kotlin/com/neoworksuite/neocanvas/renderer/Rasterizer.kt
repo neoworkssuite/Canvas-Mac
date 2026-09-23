@@ -87,9 +87,11 @@ object Rasterizer {
     ): List<RasterPoint> {
         val configured = size * (brush?.let { it.spacing / it.baseSize } ?: .20f)
         val textured = brush?.let {
-            it.tip in setOf(BrushTip.Spray, BrushTip.Chalk, BrushTip.DryPaint, BrushTip.Bristle,
-                BrushTip.Water, BrushTip.Leaf, BrushTip.Grass, BrushTip.Bark) ||
-                it.dynamics.scatter > .2f || it.dynamics.grain > .4f || it.dynamics.wetMix > .5f
+            it.categoryId !in setOf("pencils", "pens") && (
+                it.tip in setOf(BrushTip.Spray, BrushTip.Chalk, BrushTip.DryPaint, BrushTip.Bristle,
+                    BrushTip.Water, BrushTip.Leaf, BrushTip.Grass, BrushTip.Bark) ||
+                    it.dynamics.scatter > .2f || it.dynamics.grain > .4f || it.dynamics.wetMix > .5f
+                )
         } == true
         // Large textured tips cover a broad area. A proportional floor avoids restamping almost
         // identical areas while preserving the dense sampling used by precision pens and pencils.

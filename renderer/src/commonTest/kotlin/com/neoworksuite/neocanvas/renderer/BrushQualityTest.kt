@@ -71,6 +71,21 @@ class BrushQualityTest {
         assertTrue(plannedStrokeStampCount(points, 120f, textured) <= 45)
         assertTrue(plannedStrokeStampCount(points, 6f, precision) > 100)
     }
+
+    @Test fun pencil_and_pen_presets_keep_their_precision_spacing_at_large_sizes() {
+        val points = listOf(RasterPoint(0f, 20f), RasterPoint(1_000f, 20f))
+        val precisionPencil = BuiltInBrushes.inCategory("pencils").first { it.name == "Precision Pencil" }
+        val leaf = precisionPencil.copy(
+            categoryId = "foliage",
+            tip = BrushTip.Leaf,
+            dynamics = BrushDynamics(grain = .5f, scatter = .6f, rotation = .8f),
+        )
+
+        assertTrue(
+            plannedStrokeStampCount(points, 120f, precisionPencil) >
+                plannedStrokeStampCount(points, 120f, leaf),
+        )
+    }
     private fun paint(points: List<RasterPoint>, brush: BrushDefinition): ByteArray {
         val store = TileStore()
         store.applyPatch(Rasterizer.stroke(store, "a", points, RasterColor(20, 40, 60),
