@@ -89,6 +89,11 @@ interface EditorFileActions {
     fun savePalette(colors: List<String>): SaveResult = SaveResult.Failure("Palette storage is unavailable in this host.")
     fun loadBrushLibrary(): ByteArray? = null
     fun saveBrushLibrary(bytes: ByteArray): SaveResult = SaveResult.Failure("Brush library storage is unavailable in this host.")
+    fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
+        onResult(Result.failure(IllegalStateException("Brush import is unavailable in this host.")))
+    }
+    fun shareBrushFile(name: String, bytes: ByteArray): SaveResult =
+        SaveResult.Failure("Brush sharing is unavailable in this host.")
     fun openExternalUrl(url: String): Boolean = false
     fun openDocumentFile(onResult: (Result<LoadResult?>) -> Unit) {
         onResult(runCatching { open() })

@@ -44,6 +44,37 @@
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
 
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.neoworksuite.neocanvas.brush</string>
+            <key>UTTypeDescription</key><string>NeoCanvas Brush</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.content</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>neobrush</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.neoworksuite.neocanvas.brushpack</string>
+            <key>UTTypeDescription</key><string>NeoCanvas Brush Pack</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.content</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>neobrushpack</string></array></dict>
+        </dict>
+    </array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key><string>NeoCanvas Brush</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Owner</string>
+            <key>LSItemContentTypes</key><array><string>com.neoworksuite.neocanvas.brush</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>NeoCanvas Brush Pack</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Owner</string>
+            <key>LSItemContentTypes</key><array><string>com.neoworksuite.neocanvas.brushpack</string></array>
+        </dict>
+    </array>
+
     <key>NSPhotoLibraryUsageDescription</key>
     <string>NeoCanvas uses your photo library only when you choose an image to import onto the canvas.</string>
 

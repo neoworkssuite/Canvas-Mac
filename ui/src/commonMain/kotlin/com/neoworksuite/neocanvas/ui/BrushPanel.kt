@@ -23,6 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,7 +75,11 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
         )
     }
     val pad = remember { BrushTestPadState() }
+    val packManager = remember(library) { BrushPackManager(library) }
     var page by remember { mutableStateOf(BrushPanelPage.Library) }
+    var addMenu by remember { mutableStateOf(false) }
+
+    BrushPackInstallSheet(packManager) { state.statusMessage = "Brush pack installed" }
 
     if (page == BrushPanelPage.Studio) {
         BrushStudio(
@@ -87,7 +93,26 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
     }
 
     Column(modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        InspectorHeading("BRUSHES", BuiltInBrushes.paintBrushes.size.toString() + " brushes")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            BoxWithConstraints(Modifier.weight(1f)) { InspectorHeading("BRUSHES", library.allBrushes.size.toString() + " brushes") }
+            BoxWithConstraints {
+                TextButton(onClick = { addMenu = true }, modifier = Modifier.semantics { contentDescription = "Add or import brush" }) { Text("＋") }
+                DropdownMenu(addMenu, { addMenu = false }, containerColor = NeoCanvasColors.panelRaised) {
+                    DropdownMenuItem(text = { Text("Import Brush or Pack") }, onClick = {
+                        addMenu = false
+                        state.openBrushFile { result -> result.onSuccess { item ->
+                            if (item != null) {
+                                if (item.name.endsWith(".neobrushpack", true)) packManager.preview(item.bytes)
+                                else runCatching { library.importBrush(item.bytes) }
+                                    .onSuccess { state.statusMessage = "Imported brush: ${it.name}" }
+                                    .onFailure { state.statusMessage = "This brush could not be opened" }
+                            }
+                        }.onFailure { state.statusMessage = it.message ?: "Brush import failed" } }
+                    })
+                    DropdownMenuItem(text = { Text("Create Brush") }, onClick = { addMenu = false; page = BrushPanelPage.Studio })
+                }
+            }
+        }
         OutlinedTextField(
             value = library.query,
             onValueChange = { library.query = it },

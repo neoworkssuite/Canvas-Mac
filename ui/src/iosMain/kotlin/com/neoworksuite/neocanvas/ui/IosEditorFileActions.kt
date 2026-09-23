@@ -38,6 +38,7 @@ import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfFile
 import platform.Foundation.writeToFile
 import platform.UIKit.UIApplication
+import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIImage
 import platform.UIKit.UIImagePickerController
 import platform.UIKit.UIDocumentPickerDelegateProtocol
@@ -72,6 +73,7 @@ internal class IosEditorFileActions(
     private var activeImagePickerDelegate: ImagePickerDelegate? = null
     private var activePsdPickerDelegate: PsdPickerDelegate? = null
     private var activeNeoCanvasPickerDelegate: NeoCanvasPickerDelegate? = null
+    private var activeBrushPickerDelegate: BrushFilePickerDelegate? = null
     private var currentDocumentName: String? = null
 
     private val documentsRoot: String
@@ -105,6 +107,35 @@ internal class IosEditorFileActions(
     override val supportsTiffExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
     override val supportsUpdateChecks: Boolean = true
+
+    override fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
+        val host = presenter()
+        if (host == null) {
+            onResult(Result.failure(IllegalStateException("The iPad file picker is not ready yet.")))
+            return
+        }
+        val picker = UIDocumentPickerViewController(
+            documentTypes = listOf("com.neoworksuite.neocanvas.brush", "com.neoworksuite.neocanvas.brushpack"),
+            inMode = UIDocumentPickerMode.UIDocumentPickerModeImport,
+        ).apply { allowsMultipleSelection = false; modalPresentationStyle = UIModalPresentationFullScreen }
+        val delegate = BrushFilePickerDelegate(onResult) { activeBrushPickerDelegate = null }
+        activeBrushPickerDelegate = delegate
+        picker.delegate = delegate
+        host.presentViewController(picker, animated = true, completion = null)
+    }
+
+    override fun shareBrushFile(name: String, bytes: ByteArray): SaveResult {
+        val host = presenter() ?: return SaveResult.Failure("The iPad share sheet is not ready yet.")
+        if (!(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)))
+            return SaveResult.Failure("Use a NeoCanvas brush filename.")
+        ensureDirectory(exportDirectory)
+        val safeName = name.substringAfterLast('/').substringAfterLast('\\')
+        val path = join(exportDirectory, safeName)
+        if (!writeBytes(path, bytes)) return SaveResult.Failure("Could not prepare the brush file.")
+        val url = NSURL.fileURLWithPath(path)
+        host.presentViewController(UIActivityViewController(listOf(url), null), animated = true, completion = null)
+        return SaveResult.Success
+    }
 
     init {
         ensureDirectory(libraryDirectory)
@@ -866,6 +897,29 @@ private class NeoCanvasPickerDelegate(
         onResult(result)
         onFinished()
     }
+}
+
+private class BrushFilePickerDelegate(
+    private val onResult: (Result<PendingBrushImport?>) -> Unit,
+    private val onFinished: () -> Unit,
+) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+        controller.dismissViewControllerAnimated(true, null)
+        if (url == null) return finish(Result.failure(IllegalStateException("No brush file was selected.")))
+        finish(runCatching {
+            val path = url.path ?: error("iPadOS could not resolve the selected brush path.")
+            val name = path.substringAfterLast('/')
+            require(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)) { "Choose a NeoCanvas brush or brush pack." }
+            val data = NSData.dataWithContentsOfFile(path) ?: error("iPadOS could not read the selected brush file.")
+            require(data.length <= 25uL * 1024uL * 1024uL) { "This brush file is larger than 25 MiB." }
+            PendingBrushImport(name, data.toByteArray())
+        })
+    }
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+        controller.dismissViewControllerAnimated(true, null); finish(Result.success(null))
+    }
+    private fun finish(result: Result<PendingBrushImport?>) { onResult(result); onFinished() }
 }
 
 private class PsdPickerDelegate(

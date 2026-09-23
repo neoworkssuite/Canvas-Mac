@@ -2766,6 +2766,15 @@ class EditorState(
         }
     }
 
+    fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) = fileActions.openBrushFile(onResult)
+
+    fun shareBrushFile(name: String, bytes: ByteArray) {
+        when (val result = fileActions.shareBrushFile(name, bytes)) {
+            SaveResult.Success -> statusMessage = "Brush file ready to share"
+            is SaveResult.Failure -> statusMessage = result.message
+        }
+    }
+
     fun addPaletteColor() {
         val hex = colorHex(color)
         if (hex in palette) { statusMessage = "Colour already in palette"; return }
