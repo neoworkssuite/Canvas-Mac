@@ -27,8 +27,33 @@ REQUIRED_SCREENSHOTS = (
 
 def collect_exported_attachments(attachments: Path, directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
+    manifest_entries: list[dict] = []
+    manifest_path = attachments / "manifest.json"
+    if manifest_path.is_file():
+        def visit(value: object) -> None:
+            if isinstance(value, dict):
+                if "exportedFileName" in value and "suggestedHumanReadableName" in value:
+                    manifest_entries.append(value)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(json.loads(manifest_path.read_text(encoding="utf-8")))
+
     for name in REQUIRED_SCREENSHOTS:
         matches = [path for path in attachments.rglob(name) if path.is_file()]
+        if not matches:
+            stem = Path(name).stem
+            exported_names = [
+                str(entry["exportedFileName"])
+                for entry in manifest_entries
+                if str(entry["suggestedHumanReadableName"]).startswith(stem + "_0_")
+                and str(entry["suggestedHumanReadableName"]).endswith(".png")
+            ]
+            matches = [attachments / exported for exported in exported_names]
+            matches = [path for path in matches if path.is_file()]
         if len(matches) > 1:
             raise ValueError(f"Found duplicate exported attachments named {name}")
         if matches:

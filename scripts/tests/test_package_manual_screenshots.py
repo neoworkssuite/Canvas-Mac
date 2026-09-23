@@ -53,6 +53,34 @@ class PackageManualScreenshotsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 MODULE.collect_exported_attachments(root / "attachments", root / "pack")
 
+    def test_collect_exported_attachments_uses_xcresult_manifest_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            attachments = root / "attachments"
+            output = root / "pack"
+            attachments.mkdir()
+            manifest_items = []
+            for index, name in enumerate(MODULE.REQUIRED_SCREENSHOTS):
+                exported = f"exported-{index}.png"
+                write_png(attachments / exported)
+                stem = Path(name).stem
+                manifest_items.append(
+                    {
+                        "exportedFileName": exported,
+                        "suggestedHumanReadableName": f"{stem}_0_TEST-{index}.png",
+                    }
+                )
+            (attachments / "manifest.json").write_text(
+                json.dumps({"tests": [{"attachments": manifest_items}]}), encoding="utf-8"
+            )
+
+            MODULE.collect_exported_attachments(attachments, output)
+
+            self.assertEqual(
+                sorted(path.name for path in output.glob("*.png")),
+                sorted(MODULE.REQUIRED_SCREENSHOTS),
+            )
+
     def test_build_pack_rejects_a_missing_required_screen(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
