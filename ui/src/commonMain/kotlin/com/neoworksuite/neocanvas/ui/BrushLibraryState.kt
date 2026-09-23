@@ -10,6 +10,8 @@ import com.neoworksuite.neocanvas.brushes.BuiltInBrushes
 import com.neoworksuite.neocanvas.brushes.BrushCategory
 import com.neoworksuite.neocanvas.brushes.BrushMode
 import com.neoworksuite.neocanvas.brushes.NeoBrushCodec
+import com.neoworksuite.neocanvas.brushes.NeoBrushPack
+import com.neoworksuite.neocanvas.brushes.NeoBrushPackCodec
 
 enum class BrushShelf { All, Favourites, Recent, Category }
 
@@ -22,16 +24,19 @@ class BrushLibraryState(
     private val favouriteIds = mutableStateListOf<String>()
     private val recentIds = mutableStateListOf<String>()
     val customBrushes = mutableStateListOf<BrushDefinition>()
+    val installedPacks = mutableStateListOf<InstalledBrushPack>()
 
     init {
         customBrushes.addAll(restored?.brushes.orEmpty())
+        installedPacks.addAll(restored?.packs.orEmpty().map(::InstalledBrushPack))
         favouriteIds.addAll(restored?.favourites.orEmpty().filter { find(it) != null })
         recentIds.addAll(restored?.recent.orEmpty().filter { find(it) != null }.take(12))
     }
 
     val categories: List<BrushCategory>
-        get() = catalog.categories + if (customBrushes.isNotEmpty()) listOf(BrushCategory("custom", "Custom")) else emptyList()
-    val allBrushes: List<BrushDefinition> get() = catalog.paintBrushes + customBrushes
+        get() = catalog.categories + installedPacks.map { BrushCategory(it.pack.manifest.id, it.pack.manifest.name) } +
+            if (customBrushes.isNotEmpty()) listOf(BrushCategory("custom", "Custom")) else emptyList()
+    val allBrushes: List<BrushDefinition> get() = catalog.paintBrushes + customBrushes + installedPacks.flatMap { it.pack.brushes.values }
 
     var query: String by mutableStateOf("")
     var shelf: BrushShelf by mutableStateOf(BrushShelf.Category)
@@ -105,7 +110,41 @@ class BrushLibraryState(
 
     fun exportBrush(id: String): ByteArray? = customBrushes.firstOrNull { it.id == id }?.let(NeoBrushCodec::encode)
 
+    fun installPack(pack: NeoBrushPack): PackInstallResult {
+        val currentIndex = installedPacks.indexOfFirst { it.pack.manifest.id == pack.manifest.id }
+        if (currentIndex < 0) {
+            installedPacks += InstalledBrushPack(pack)
+            persist()
+            return PackInstallResult.Installed
+        }
+        val current = installedPacks[currentIndex].pack
+        require(current.manifest.author == pack.manifest.author) { "A different author already uses this pack ID." }
+        val comparison = compareVersions(pack.manifest.version, current.manifest.version)
+        if (comparison == 0) return PackInstallResult.Unchanged
+        require(comparison > 0) { "An installed pack cannot be replaced by an older version." }
+        installedPacks[currentIndex] = InstalledBrushPack(pack)
+        favouriteIds.removeAll { id -> find(id) == null }
+        recentIds.removeAll { id -> find(id) == null }
+        persist()
+        return PackInstallResult.Replaced
+    }
+
+    fun removePack(id: String): Boolean {
+        val removed = installedPacks.firstOrNull { it.pack.manifest.id == id } ?: return false
+        installedPacks.remove(removed)
+        val ids = removed.pack.brushes.keys
+        favouriteIds.removeAll { it in ids }
+        recentIds.removeAll { it in ids }
+        if (selectedCategoryId == id) selectCategory(catalog.categories.first().id)
+        persist()
+        return true
+    }
+
+    fun exportPack(id: String): ByteArray? = installedPacks.firstOrNull { it.pack.manifest.id == id }
+        ?.pack?.let(NeoBrushPackCodec::encode)
+
     private fun find(id: String): BrushDefinition? = catalog.find(id) ?: customBrushes.firstOrNull { it.id == id }
+        ?: installedPacks.firstNotNullOfOrNull { it.pack.brushes[id] }
 
     private fun uniqueId(base: String): String {
         if (find(base) == null) return base
@@ -117,7 +156,13 @@ class BrushLibraryState(
     private fun slug(name: String): String = name.lowercase().map { if (it.isLetterOrDigit()) it else '-' }.joinToString("")
         .replace(Regex("-+"), "-").trim('-').ifEmpty { "brush" }
 
-    private fun persist() = onPersist(BrushLibrarySnapshotCodec.encode(favouriteIds, recentIds, customBrushes))
+    private fun persist() = onPersist(BrushLibrarySnapshotCodec.encode(favouriteIds, recentIds, customBrushes, installedPacks.map { it.pack }))
+
+    private fun compareVersions(a: String, b: String): Int {
+        val left = a.split('.').map { it.toInt() }; val right = b.split('.').map { it.toInt() }
+        repeat(3) { if (left[it] != right[it]) return left[it].compareTo(right[it]) }
+        return 0
+    }
 
     private fun show(next: BrushShelf) {
         query = ""
@@ -126,15 +171,18 @@ class BrushLibraryState(
     }
 }
 
-private data class BrushLibrarySnapshot(val favourites: List<String>, val recent: List<String>, val brushes: List<BrushDefinition>)
+private data class BrushLibrarySnapshot(
+    val favourites: List<String>, val recent: List<String>, val brushes: List<BrushDefinition>, val packs: List<NeoBrushPack>,
+)
 
 private object BrushLibrarySnapshotCodec {
-    private const val HEADER = "NEOCANVAS_BRUSH_LIBRARY=1"
+    private const val HEADER_V1 = "NEOCANVAS_BRUSH_LIBRARY=1"
+    private const val HEADER_V2 = "NEOCANVAS_BRUSH_LIBRARY=2"
     private const val START = "---BRUSH---"
     private const val END = "---END---"
 
-    fun encode(favourites: List<String>, recent: List<String>, brushes: List<BrushDefinition>): ByteArray = buildString {
-        appendLine(HEADER)
+    fun encode(favourites: List<String>, recent: List<String>, brushes: List<BrushDefinition>, packs: List<NeoBrushPack>): ByteArray = buildString {
+        appendLine(HEADER_V2)
         favourites.forEach { append("favourite=").appendLine(it) }
         recent.forEach { append("recent=").appendLine(it) }
         brushes.forEach { brush ->
@@ -142,15 +190,17 @@ private object BrushLibrarySnapshotCodec {
             append(NeoBrushCodec.encode(brush).decodeToString())
             appendLine(END)
         }
+        packs.forEach { append("pack=").appendLine(NeoBrushPackCodec.encode(it).toHex()) }
     }.encodeToByteArray()
 
     fun decode(bytes: ByteArray): BrushLibrarySnapshot {
         require(bytes.size <= 2_000_000) { "Brush library is too large." }
         val lines = bytes.decodeToString(throwOnInvalidSequence = true).lines()
-        require(lines.firstOrNull() == HEADER) { "Unsupported brush library." }
+        require(lines.firstOrNull() == HEADER_V1 || lines.firstOrNull() == HEADER_V2) { "Unsupported brush library." }
         val favourites = mutableListOf<String>()
         val recent = mutableListOf<String>()
         val brushes = mutableListOf<BrushDefinition>()
+        val packs = mutableListOf<NeoBrushPack>()
         var index = 1
         while (index < lines.size) {
             val line = lines[index++]
@@ -158,6 +208,7 @@ private object BrushLibrarySnapshotCodec {
                 line.isEmpty() -> Unit
                 line.startsWith("favourite=") -> favourites += line.removePrefix("favourite=")
                 line.startsWith("recent=") -> recent += line.removePrefix("recent=")
+                line.startsWith("pack=") -> packs += NeoBrushPackCodec.decode(line.removePrefix("pack=").hexBytes(), "1.0.0")
                 line == START -> {
                     val body = mutableListOf<String>()
                     while (index < lines.size && lines[index] != END) body += lines[index++]
@@ -168,6 +219,12 @@ private object BrushLibrarySnapshotCodec {
             }
         }
         require(brushes.map { it.id }.distinct().size == brushes.size) { "Duplicate custom brush ID." }
-        return BrushLibrarySnapshot(favourites.distinct(), recent.distinct(), brushes)
+        return BrushLibrarySnapshot(favourites.distinct(), recent.distinct(), brushes, packs)
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
+    private fun String.hexBytes(): ByteArray {
+        require(length % 2 == 0 && all { it in "0123456789abcdef" })
+        return ByteArray(length / 2) { substring(it * 2, it * 2 + 2).toInt(16).toByte() }
     }
 }
