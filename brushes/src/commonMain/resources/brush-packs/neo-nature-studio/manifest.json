@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "com.neoworks.nature-studio",
+  "version": "1.0.0",
+  "name": "Neo Nature Studio",
+  "summary": "18 original tree, foliage and landscape brushes for NeoCanvas.",
+  "author": "NeoWorks",
+  "website": "https://neoworkssuite.com/neocanvas/brushes",
+  "licence": "NeoWorks Free Brush Pack Licence",
+  "minimumAppVersion": "1.0.0",
+  "brushCount": 18
+}

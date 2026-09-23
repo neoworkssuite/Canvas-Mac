@@ -5,6 +5,7 @@ data class NeoBrushPack(
     val brushes: LinkedHashMap<String, BrushDefinition>,
     val assets: LinkedHashMap<String, ByteArray> = linkedMapOf(),
     val previews: LinkedHashMap<String, ByteArray> = linkedMapOf(),
+    val artwork: LinkedHashMap<String, ByteArray> = linkedMapOf(),
 ) {
     init {
         require(brushes.keys.toList() == manifest.brushIds)
@@ -18,6 +19,7 @@ object NeoBrushPackCodec {
         pack.manifest.brushIds.forEach { id -> members["brushes/$id.neobrush"] = NeoBrushCodec.encode(pack.brushes.getValue(id)) }
         pack.assets.forEach { (name, bytes) -> members["assets/$name"] = bytes }
         pack.previews.forEach { (name, bytes) -> members["previews/$name"] = bytes }
+        pack.artwork.forEach { (name, bytes) -> members["artwork/$name"] = bytes }
         val entries = members.map { (path, bytes) -> path to Sha256.hex(bytes) }
         members["manifest.json"] = manifestJson(pack.manifest, entries).encodeToByteArray()
         val ordered = linkedMapOf("manifest.json" to members.getValue("manifest.json"))
@@ -36,18 +38,19 @@ object NeoBrushPackCodec {
             if (compareVersions(appVersion, parsed.manifest.minimumAppVersion) < 0)
                 throw PackValidationException(PackValidationError.IncompatibleVersion, "A newer NeoCanvas version is required.")
             val declared = linkedSetOf("manifest.json", "signature/manifest.sha256")
-            val brushes = linkedMapOf<String, BrushDefinition>(); val assets=linkedMapOf<String,ByteArray>();val previews=linkedMapOf<String,ByteArray>()
+            val brushes = linkedMapOf<String, BrushDefinition>(); val assets=linkedMapOf<String,ByteArray>();val previews=linkedMapOf<String,ByteArray>();val artwork=linkedMapOf<String,ByteArray>()
             parsed.entries.forEach { (path, hash) ->
                 val data = members[path] ?: invalid("Declared pack entry is missing.")
                 if (Sha256.hex(data) != hash) checksum(); declared += path
                 when { path.startsWith("brushes/") -> { val brush=NeoBrushCodec.decode(data); brushes[brush.id]=brush }
                     path.startsWith("assets/") -> assets[path.removePrefix("assets/")]=data
                     path.startsWith("previews/") -> previews[path.removePrefix("previews/")]=data
+                    path.startsWith("artwork/") -> artwork[path.removePrefix("artwork/")]=data
                     else -> throw PackValidationException(PackValidationError.UnsupportedEntry,"Unsupported pack entry.") }
             }
             if (members.keys != declared) throw PackValidationException(PackValidationError.UnsupportedEntry,"Pack contains undeclared entries.")
             if (brushes.keys.toList() != parsed.manifest.brushIds) invalid("Brush order does not match the manifest.")
-            return NeoBrushPack(parsed.manifest, LinkedHashMap(brushes), LinkedHashMap(assets), LinkedHashMap(previews))
+            return NeoBrushPack(parsed.manifest, LinkedHashMap(brushes), LinkedHashMap(assets), LinkedHashMap(previews), LinkedHashMap(artwork))
         } catch (e: PackValidationException) { throw e }
         catch (_: IllegalArgumentException) { invalid("Invalid brush pack manifest.") }
     }
