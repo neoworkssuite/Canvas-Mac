@@ -3,6 +3,7 @@ package com.neoworksuite.neocanvas.brushes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class NeoBrushCodecTest {
     @Test
@@ -35,5 +36,36 @@ class NeoBrushCodecTest {
         assertFailsWith<IllegalArgumentException> {
             NeoBrushCodec.decode((encoded + "unknown=value\n").encodeToByteArray())
         }
+    }
+
+    @Test
+    fun v2_round_trip_preserves_stamp_while_v1_stays_stamp_free() {
+        val stamp = BrushStamp(
+            shape = BrushAssetRef("oak-leaf", "0".repeat(64)),
+            grain = BrushAssetRef("paper-grain", "1".repeat(64)),
+            angleMode = StampAngleMode.DirectionJitter,
+            angleDegrees = 12f,
+            angleJitter = .35f,
+            scaleX = 1.25f,
+            scaleY = .7f,
+            spacingRatio = .24f,
+            scatterAlong = .2f,
+            scatterAcross = .55f,
+            stampCount = 4,
+            stampCountJitter = .25f,
+            grainScale = 1.4f,
+            grainMovement = GrainMovement.Canvas,
+            hueJitter = .03f,
+            saturationJitter = .08f,
+            brightnessJitter = .06f,
+            pressureScatter = .5f,
+            pressureStampCount = .7f,
+            startTaper = .2f,
+            endTaper = .15f,
+        )
+        val brush = BuiltInBrushes.ink.copy(version = 2, stamp = stamp)
+
+        assertEquals(brush, NeoBrushCodec.decode(NeoBrushCodec.encode(brush)))
+        assertNull(NeoBrushCodec.decode(NeoBrushCodec.encode(BuiltInBrushes.ink)).stamp)
     }
 }
