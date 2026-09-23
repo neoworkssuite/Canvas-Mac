@@ -86,6 +86,23 @@ class BrushQualityTest {
                 plannedStrokeStampCount(points, 120f, leaf),
         )
     }
+
+    @Test fun rotated_bark_tip_keeps_pixels_in_its_rotated_corners() {
+        val store = TileStore()
+        val brush = BuiltInBrushes.ink.copy(
+            tip = BrushTip.Bark,
+            dynamics = BrushDynamics(rotation = .19901971f, shapeRatio = 1f),
+        )
+        store.applyPatch(
+            Rasterizer.stroke(
+                store, "a", listOf(RasterPoint(100f, 100f)), RasterColor(30, 60, 90),
+                100f, 1f, BrushMode.PAINT, 200, 200, brush = brush,
+            ),
+        )
+
+        val pixels = store.read(TileKey("a", 0, 0))!!
+        assertTrue((pixels[(100 * 256 + 160) * 4 + 3].toInt() and 255) > 0)
+    }
     private fun paint(points: List<RasterPoint>, brush: BrushDefinition): ByteArray {
         val store = TileStore()
         store.applyPatch(Rasterizer.stroke(store, "a", points, RasterColor(20, 40, 60),

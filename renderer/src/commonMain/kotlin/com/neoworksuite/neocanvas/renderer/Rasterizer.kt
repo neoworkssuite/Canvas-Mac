@@ -135,10 +135,13 @@ object Rasterizer {
         val sizePressure = 1f - (1f - pressure) * (brush?.pressureSize ?: 1f)
         val opacityPressure = 1f - (1f - pressure) * (brush?.pressureOpacity ?: 1f)
         val radius = max(.5f, size * sizePressure / 2f)
-        val left = max(0, floor(point.x - radius).toInt())
-        val top = max(0, floor(point.y - radius).toInt())
-        val right = min(canvasWidth - 1, ceil(point.x + radius).toInt())
-        val bottom = min(canvasHeight - 1, ceil(point.y + radius).toInt())
+        val boundRadius = if (brush?.tip == BrushTip.Bark && brush.dynamics.rotation > 0f) {
+            radius * 1.414214f
+        } else radius
+        val left = max(0, floor(point.x - boundRadius).toInt())
+        val top = max(0, floor(point.y - boundRadius).toInt())
+        val right = min(canvasWidth - 1, ceil(point.x + boundRadius).toInt())
+        val bottom = min(canvasHeight - 1, ceil(point.y + boundRadius).toInt())
         if (left > right || top > bottom) return
 
         // Brush dynamics are constant for this stamp. Keep them out of the hot per-pixel loop.
