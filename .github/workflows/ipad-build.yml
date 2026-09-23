@@ -503,9 +503,8 @@ jobs:
         shell: bash
         env:
           UDID: ${{ steps.manual_ipad.outputs.udid }}
-          SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/manual-screenshots
         run: |
-          mkdir -p "$SCREENSHOT_OUTPUT_DIR"
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
           cd iosApp
 
           xcodebuild \
@@ -523,10 +522,17 @@ jobs:
       - name: Verify and index screenshot pack
         env:
           SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/manual-screenshots
+          ATTACHMENT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/manual-screenshot-attachments
           DEVICE_NAME: ${{ steps.manual_ipad.outputs.name }}
         run: |
+          mkdir -p "$ATTACHMENT_OUTPUT_DIR"
+          xcrun xcresulttool export attachments \
+            --path artifacts/NeoCanvas-Manual-Screenshots.xcresult \
+            --output-path "$ATTACHMENT_OUTPUT_DIR"
+
           python3 scripts/package-manual-screenshots.py \
             --directory "$SCREENSHOT_OUTPUT_DIR" \
+            --attachments-directory "$ATTACHMENT_OUTPUT_DIR" \
             --commit "$GITHUB_SHA" \
             --device "$DEVICE_NAME"
 

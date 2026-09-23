@@ -24,6 +24,35 @@ def write_png(path: Path, width: int = 1366, height: int = 1024) -> None:
 
 
 class PackageManualScreenshotsTest(unittest.TestCase):
+    def test_collect_exported_attachments_copies_named_screenshots(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            attachments = root / "attachments" / "nested"
+            output = root / "pack"
+            attachments.mkdir(parents=True)
+            for name in MODULE.REQUIRED_SCREENSHOTS:
+                write_png(attachments / name)
+
+            MODULE.collect_exported_attachments(root / "attachments", output)
+
+            self.assertEqual(
+                sorted(path.name for path in output.glob("*.png")),
+                sorted(MODULE.REQUIRED_SCREENSHOTS),
+            )
+
+    def test_collect_exported_attachments_rejects_duplicate_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "attachments" / "one"
+            second = root / "attachments" / "two"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            write_png(first / MODULE.REQUIRED_SCREENSHOTS[0])
+            write_png(second / MODULE.REQUIRED_SCREENSHOTS[0])
+
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                MODULE.collect_exported_attachments(root / "attachments", root / "pack")
+
     def test_build_pack_rejects_a_missing_required_screen(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

@@ -3,16 +3,9 @@ import XCTest
 
 final class NeoCanvasManualScreenshotTests: XCTestCase {
     private var app: XCUIApplication!
-    private var outputDirectory: URL!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        guard let output = ProcessInfo.processInfo.environment["SCREENSHOT_OUTPUT_DIR"], !output.isEmpty else {
-            throw XCTSkip("SCREENSHOT_OUTPUT_DIR is required for manual screenshot capture")
-        }
-        outputDirectory = URL(fileURLWithPath: output, isDirectory: true)
-        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
-
         XCUIDevice.shared.orientation = .landscapeLeft
         XCUIDevice.shared.appearance = .light
         app = XCUIApplication()
@@ -70,8 +63,6 @@ final class NeoCanvasManualScreenshotTests: XCTestCase {
 
     private func capture(_ filename: String) throws {
         let screenshot = XCUIScreen.main.screenshot()
-        let destination = outputDirectory.appendingPathComponent(filename)
-        try screenshot.pngRepresentation.write(to: destination, options: .atomic)
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = filename
         attachment.lifetime = .keepAlways

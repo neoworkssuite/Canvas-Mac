@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import shutil
 import struct
 from pathlib import Path
 
@@ -22,6 +23,16 @@ REQUIRED_SCREENSHOTS = (
     "09-settings.png",
     "10-kids-activities.png",
 )
+
+
+def collect_exported_attachments(attachments: Path, directory: Path) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in REQUIRED_SCREENSHOTS:
+        matches = [path for path in attachments.rglob(name) if path.is_file()]
+        if len(matches) > 1:
+            raise ValueError(f"Found duplicate exported attachments named {name}")
+        if matches:
+            shutil.copy2(matches[0], directory / name)
 
 
 def png_dimensions(path: Path) -> tuple[int, int]:
@@ -69,9 +80,12 @@ def build_pack(directory: Path, commit: str, device: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--directory", type=Path, required=True)
+    parser.add_argument("--attachments-directory", type=Path)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--device", required=True)
     args = parser.parse_args()
+    if args.attachments_directory:
+        collect_exported_attachments(args.attachments_directory, args.directory)
     build_pack(args.directory, args.commit, args.device)
     return 0
 
