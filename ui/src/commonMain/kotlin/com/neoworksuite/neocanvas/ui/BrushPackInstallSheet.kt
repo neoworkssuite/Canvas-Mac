@@ -29,7 +29,8 @@ fun BrushPackInstallSheet(manager: BrushPackManager, onInstalled: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { manager.install(); onInstalled() }) { Text(manager.primaryActionLabel) } },
+        confirmButton = { TextButton(onClick = { if (manager.install() != null) onInstalled() }) { Text(manager.primaryActionLabel) } },
         dismissButton = { TextButton(onClick = manager::cancel) { Text("Cancel") } },
     )
+    manager.errorMessage?.let { Text(it, color = androidx.compose.ui.graphics.Color(0xFFFF8A8A), fontSize = 10.sp) }
 }

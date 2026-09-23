@@ -32,4 +32,15 @@ class BrushPackLibraryTest {
         assertFalse(state.isFavourite("oak"))
         assertTrue(writes >= 2)
     }
+
+    @Test fun restart_restores_a_pack_larger_than_the_legacy_two_megabyte_snapshot_limit() {
+        var snapshot: ByteArray? = null
+        val artwork = linkedMapOf("example.png" to ByteArray(1_100_000) { (it % 251).toByte() })
+        val large = pack().copy(artwork = artwork)
+        BrushLibraryState(onPersist = { snapshot = it }).installPack(large)
+        assertTrue(snapshot!!.size > 2_000_000)
+        val restored = BrushLibraryState(initialSnapshot = snapshot)
+        assertEquals(1, restored.installedPacks.size)
+        assertContentEquals(artwork.getValue("example.png"), restored.installedPacks.single().pack.artwork.getValue("example.png"))
+    }
 }

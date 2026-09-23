@@ -112,6 +112,11 @@ class BrushLibraryState(
 
     fun installPack(pack: NeoBrushPack): PackInstallResult {
         val currentIndex = installedPacks.indexOfFirst { it.pack.manifest.id == pack.manifest.id }
+        require(catalog.categories.none { it.id == pack.manifest.id }) { "This pack ID is reserved by NeoCanvas." }
+        val otherIds = installedPacks.filterIndexed { index, _ -> index != currentIndex }.flatMap { it.pack.brushes.keys }.toSet()
+        require(pack.brushes.keys.none { catalog.find(it) != null || it in otherIds || customBrushes.any { brush -> brush.id == it } }) {
+            "One or more brush IDs are already in use."
+        }
         if (currentIndex < 0) {
             installedPacks += InstalledBrushPack(pack)
             persist()
@@ -194,7 +199,8 @@ private object BrushLibrarySnapshotCodec {
     }.encodeToByteArray()
 
     fun decode(bytes: ByteArray): BrushLibrarySnapshot {
-        require(bytes.size <= 2_000_000) { "Brush library is too large." }
+        // A valid 25 MiB pack is hex-embedded in the V2 snapshot, so it can exceed 50 MiB.
+        require(bytes.size <= 64 * 1024 * 1024) { "Brush library is too large." }
         val lines = bytes.decodeToString(throwOnInvalidSequence = true).lines()
         require(lines.firstOrNull() == HEADER_V1 || lines.firstOrNull() == HEADER_V2) { "Unsupported brush library." }
         val favourites = mutableListOf<String>()

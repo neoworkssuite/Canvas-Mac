@@ -110,6 +110,23 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
                         }.onFailure { state.statusMessage = it.message ?: "Brush import failed" } }
                     })
                     DropdownMenuItem(text = { Text("Create Brush") }, onClick = { addMenu = false; page = BrushPanelPage.Studio })
+                    val selectedPack = library.installedPacks.firstOrNull { it.pack.manifest.id == library.selectedCategoryId }
+                    if (selectedPack != null) {
+                        DropdownMenuItem(text = { Text("Share ${selectedPack.pack.manifest.name}") }, onClick = {
+                            addMenu = false
+                            val bytes = library.exportPack(selectedPack.pack.manifest.id)
+                            if (bytes != null) state.shareBrushFile(
+                                selectedPack.pack.manifest.name.replace(' ', '-') + ".neobrushpack",
+                                bytes,
+                            )
+                        })
+                        DropdownMenuItem(text = { Text("Remove ${selectedPack.pack.manifest.name}") }, onClick = {
+                            addMenu = false
+                            val fallback = packManager.remove(selectedPack.pack.manifest.id, state.brush.id)
+                            if (fallback != null) state.selectBrush(BuiltInBrushes.pencil)
+                            state.statusMessage = "Removed ${selectedPack.pack.manifest.name}"
+                        })
+                    }
                 }
             }
         }

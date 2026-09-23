@@ -669,7 +669,8 @@ private fun ColourWheel(
         drawCircle(Brush.sweepGradient(hues), radius * .96f)
         drawCircle(NeoCanvasColors.panel, radius * .67f)
         val discRadius = radius * .62f
-        val fieldRadius = (discRadius * zoomState.scale).coerceAtMost(radius * 1.5f)
+        // Zoom changes interaction precision; the SV field remains clipped inside the hue ring.
+        val fieldRadius = discRadius
         drawCircle(
             Brush.horizontalGradient(
                 listOf(Color.White, Color.hsv(hsv.hue, 1f, 1f)),

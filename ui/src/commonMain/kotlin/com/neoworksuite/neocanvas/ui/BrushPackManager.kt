@@ -24,8 +24,8 @@ class BrushPackManager(private val library: BrushLibraryState) {
         errorMessage = null
         pending = runCatching { NeoBrushPackCodec.decode(bytes, "1.0.0") }
             .map { pack ->
-                val official = pack.manifest.author == "NeoWorks" && pack.manifest.id.startsWith("com.neoworks.")
-                BrushPackPreview(pack, if (official) "Official NeoWorks" else "Imported Pack")
+                // Checksums prove integrity, not authorship. Signature verification will enable an official badge later.
+                BrushPackPreview(pack, "Imported Pack")
             }
             .getOrElse {
                 errorMessage = "This brush pack could not be opened. Check the file and try again."
@@ -35,7 +35,12 @@ class BrushPackManager(private val library: BrushLibraryState) {
 
     fun install(): PackInstallResult? {
         val pack = pending?.pack ?: return null
-        return library.installPack(pack).also { pending = null }
+        return runCatching { library.installPack(pack) }
+            .onSuccess { pending = null; errorMessage = null }
+            .getOrElse { error ->
+                errorMessage = error.message ?: "This brush pack could not be installed."
+                null
+            }
     }
 
     fun cancel() { pending = null; errorMessage = null }
