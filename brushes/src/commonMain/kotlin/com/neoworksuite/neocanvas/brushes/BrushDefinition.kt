@@ -53,6 +53,7 @@ data class BrushDefinition(
     val pressureOpacity: Float = 1f,
     val categoryId: String = "basics",
     val dynamics: BrushDynamics = BrushDynamics(),
+    val stamp: BrushStamp? = null,
 ) {
     init {
         require(id.isNotBlank()) { "Brush id must not be blank." }
@@ -61,6 +62,7 @@ data class BrushDefinition(
         require(baseSize.isFinite() && baseSize > 0f) { "Brush base size must be positive and finite." }
         require(opacity.isFinite() && opacity in 0f..1f) { "Brush opacity must be between 0 and 1." }
         require(version > 0) { "Brush version must be positive." }
+        require(stamp == null || version >= 2) { "Image stamps require brush version 2 or newer." }
         require(pressureSize in 0f..1f && pressureOpacity in 0f..1f) { "Pressure response must be between zero and one." }
         require(categoryId.isNotBlank()) { "Brush category id must not be blank." }
     }
