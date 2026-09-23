@@ -232,6 +232,21 @@ Version 1 distribution is free:
 
 Paid packs and StoreKit are explicitly deferred. If later introduced, digital packs offered inside the iPad app use non-consumable In-App Purchases with Restore Purchases and App Store review metadata.
 
+## Colour Studio Upgrade
+
+The existing Disc, Classic, Harmony, Value, and Palettes modes remain, but the primary picker becomes a compact artist-focused control:
+
+- A larger centred disc uses an outer hue ring and inner saturation/brightness field.
+- Pinching expands the inner field for fine control; leaving the panel restores the normal scale.
+- Double-tap snaps to white, black, mid-grey, full saturation, or half saturation according to the nearest snap target.
+- The active reticle compares the hovered colour with the previous colour while dragging.
+- Harmony draws its related reticles directly on the wheel and lets any reticle become primary.
+- The last Colour Studio mode is persisted locally.
+- Existing RGB, HSB, hexadecimal, palette, recent-colour, primary/secondary, and eyedropper workflows remain available.
+- Panel spacing and height are reduced without shrinking touch targets below 44 points.
+
+The toolbar trigger becomes an original NeoCanvas colour-ring glyph with the active colour in its centre and a smaller overlapping secondary-colour swatch. It must remain recognisable in grayscale/high-contrast states and must not resemble a telephone handset or copy another application's artwork.
+
 ## Error Handling
 
 User-visible failures distinguish:
@@ -268,6 +283,7 @@ Parsing errors are sanitized and do not expose device paths. A failed import lea
 - Open In/file-association routing.
 - Install sheet and official/imported badges.
 - Pack appears as a category, survives restart, exports, replaces, and removes.
+- Colour disc pinch expansion, double-tap snapping, harmony reticles, mode persistence, and primary/secondary toolbar glyph.
 - Example canvas exercises all 18 brushes.
 - Simulator screenshots for library, install sheet, installed pack, and example artwork.
 - Physical-device unsigned build and full existing iPad smoke suite.
@@ -289,4 +305,3 @@ Parsing errors are sanitized and do not expose device paths. A failed import lea
 4. Original Neo Nature Studio assets, brush tuning, previews, and example artwork.
 5. Website download page and documentation.
 6. Full iPad validation and downloadable test IPA/artifacts.
-

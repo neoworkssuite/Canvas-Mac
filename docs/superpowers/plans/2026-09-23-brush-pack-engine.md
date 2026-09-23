@@ -440,7 +440,53 @@ git commit -m "Document NeoCanvas brush pack workflows"
 
 Commit the website changes in NeoWebsite with `Publish Neo Nature Studio brush pack`.
 
-### Task 9: Full Release Validation, Pack Artifact, and Test IPA
+### Task 9: Compact Artist Colour Studio and New Colour Glyph
+
+**Files:**
+- Modify: `ui/src/commonMain/kotlin/com/neoworksuite/neocanvas/ui/ColorPanel.kt`
+- Modify: `ui/src/commonMain/kotlin/com/neoworksuite/neocanvas/ui/ColourValues.kt`
+- Modify: `ui/src/commonMain/kotlin/com/neoworksuite/neocanvas/ui/ToolBar.kt`
+- Modify: `ui/src/commonMain/kotlin/com/neoworksuite/neocanvas/ui/EditorState.kt`
+- Modify: `ui/src/commonMain/kotlin/com/neoworksuite/neocanvas/ui/EditorFileActions.kt`
+- Create: `ui/src/commonTest/kotlin/com/neoworksuite/neocanvas/ui/ColourDiscInteractionTest.kt`
+- Modify: `ui/src/commonTest/kotlin/com/neoworksuite/neocanvas/ui/ColorPanelTest.kt`
+
+**Interfaces:**
+- Consumes: existing HSV, harmony, palette, recent, primary/secondary, and inspector persistence behavior.
+- Produces: `snapColourDisc(hsv)`, `ColourDiscZoomState`, persisted `ColourStudioMode`, direct harmony reticles, and `StudioColourGlyph`.
+
+- [ ] **Step 1: Write failing interaction and persistence tests**
+
+Test nearest snap targets for white, black, mid-grey, half/full saturation; zoom clamping and reset; all harmony reticle angles; last-mode restoration; minimum 44-point touch targets; and glyph geometry containing a hue ring, active centre, and offset secondary swatch.
+
+- [ ] **Step 2: Run focused tests and verify RED**
+
+Run: `./gradlew :ui:desktopTest --tests '*ColourDiscInteractionTest' --tests '*ColorPanelTest'`
+
+Expected: compilation or assertions fail because snapping, zoom state, persisted mode, and the new glyph do not exist.
+
+- [ ] **Step 3: Implement model behavior**
+
+Add pure functions for snap selection and harmony reticle positions, a bounded `1f..2.5f` zoom state, and local mode persistence through the existing settings/file-actions mechanism. Preserve the current `Hsv` conversion behavior and make gesture updates atomic.
+
+- [ ] **Step 4: Implement the compact UI and original glyph**
+
+Centre the disc, use pinch input for the inner field, double-tap snapping, split previous/current reticle fill, and direct harmony reticles. Reduce decorative vertical spacing while keeping every interactive target at least 44 dp. Replace the toolbar colour circle with a Canvas-drawn sweep-gradient ring, active centre, and offset secondary swatch; retain the dynamic tooltip and accessibility description.
+
+- [ ] **Step 5: Run the full UI suite**
+
+Run: `./gradlew :ui:desktopTest`
+
+Expected: all tests pass with existing palette, colour history, and toolbar tests unchanged.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add ui
+git commit -m "Upgrade Colour Studio picker and toolbar glyph"
+```
+
+### Task 10: Full Release Validation, Pack Artifact, and Test IPA
 
 **Files:**
 - Modify: `.github/workflows/ci.yml` only if new pack artifacts are not already collected.
