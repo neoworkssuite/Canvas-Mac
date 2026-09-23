@@ -38,6 +38,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.DocumentHistory
@@ -46,6 +47,19 @@ import com.neoworksuite.neocanvas.core.model.LayerPayload
 
 internal enum class InspectorPresentation { Overlay }
 internal fun inspectorPresentation(panel: InspectorPanel): InspectorPresentation = InspectorPresentation.Overlay
+
+internal data class ColourStudioBounds(
+    val widthFraction: Float,
+    val heightFraction: Float,
+    val maxWidth: Dp,
+    val maxHeight: Dp,
+)
+
+internal fun colourStudioBounds(compact: Boolean): ColourStudioBounds = if (compact) {
+    ColourStudioBounds(.94f, .60f, 380.dp, 520.dp)
+} else {
+    ColourStudioBounds(.36f, .66f, 380.dp, 520.dp)
+}
 
 @Composable
 fun rememberEditorState(fileActions: EditorFileActions = UnavailableEditorFileActions): EditorState = remember {
@@ -265,16 +279,18 @@ fun NeoCanvasApp(
                         .heightIn(max = 720.dp)
 
                 InspectorPanel.Colors ->
-                    Modifier.align(overlayAlignment)
-                        .padding(
-                            end = if (compact) 10.dp else 16.dp,
-                            start = if (compact) 10.dp else 0.dp,
-                            bottom = 12.dp,
-                        )
-                        .fillMaxWidth(if (compact) .94f else .40f)
-                        .fillMaxHeight(if (compact) .70f else .82f)
-                        .widthIn(max = 420.dp)
-                        .heightIn(max = 680.dp)
+                    colourStudioBounds(compact).let { bounds ->
+                        Modifier.align(overlayAlignment)
+                            .padding(
+                                end = if (compact) 10.dp else 16.dp,
+                                start = if (compact) 10.dp else 0.dp,
+                                bottom = 12.dp,
+                            )
+                            .fillMaxWidth(bounds.widthFraction)
+                            .fillMaxHeight(bounds.heightFraction)
+                            .widthIn(max = bounds.maxWidth)
+                            .heightIn(max = bounds.maxHeight)
+                    }
 
                 InspectorPanel.Layers ->
                     Modifier.align(overlayAlignment)

@@ -47,6 +47,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
+internal data class StarterColourPalette(val name: String, val colours: List<String>)
+
+internal val paletteSwatchCornerRadius = 6.dp
+
+internal val starterColourPalettes = listOf(
+    StarterColourPalette("Essential", listOf("#111827", "#FFFFFF", "#EF4444", "#F59E0B", "#FDE047", "#22C55E", "#3B82F6", "#8B5CF6")),
+    StarterColourPalette("Portrait", listOf("#3B2118", "#6B3F2A", "#9A6248", "#C98D6B", "#E8B99A", "#F6D7C3", "#A14F5A", "#5E2D38")),
+    StarterColourPalette("Landscape", listOf("#162A46", "#315A7D", "#79A9C2", "#D9E8DC", "#264D36", "#56805C", "#B4A46A", "#76533A")),
+    StarterColourPalette("Neo Neon", listOf("#07111E", "#00E5FF", "#2563FF", "#7C3AED", "#D946EF", "#FF2D8D", "#FF8A00", "#D9FF00")),
+)
+
 private enum class ColourStudioMode(val label: String) {
     Disc("DISC"),
     Classic("CLASSIC"),
@@ -169,7 +180,7 @@ private fun ColourRole(label: String, color: Color, active: Boolean, onClick: ()
 
 @Composable
 private fun DiscMode(hsv: Hsv, choose: (Hsv) -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         ColourWheel(hsv, Modifier.size(210.dp), choose)
         Text(
             "H " + hsv.hue.toInt() + "°   S " + (hsv.saturation * 100).toInt() + "%   B " + (hsv.value * 100).toInt() + "%",
@@ -346,6 +357,20 @@ private fun PalettesMode(state: EditorState) {
             PaletteMenu(state)
         }
 
+        Text("STARTER PALETTES", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .8.sp)
+        starterColourPalettes.forEach { palette ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(palette.name.uppercase(), color = NeoCanvasColors.muted, fontSize = 8.sp, letterSpacing = .5.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    palette.colours.forEach { hex ->
+                        val colour = parseColorHex(hex) ?: Color.Transparent
+                        PaletteSwatch(colour, 32.dp, hex == colorHex(state.color)) { state.color = colour }
+                    }
+                }
+            }
+        }
+
+        Text("SAVED COLOURS", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .8.sp)
         if (state.palette.isEmpty()) {
             Text(
                 "Save the current colour to start your local palette.",
@@ -358,7 +383,7 @@ private fun PalettesMode(state: EditorState) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { hex ->
                         val colour = parseColorHex(hex) ?: Color.Transparent
-                        ColourDot(colour, 36.dp, hex == colorHex(state.color)) { state.color = colour }
+                        PaletteSwatch(colour, 36.dp, hex == colorHex(state.color)) { state.color = colour }
                     }
                 }
             }
@@ -393,7 +418,7 @@ private fun RecentAndPaletteStrip(state: EditorState) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             state.palette.take(8).forEach { hex ->
                 val colour = parseColorHex(hex) ?: Color.Transparent
-                ColourDot(colour, 25.dp, hex == colorHex(state.color)) { state.color = colour }
+                PaletteSwatch(colour, 25.dp, hex == colorHex(state.color)) { state.color = colour }
             }
         }
     }
@@ -408,7 +433,7 @@ private fun RecentRow(state: EditorState, size: androidx.compose.ui.unit.Dp) {
     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         state.recentColors.take(10).forEach { hex ->
             val colour = parseColorHex(hex) ?: Color.Transparent
-            ColourDot(colour, size, hex == colorHex(state.color)) { state.color = colour }
+            PaletteSwatch(colour, size, hex == colorHex(state.color)) { state.color = colour }
         }
     }
 }
@@ -482,6 +507,25 @@ private fun ColourDot(color: Color, size: androidx.compose.ui.unit.Dp, selected:
         if (selected) {
             Canvas(Modifier.size(size * .62f)) {
                 drawCircle(NeoCanvasColors.paper, style = Stroke(1.6.dp.toPx()))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaletteSwatch(color: Color, size: androidx.compose.ui.unit.Dp, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(size).clip(RoundedCornerShape(paletteSwatchCornerRadius)).background(color).clickable(onClick = onClick)
+            .semantics { contentDescription = "Use palette colour " + colorHex(color) },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Canvas(Modifier.size(size * .68f)) {
+                drawRoundRect(
+                    color = NeoCanvasColors.paper,
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                    style = Stroke(1.6.dp.toPx()),
+                )
             }
         }
     }

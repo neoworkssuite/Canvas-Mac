@@ -418,7 +418,7 @@ private fun VerticalRailControl(label: String, value: Float, range: ClosedFloati
             .padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(label, color = NeoCanvasColors.faint, fontSize = 8.sp, letterSpacing = 1.sp)
+        Text(label, color = NeoCanvasColors.faint, fontSize = 7.sp, letterSpacing = .55.sp, maxLines = 1, softWrap = false)
         Box(
             Modifier.padding(top = 4.dp, bottom = 2.dp)
                 .clip(RoundedCornerShape(9.dp))
