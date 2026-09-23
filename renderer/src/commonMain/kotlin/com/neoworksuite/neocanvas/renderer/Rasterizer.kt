@@ -28,6 +28,8 @@ data class RasterColor(val red: Int, val green: Int, val blue: Int) {
  * applied automatically: callers can pair it with one ApplyRasterPatch history command.
  */
 object Rasterizer {
+    private data class SymmetrySample(val point: RasterPoint, val flipX: Boolean, val flipY: Boolean)
+
     fun stroke(
         existing: TileStore,
         layerId: String,
@@ -73,19 +75,22 @@ object Rasterizer {
                     x = movedPoint.x + (noise01(stampIndex, subStamp, 223) * 2f - 1f) * size * along,
                     y = movedPoint.y + (noise01(stampIndex, subStamp, 227) * 2f - 1f) * size * across,
                 )
-                val mirrored = linkedSetOf(variedPoint)
-                if (symmetry == DrawingSymmetry.Vertical || symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(x = canvasWidth - variedPoint.x)
-                if (symmetry == DrawingSymmetry.Horizontal || symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(y = canvasHeight - variedPoint.y)
-                if (symmetry == DrawingSymmetry.Both)
-                    mirrored += variedPoint.copy(
-                        x = canvasWidth - variedPoint.x,
-                        y = canvasHeight - variedPoint.y,
-                    )
+                val mirrored = linkedSetOf(SymmetrySample(variedPoint, flipX = false, flipY = false))
+                if (symmetry == DrawingSymmetry.Vertical || symmetry == DrawingSymmetry.Both) {
+                    val point = variedPoint.copy(x = canvasWidth - variedPoint.x)
+                    if (point != variedPoint) mirrored += SymmetrySample(point, flipX = true, flipY = false)
+                }
+                if (symmetry == DrawingSymmetry.Horizontal || symmetry == DrawingSymmetry.Both) {
+                    val point = variedPoint.copy(y = canvasHeight - variedPoint.y)
+                    if (point != variedPoint) mirrored += SymmetrySample(point, flipX = false, flipY = true)
+                }
+                if (symmetry == DrawingSymmetry.Both) {
+                    val point = variedPoint.copy(x = canvasWidth - variedPoint.x, y = canvasHeight - variedPoint.y)
+                    if (point != variedPoint) mirrored += SymmetrySample(point, flipX = true, flipY = true)
+                }
                 mirrored.forEach { sample ->
-                    stamp(::tile, layerId, sample, color, size, opacity, mode, canvasWidth, canvasHeight,
-                        acceptsPixel, brush, alphaLocked, assetResolver, stampIndex, subStamp)
+                    stamp(::tile, layerId, sample.point, color, size, opacity, mode, canvasWidth, canvasHeight,
+                        acceptsPixel, brush, alphaLocked, assetResolver, stampIndex, subStamp, sample.flipX, sample.flipY)
                 }
             }
         }
@@ -152,6 +157,8 @@ object Rasterizer {
         assetResolver: BrushAssetResolver,
         stampIndex: Int,
         subStamp: Int,
+        flipX: Boolean,
+        flipY: Boolean,
     ) {
         val pressure = point.pressure.coerceIn(.05f, 1f)
         val sizePressure = 1f - (1f - pressure) * (brush?.pressureSize ?: 1f)
@@ -211,7 +218,9 @@ object Rasterizer {
                 else -> ((outerDistance - distance) / (outerDistance - hardness)).coerceIn(0f, 1f)
             }
             val pixelNoise = noise01(x, y, 101)
-            var coverage = maskSampler?.coverage(dx / radius, dy / radius) ?: when (tip) {
+            val maskX = if (flipX) -dx else dx
+            val maskY = if (flipY) -dy else dy
+            var coverage = maskSampler?.coverage(maskX / radius, maskY / radius) ?: when (tip) {
                 BrushTip.Round -> if (brush == null) { if (distance <= 1f) 1f else 0f } else edge
                 BrushTip.SoftRound -> (1f - distance * distance).coerceIn(0f, 1f).let { it * it * it }
                 BrushTip.Flat -> if (abs(rotatedX) <= radius && abs(rotatedY) <= flatHalfHeight) edge else 0f
