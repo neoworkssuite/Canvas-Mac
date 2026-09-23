@@ -23,7 +23,8 @@ object NeoBrushPackCodec {
         val entries = members.map { (path, bytes) -> path to Sha256.hex(bytes) }
         members["manifest.json"] = manifestJson(pack.manifest, entries).encodeToByteArray()
         val ordered = linkedMapOf("manifest.json" to members.getValue("manifest.json"))
-        members.filterKeys { it != "manifest.json" }.forEach(ordered::put)
+        // Keep this explicit: Kotlin/Native does not adapt Map.Entry to LinkedHashMap.put.
+        members.filterKeys { it != "manifest.json" }.forEach { (path, bytes) -> ordered[path] = bytes }
         ordered["signature/manifest.sha256"] = Sha256.hex(ordered.getValue("manifest.json")).encodeToByteArray()
         return ZipStoreCodec.encode(ordered)
     }
