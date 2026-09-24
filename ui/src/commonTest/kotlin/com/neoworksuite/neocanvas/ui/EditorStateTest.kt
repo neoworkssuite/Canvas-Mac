@@ -21,6 +21,36 @@ import kotlin.test.assertTrue
 
 class EditorStateTest {
     @Test
+    fun active_line_geometry_edits_are_single_undoable_commands() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(400, 300)))
+        state.addShapeObject(ShapeKind.Line)
+        val original = state.activeShapeObject!!
+
+        assertTrue(state.setActiveLineLength(300f))
+        assertEquals(300f, lineMetrics(state.activeShapeObject!!).length, .001f)
+        assertTrue(state.undo())
+        assertEquals(original, state.activeShapeObject)
+
+        assertTrue(state.setActiveLineAngle(46f))
+        assertEquals(45f, lineMetrics(state.activeShapeObject!!).angleDegrees, .001f)
+        assertTrue(state.reverseActiveLine())
+        assertTrue(state.undo())
+        assertEquals(45f, lineMetrics(state.activeShapeObject!!).angleDegrees, .001f)
+    }
+
+    @Test
+    fun invalid_active_line_edit_preserves_document_and_history() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(400, 300)))
+        state.addShapeObject(ShapeKind.Line)
+        val original = state.document
+
+        assertFalse(state.setActiveLineLength(Float.NaN))
+        assertEquals(original, state.document)
+        assertTrue(state.undo())
+        assertFalse(state.undo())
+    }
+
+    @Test
     fun closing_brush_library_keeps_selected_brush_active_on_canvas() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
         val selected = com.neoworksuite.neocanvas.brushes.BuiltInBrushes.ink

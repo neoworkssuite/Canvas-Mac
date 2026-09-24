@@ -971,6 +971,30 @@ class EditorState(
         )))
     }
 
+    fun setActiveLineLength(value: Float): Boolean = updateActiveLine { lineWithLength(it, value) }
+
+    fun setActiveLineAngle(value: Float): Boolean = updateActiveLine { lineWithAngle(it, value) }
+
+    fun setActiveLineEndpoint(moveStart: Boolean, x: Float, y: Float): Boolean =
+        updateActiveLine { lineWithEndpoint(it, moveStart, x, y) }
+
+    fun reverseActiveLine(): Boolean = updateActiveLine(::reversedLine)
+
+    private fun updateActiveLine(
+        transform: (LayerPayload.ShapeObject) -> LayerPayload.ShapeObject,
+    ): Boolean {
+        val layer = mutableActiveObjectLayer() ?: return false
+        val payload = layer.payload as? LayerPayload.ShapeObject ?: return false
+        if (payload.kind != ShapeKind.Line) return false
+        val next = transform(payload)
+        if (next == payload) {
+            statusMessage = "Enter a valid line value"
+            return false
+        }
+        execute(UpdateShapeLayer(layer.id, next))
+        return true
+    }
+
     fun removeActiveShapeFill() {
         val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.ShapeObject ?: return
