@@ -7,6 +7,26 @@ import java.nio.file.Files
 import kotlin.test.*
 
 class LocalLibraryTest {
+    @Test fun android_local_versions_workbench_and_deep_layers_round_trip() {
+        val directory = Files.createTempDirectory("neocanvas-history-test").toFile()
+        try {
+            val actions = AndroidEditorFileActions(directory)
+            val document = CanvasDocument.blank(16, 16)
+            assertEquals(SaveResult.Success, actions.createVersionOnBranch("Initial", "Sketch", null, document, emptyMap()))
+            val version = assertNotNull(actions.listVersions(document.id).singleOrNull())
+            assertEquals("Initial", version.label)
+            assertEquals("Sketch", version.branch)
+            assertEquals(16, (actions.loadVersion(document.id, version.id) as LoadResult.Success).document.width)
+            assertEquals(SaveResult.Success, actions.saveWorkbench(document.id, byteArrayOf(1, 2)))
+            assertContentEquals(byteArrayOf(1, 2), actions.loadWorkbench(document.id))
+            assertEquals(SaveResult.Success, actions.saveDormantLayer(document.id, "layer/1", byteArrayOf(3)))
+            assertContentEquals(byteArrayOf(3), actions.loadDormantLayer(document.id, "layer/1"))
+            assertEquals(SaveResult.Success, actions.deleteDormantLayer(document.id, "layer/1"))
+            assertNull(actions.loadDormantLayer(document.id, "layer/1"))
+            assertEquals(SaveResult.Success, actions.deleteVersion(document.id, version.id))
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun android_host_advertises_all_supported_tablet_export_and_psd_import_actions() {
         val directory = Files.createTempDirectory("neocanvas-capabilities-test").toFile()
         try {
