@@ -83,9 +83,7 @@ internal fun DrawScope.drawLayerPreview(
                             }
                             com.neoworksuite.neocanvas.core.model.ShapeKind.Line -> {
                                 val color = stroke ?: fill ?: Color.Black
-                                drawLine(color, Offset(payload.x, payload.y),
-                                    Offset(payload.x + payload.width, payload.y + payload.height),
-                                    payload.strokeWidth.coerceAtLeast(1f))
+                                drawStyledLine(payload, color)
                             }
                         }
                     }

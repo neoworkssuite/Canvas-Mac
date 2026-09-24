@@ -2,6 +2,9 @@ package com.neoworksuite.neocanvas.renderer
 
 import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.LineCap
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.SaveResult
@@ -281,10 +284,13 @@ object PngExporter {
             return (centerX + dx * cosA - dy * sinA) to (centerY + dx * sinA + dy * cosA)
         }
 
-        val rawLeft = minOf(shape.x, shape.x + shape.width) - strokeHalf - 2f
-        val rawTop = minOf(shape.y, shape.y + shape.height) - strokeHalf - 2f
-        val rawRight = maxOf(shape.x, shape.x + shape.width) + strokeHalf + 2f
-        val rawBottom = maxOf(shape.y, shape.y + shape.height) + strokeHalf + 2f
+        val markerPadding = if (shape.kind == ShapeKind.Line &&
+            (shape.startMarker == LineMarker.Arrow || shape.endMarker == LineMarker.Arrow)
+        ) maxOf(8f, shape.strokeWidth * 4f) else 0f
+        val rawLeft = minOf(shape.x, shape.x + shape.width) - strokeHalf - markerPadding - 2f
+        val rawTop = minOf(shape.y, shape.y + shape.height) - strokeHalf - markerPadding - 2f
+        val rawRight = maxOf(shape.x, shape.x + shape.width) + strokeHalf + markerPadding + 2f
+        val rawBottom = maxOf(shape.y, shape.y + shape.height) + strokeHalf + markerPadding + 2f
         val corners = listOf(
             rotatePoint(rawLeft, rawTop),
             rotatePoint(rawRight, rawTop),
@@ -383,12 +389,71 @@ object PngExporter {
             val vy = shape.height
             val length2 = vx * vx + vy * vy
             if (length2 <= 0f) return false
-            val t = ((lx * vx + ly * vy) / length2).coerceIn(0f, 1f)
+            val rawT = (lx * vx + ly * vy) / length2
+            val length = kotlin.math.sqrt(length2)
+            val half = shape.strokeWidth.coerceAtLeast(1f) / 2f
+            val capAllowance = if (shape.lineCap == LineCap.Square) half / length else 0f
+            if (shape.lineCap == LineCap.Butt && rawT !in 0f..1f) return false
+            if (shape.lineCap == LineCap.Square && rawT !in -capAllowance..(1f + capAllowance)) return false
+            val t = rawT.coerceIn(0f, 1f)
             val nearestX = t * vx
             val nearestY = t * vy
             val dx = lx - nearestX
             val dy = ly - nearestY
-            return kotlin.math.sqrt(dx * dx + dy * dy) <= shape.strokeWidth.coerceAtLeast(1f) / 2f
+            if (kotlin.math.sqrt(dx * dx + dy * dy) > half) return false
+            val along = t * length
+            val unit = shape.strokeWidth.coerceAtLeast(1f)
+            return when (shape.lineStyle) {
+                LineStyle.Solid -> true
+                LineStyle.Dashed -> along % (unit * 6f) < unit * 4f
+                LineStyle.Dotted -> along % (unit * 3f) < unit
+            }
+        }
+
+        fun triangleContains(
+            px: Float,
+            py: Float,
+            ax: Float,
+            ay: Float,
+            bx: Float,
+            by: Float,
+            cx: Float,
+            cy: Float,
+        ): Boolean {
+            fun sign(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float): Float =
+                (x1 - x3) * (y2 - y3) - (x2 - x3) * (y1 - y3)
+            val d1 = sign(px, py, ax, ay, bx, by)
+            val d2 = sign(px, py, bx, by, cx, cy)
+            val d3 = sign(px, py, cx, cy, ax, ay)
+            return !((d1 < 0f || d2 < 0f || d3 < 0f) && (d1 > 0f || d2 > 0f || d3 > 0f))
+        }
+
+        fun lineMarker(lx: Float, ly: Float): Boolean {
+            val length = kotlin.math.sqrt(shape.width * shape.width + shape.height * shape.height)
+            if (length <= 0f) return false
+            val ux = shape.width / length
+            val uy = shape.height / length
+            val nx = -uy
+            val ny = ux
+            val markerLength = maxOf(8f, shape.strokeWidth * 4f)
+            val markerHalf = markerLength * .45f
+            fun arrow(atEnd: Boolean): Boolean {
+                val baseX = if (atEnd) shape.width else 0f
+                val baseY = if (atEnd) shape.height else 0f
+                val direction = if (atEnd) 1f else -1f
+                val tipX = baseX + ux * markerLength * direction
+                val tipY = baseY + uy * markerLength * direction
+                val backX = baseX - ux * markerLength * .35f * direction
+                val backY = baseY - uy * markerLength * .35f * direction
+                return triangleContains(
+                    lx, ly,
+                    tipX, tipY,
+                    backX + nx * markerHalf, backY + ny * markerHalf,
+                    backX - nx * markerHalf, backY - ny * markerHalf,
+                )
+            }
+            return (shape.startMarker == LineMarker.Arrow && arrow(false)) ||
+                (shape.endMarker == LineMarker.Arrow && arrow(true))
         }
 
         fun compositeSolid(argb: Int, coverage: Float, destinationOffset: Int) {
@@ -417,7 +482,7 @@ object PngExporter {
                                 if (shape.fillArgb != null && ellipseFill(lx, ly)) fillHits++
                                 if (ellipseStroke(lx, ly)) strokeHits++
                             }
-                            ShapeKind.Line -> if (lineStroke(lx, ly)) strokeHits++
+                            ShapeKind.Line -> if (lineStroke(lx, ly) || lineMarker(lx, ly)) strokeHits++
                         }
                     }
                 }

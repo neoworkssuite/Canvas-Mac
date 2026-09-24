@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -68,6 +70,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.LineCap
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -77,7 +82,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
-private enum class ObjectDrag { None, Move, Scale, Rotate }
+private enum class ObjectDrag { None, Move, Scale, Rotate, LineStart, LineEnd }
 
 /** Bounded document viewport. Strokes map to document pixels before the shared rasterizer stores them. */
 @Composable
@@ -557,6 +562,12 @@ fun CanvasWorkspace(
                     val objectHandleRadius = 18f / gestureScale
                     val objectDrag = when {
                         startingObjectGeometry == null -> ObjectDrag.None
+                        startingObjectGeometry.isLine &&
+                            (initialOffset - startingObjectGeometry.scaleHandles()[0]).getDistance() <= objectHandleRadius ->
+                            ObjectDrag.LineStart
+                        startingObjectGeometry.isLine &&
+                            (initialOffset - startingObjectGeometry.scaleHandles()[1]).getDistance() <= objectHandleRadius ->
+                            ObjectDrag.LineEnd
                         (initialOffset - startingObjectGeometry.rotationHandle(32f / gestureScale)).getDistance() <= objectHandleRadius ->
                             ObjectDrag.Rotate
                         startingObjectGeometry.scaleHandles().any { (initialOffset - it).getDistance() <= objectHandleRadius } ->
@@ -671,6 +682,7 @@ fun CanvasWorkspace(
                                             snapEditableObjectGroupRotation(rawRotationDelta)
                                         } else rawRotationDelta
                                     }
+                                    ObjectDrag.LineStart, ObjectDrag.LineEnd -> Unit
                                     ObjectDrag.None -> Unit
                                 }
                                 objectGroupGesturePreview = startingGroupPayloads.mapValues { (_, payload) ->
@@ -721,6 +733,12 @@ fun CanvasWorkspace(
                                         snapPosition = false,
                                         snapRotation = true,
                                     )
+                                    ObjectDrag.LineStart -> (startingObjectPayload as? LayerPayload.ShapeObject)?.let {
+                                        lineWithEndpoint(it, moveStart = true, x = currentObjectPoint.x, y = currentObjectPoint.y)
+                                    } ?: startingObjectPayload
+                                    ObjectDrag.LineEnd -> (startingObjectPayload as? LayerPayload.ShapeObject)?.let {
+                                        lineWithEndpoint(it, moveStart = false, x = currentObjectPoint.x, y = currentObjectPoint.y)
+                                    } ?: startingObjectPayload
                                     ObjectDrag.None -> startingObjectPayload
                                 }
                             } else if (startingTransform != null && transformCenter != null) {
@@ -1547,16 +1565,52 @@ private fun DrawScope.drawEditableShape(
             }
             com.neoworksuite.neocanvas.core.model.ShapeKind.Line -> {
                 val color = stroke ?: fill ?: Color.Black
-                drawLine(
-                    color,
-                    Offset(shape.x, shape.y),
-                    Offset(shape.x + shape.width, shape.y + shape.height),
-                    shape.strokeWidth.coerceAtLeast(1f),
-                    blendMode = blendMode,
-                )
+                drawStyledLine(shape, color, blendMode)
             }
         }
     }
+}
+
+internal fun DrawScope.drawStyledLine(
+    shape: LayerPayload.ShapeObject,
+    color: Color,
+    blendMode: androidx.compose.ui.graphics.BlendMode = androidx.compose.ui.graphics.BlendMode.SrcOver,
+) {
+    val start = Offset(shape.x, shape.y)
+    val end = Offset(shape.x + shape.width, shape.y + shape.height)
+    val width = shape.strokeWidth.coerceAtLeast(1f)
+    val effect = when (shape.lineStyle) {
+        LineStyle.Solid -> null
+        LineStyle.Dashed -> PathEffect.dashPathEffect(floatArrayOf(width * 4f, width * 2f))
+        LineStyle.Dotted -> PathEffect.dashPathEffect(floatArrayOf(width, width * 2f))
+    }
+    val cap = when (shape.lineCap) {
+        LineCap.Round -> StrokeCap.Round
+        LineCap.Square -> StrokeCap.Square
+        LineCap.Butt -> StrokeCap.Butt
+    }
+    drawLine(color, start, end, width, cap = cap, pathEffect = effect, blendMode = blendMode)
+
+    val delta = end - start
+    val length = delta.getDistance()
+    if (length <= 0f) return
+    val unit = delta / length
+    val normal = Offset(-unit.y, unit.x)
+    val markerLength = maxOf(8f, width * 4f)
+    fun arrow(base: Offset, direction: Float) {
+        val tip = base + unit * markerLength * direction
+        val back = base - unit * markerLength * .35f * direction
+        val half = markerLength * .45f
+        val path = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(back.x + normal.x * half, back.y + normal.y * half)
+            lineTo(back.x - normal.x * half, back.y - normal.y * half)
+            close()
+        }
+        drawPath(path, color, blendMode = blendMode)
+    }
+    if (shape.startMarker == LineMarker.Arrow) arrow(start, -1f)
+    if (shape.endMarker == LineMarker.Arrow) arrow(end, 1f)
 }
 
 private fun layerBlendMode(

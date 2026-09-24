@@ -53,6 +53,9 @@ import com.neoworksuite.neocanvas.core.model.UpdateShapeLayer
 import com.neoworksuite.neocanvas.core.model.UpdateEditableObjects
 import com.neoworksuite.neocanvas.core.model.Layer
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.LineCap
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.RasterColor
@@ -1009,6 +1012,23 @@ class EditorState(
         updateActiveLine { lineWithEndpoint(it, moveStart, x, y) }
 
     fun reverseActiveLine(): Boolean = updateActiveLine(::reversedLine)
+
+    fun setActiveLineStyle(value: LineStyle): Boolean = updateActiveLine { it.copy(lineStyle = value) }
+
+    fun setActiveLineCap(value: LineCap): Boolean = updateActiveLine { it.copy(lineCap = value) }
+
+    fun setActiveLineStartMarker(value: LineMarker): Boolean = updateActiveLine { it.copy(startMarker = value) }
+
+    fun setActiveLineEndMarker(value: LineMarker): Boolean = updateActiveLine { it.copy(endMarker = value) }
+
+    fun setActiveLineAngleSnapping(value: Boolean): Boolean = updateActiveLine { it.copy(angleSnapping = value) }
+
+    fun setActiveObjectOpacity(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val next = value.coerceIn(0f, 1f)
+        if (layer.opacity == next) return
+        execute(SetLayerOpacity(layer.id, next))
+    }
 
     private fun updateActiveLine(
         transform: (LayerPayload.ShapeObject) -> LayerPayload.ShapeObject,

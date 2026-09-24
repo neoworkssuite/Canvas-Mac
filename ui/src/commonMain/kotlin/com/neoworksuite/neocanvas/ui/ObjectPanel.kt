@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
+import com.neoworksuite.neocanvas.core.model.LineCap
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 
 @Composable
 fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -> Unit) {
@@ -162,7 +165,64 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                     state::setActiveShapeCornerRadius,
                 )
             }
-            if (shape.strokeArgb != null || shape.kind == ShapeKind.Line) {
+            if (shape.kind == ShapeKind.Line) {
+                val metrics = lineMetrics(shape)
+                Text("LINE", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
+                ObjectSlider(
+                    "Length",
+                    metrics.length,
+                    1f..(maxOf(state.document.width, state.document.height) * 2f),
+                    metrics.length.toInt().toString() + " px",
+                    !locked,
+                    { state.setActiveLineLength(it) },
+                )
+                ObjectSlider("Angle", metrics.angleDegrees, 0f..359.9f,
+                    metrics.angleDegrees.toInt().toString() + "°", !locked, { state.setActiveLineAngle(it) })
+                ObjectAction(
+                    if (shape.angleSnapping) "15° Snap ✓" else "15° Snap",
+                    Modifier.fillMaxWidth(), shape.angleSnapping, !locked,
+                ) { state.setActiveLineAngleSnapping(!shape.angleSnapping) }
+                ObjectSlider(
+                    "Stroke",
+                    shape.strokeWidth.coerceAtLeast(1f),
+                    1f..64f,
+                    shape.strokeWidth.toInt().toString() + " px",
+                    !locked,
+                    state::setActiveShapeStrokeWidth,
+                )
+                ObjectSlider("Opacity", layer?.opacity ?: 1f, 0.05f..1f,
+                    (((layer?.opacity ?: 1f) * 100).toInt()).toString() + "%", !locked,
+                    state::setActiveObjectOpacity)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LineStyle.entries.forEach { style ->
+                        ObjectAction(style.name, Modifier.weight(1f), shape.lineStyle == style, !locked) {
+                            state.setActiveLineStyle(style)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LineCap.entries.forEach { cap ->
+                        ObjectAction(if (cap == LineCap.Butt) "Flat" else cap.name,
+                            Modifier.weight(1f), shape.lineCap == cap, !locked) {
+                            state.setActiveLineCap(cap)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    ObjectAction("Start Arrow", Modifier.weight(1f), shape.startMarker == LineMarker.Arrow, !locked) {
+                        state.setActiveLineStartMarker(if (shape.startMarker == LineMarker.Arrow) LineMarker.None else LineMarker.Arrow)
+                    }
+                    ObjectAction("End Arrow", Modifier.weight(1f), shape.endMarker == LineMarker.Arrow, !locked) {
+                        state.setActiveLineEndMarker(if (shape.endMarker == LineMarker.Arrow) LineMarker.None else LineMarker.Arrow)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    ObjectAction("Reverse", Modifier.weight(1f), enabled = !locked) { state.reverseActiveLine() }
+                    ObjectAction("Use Primary", Modifier.weight(1f), enabled = !locked) {
+                        state.useCurrentColourForActiveObject(asStroke = true)
+                    }
+                }
+            } else if (shape.strokeArgb != null) {
                 ObjectSlider(
                     "Stroke",
                     shape.strokeWidth.coerceAtLeast(1f),

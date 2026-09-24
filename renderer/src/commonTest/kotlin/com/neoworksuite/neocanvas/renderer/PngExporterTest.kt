@@ -6,11 +6,43 @@ import com.neoworksuite.neocanvas.core.model.LayerPayload
 import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.model.ShapeKind
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class PngExporterTest {
+    @Test
+    fun dashed_arrow_line_exports_visible_gaps_and_marker_beyond_endpoint() {
+        val document = CanvasDocument(
+            "styled-line",
+            48,
+            32,
+            layers = listOf(Layer(
+                "line",
+                "Line",
+                payload = LayerPayload.ShapeObject(
+                    kind = ShapeKind.Line,
+                    x = 8f,
+                    y = 16f,
+                    width = 20f,
+                    height = 0f,
+                    fillArgb = null,
+                    strokeArgb = 0xffffffff.toInt(),
+                    strokeWidth = 2f,
+                    lineStyle = LineStyle.Dashed,
+                    endMarker = LineMarker.Arrow,
+                ),
+            )),
+        )
+
+        val image = PngExporter.render(document, emptyMap())
+        assertEquals(255, image.rgbaAt(11, 16)[3].toInt() and 255)
+        assertEquals(0, image.rgbaAt(18, 16)[3].toInt() and 255)
+        kotlin.test.assertTrue((29..36).any { x -> (image.rgbaAt(x, 16)[3].toInt() and 255) > 0 })
+    }
+
     @Test fun multiply_and_screen_blend_modes_are_used_during_export() {
         val base = tile(100, 150, 200, 255)
         val top = tile(128, 128, 128, 255)
