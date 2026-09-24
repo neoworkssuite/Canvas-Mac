@@ -156,6 +156,28 @@ fun SettingsPanel(
         }
 
         SettingsSection("INTERFACE")
+        Text("Drawing hand", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Moves the drawing rail and inspectors away from your preferred drawing hand.",
+            color = NeoCanvasColors.muted,
+            fontSize = 11.sp,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            InterfaceSide.entries.forEach { side ->
+                Box(
+                    Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                        .background(if (state.interfaceSide == side) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
+                        .clickable {
+                            state.interfaceSide = side
+                            state.persistPreferences()
+                        }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(side.name, color = NeoCanvasColors.paper, fontSize = 11.sp)
+                }
+            }
+        }
         SettingsToggle(
             "Status messages",
             "Show temporary save, tool and editing notifications over the workspace.",

@@ -11,8 +11,31 @@ import com.neoworksuite.neocanvas.renderer.TileStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.neoworksuite.neocanvas.core.store.SaveResult
 
 class EyedropperPreferencesTest {
+    @Test
+    fun interface_side_persists_and_reset_returns_to_automatic() {
+        var stored = emptyMap<String, String>()
+        val actions = object : EditorFileActions by UnavailableEditorFileActions {
+            override fun loadPreferences(): Map<String, String> = stored
+            override fun savePreferences(values: Map<String, String>): SaveResult {
+                stored = values
+                return SaveResult.Success
+            }
+        }
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(32, 32)), actions)
+        state.interfaceSide = InterfaceSide.Left
+        state.persistPreferences()
+        assertEquals("Left", stored["interfaceSide"])
+
+        val reopened = EditorState(DocumentHistory(CanvasDocument.blank(32, 32)), actions)
+        assertEquals(InterfaceSide.Left, reopened.interfaceSide)
+        reopened.resetPreferences()
+        assertEquals(InterfaceSide.Automatic, reopened.interfaceSide)
+        assertEquals("Automatic", stored["interfaceSide"])
+    }
+
     private fun colouredTile(red: Int, green: Int, blue: Int, x: Int = 10, y: Int = 10): ByteArray {
         val bytes = ByteArray(TileFormat.BYTES_PER_TILE)
         val offset = (y * 256 + x) * 4

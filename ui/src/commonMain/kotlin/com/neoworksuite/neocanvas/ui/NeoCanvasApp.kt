@@ -228,6 +228,11 @@ fun NeoCanvasApp(
             },
     ) {
         val compact = maxWidth < 860.dp
+        val placement = workspacePlacement(state.interfaceSide, compact)
+        val sidePanelAlignment = if (placement.panelsAtEnd) Alignment.CenterEnd else Alignment.CenterStart
+        val responsivePanelAlignment = if (compact && state.interfaceSide == InterfaceSide.Automatic) {
+            Alignment.BottomCenter
+        } else sidePanelAlignment
         if (state.canvasOnlyMode) {
             CanvasWorkspace(state, Modifier.fillMaxSize())
         } else {
@@ -237,8 +242,9 @@ fun NeoCanvasApp(
                     CanvasWorkspace(state, Modifier.weight(1f).fillMaxWidth())
                 } else {
                     Row(Modifier.weight(1f).fillMaxWidth()) {
-                        StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
+                        if (placement.railAtStart) StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
                         CanvasWorkspace(state, Modifier.fillMaxHeight().weight(1f))
+                        if (!placement.railAtStart) StudioRail(state, Modifier.fillMaxHeight().width(76.dp))
                     }
                 }
             }
@@ -266,9 +272,8 @@ fun NeoCanvasApp(
         if (state.inspectorVisible) {
             val panel = state.inspectorPanel
             val overlayAlignment = when {
-                panel == InspectorPanel.Brushes -> Alignment.Center
-                compact -> Alignment.BottomCenter
-                else -> Alignment.CenterEnd
+                panel == InspectorPanel.Brushes && state.interfaceSide == InterfaceSide.Automatic -> Alignment.Center
+                else -> responsivePanelAlignment
             }
             val panelModifier = when (panel) {
                 InspectorPanel.Brushes ->
@@ -348,7 +353,7 @@ fun NeoCanvasApp(
         }
         if (state.objectEditorVisible) {
             Box(
-                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                Modifier.align(responsivePanelAlignment)
                     .padding(
                         end = if (compact) 10.dp else 16.dp,
                         start = if (compact) 10.dp else 0.dp,
@@ -371,7 +376,7 @@ fun NeoCanvasApp(
         }
         if (state.psdCompatibilityVisible) {
             Box(
-                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                Modifier.align(responsivePanelAlignment)
                     .padding(
                         end = if (compact) 10.dp else 16.dp,
                         start = if (compact) 10.dp else 0.dp,
@@ -394,7 +399,7 @@ fun NeoCanvasApp(
         }
         if (state.recentStrokesVisible) {
             Box(
-                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                Modifier.align(responsivePanelAlignment)
                     .padding(
                         end = if (compact) 10.dp else 16.dp,
                         start = if (compact) 10.dp else 0.dp,
@@ -417,7 +422,7 @@ fun NeoCanvasApp(
         }
         if (state.workbenchPanelVisible) {
             Box(
-                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                Modifier.align(responsivePanelAlignment)
                     .padding(
                         end = if (compact) 10.dp else 16.dp,
                         start = if (compact) 10.dp else 0.dp,
@@ -440,7 +445,7 @@ fun NeoCanvasApp(
         }
         if (state.versionsVisible) {
             Box(
-                Modifier.align(if (compact) Alignment.BottomCenter else Alignment.CenterEnd)
+                Modifier.align(responsivePanelAlignment)
                     .padding(
                         end = if (compact) 10.dp else 16.dp,
                         start = if (compact) 10.dp else 0.dp,
@@ -463,7 +468,8 @@ fun NeoCanvasApp(
         }
         if (state.settingsVisible) {
             Box(
-                Modifier.align(Alignment.Center).fillMaxWidth(.82f).fillMaxHeight(.82f)
+                Modifier.align(if (state.interfaceSide == InterfaceSide.Automatic) Alignment.Center else sidePanelAlignment)
+                    .fillMaxWidth(.82f).fillMaxHeight(.82f)
                     .widthIn(max = 720.dp).heightIn(max = 680.dp)
                     .clip(RoundedCornerShape(18.dp)).background(NeoCanvasColors.panel)
                     .border(1.dp, NeoCanvasColors.line, RoundedCornerShape(18.dp)),

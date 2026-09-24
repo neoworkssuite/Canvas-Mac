@@ -2735,6 +2735,7 @@ class EditorState(
     var automaticUpdateChecksEnabled: Boolean by mutableStateOf(true)
     var eyedropperSampleMerged: Boolean by mutableStateOf(true)
     var eyedropperReturnAfterSample: Boolean by mutableStateOf(true)
+    var interfaceSide: InterfaceSide by mutableStateOf(InterfaceSide.Automatic)
     private var eyedropperReturnTool: Tool = Tool.Brush
     var gridGuideVisible: Boolean by mutableStateOf(false)
     var perspectiveGuideVisible: Boolean by mutableStateOf(false)
@@ -2750,6 +2751,7 @@ class EditorState(
         automaticUpdateChecksEnabled = true
         eyedropperSampleMerged = true
         eyedropperReturnAfterSample = true
+        interfaceSide = InterfaceSide.Automatic
         gridGuideVisible = false
         perspectiveGuideVisible = false
         guideSpacing = 128f
@@ -2774,6 +2776,7 @@ class EditorState(
                     "automaticUpdateChecksEnabled" to automaticUpdateChecksEnabled.toString(),
                     "eyedropperSampleMerged" to eyedropperSampleMerged.toString(),
                     "eyedropperReturnAfterSample" to eyedropperReturnAfterSample.toString(),
+                    "interfaceSide" to interfaceSide.name,
                     "gridGuideVisible" to gridGuideVisible.toString(),
                     "perspectiveGuideVisible" to perspectiveGuideVisible.toString(),
                     "guideSpacing" to guideSpacing.toString(),
@@ -2808,6 +2811,9 @@ class EditorState(
                 preferences["eyedropperSampleMerged"]?.toBoolean() ?: eyedropperSampleMerged
             eyedropperReturnAfterSample =
                 preferences["eyedropperReturnAfterSample"]?.toBoolean() ?: eyedropperReturnAfterSample
+            interfaceSide = preferences["interfaceSide"]?.let { stored ->
+                InterfaceSide.entries.firstOrNull { it.name == stored }
+            } ?: interfaceSide
             gridGuideVisible = preferences["gridGuideVisible"]?.toBoolean() ?: gridGuideVisible
             perspectiveGuideVisible = preferences["perspectiveGuideVisible"]?.toBoolean() ?: perspectiveGuideVisible
             guideSpacing = preferences["guideSpacing"]?.toFloatOrNull()?.coerceIn(32f, 512f) ?: guideSpacing
