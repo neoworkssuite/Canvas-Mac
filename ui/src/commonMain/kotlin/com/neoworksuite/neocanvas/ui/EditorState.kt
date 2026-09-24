@@ -887,6 +887,36 @@ class EditorState(
         statusMessage = "Editable " + shapeLayerName(kind).lowercase() + " added"
     }
 
+    internal fun commitQuickShape(
+        result: QuickShapeResult,
+        colour: Color,
+        width: Float,
+        opacity: Float,
+    ): Boolean {
+        if (result.type != QuickShapeType.Line || result.points.size < 2) return false
+        val start = result.points.first()
+        val end = result.points.last()
+        if (!start.x.isFinite() || !start.y.isFinite() || !end.x.isFinite() || !end.y.isFinite()) return false
+        if (start.x == end.x && start.y == end.y) return false
+        val id = nextLayerId()
+        val payload = LayerPayload.ShapeObject(
+            kind = ShapeKind.Line,
+            x = start.x,
+            y = start.y,
+            width = end.x - start.x,
+            height = end.y - start.y,
+            fillArgb = null,
+            strokeArgb = composeColorArgb(colour),
+            strokeWidth = width.coerceIn(1f, 128f),
+        )
+        execute(AddShapeLayer(id, "Line", payload, opacity = opacity.coerceIn(0f, 1f)))
+        activeLayerId = id
+        clearSelection()
+        openObjectEditor(id)
+        statusMessage = "QuickShape line is editable"
+        return true
+    }
+
     fun setActiveTextContent(value: String) {
         val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return

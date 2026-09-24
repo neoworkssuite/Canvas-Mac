@@ -96,6 +96,7 @@ fun CanvasWorkspace(
     var quickShapeRevision by remember { mutableIntStateOf(0) }
     var quickShapeRawPoints by remember { mutableStateOf<List<DrawPoint>>(emptyList()) }
     var quickShapeSnapped by remember { mutableStateOf(false) }
+    var quickShapeResult by remember { mutableStateOf<QuickShapeResult?>(null) }
     var objectGesturePreview by remember { mutableStateOf<LayerPayload?>(null) }
     var objectGroupGesturePreview by remember { mutableStateOf<Map<String, LayerPayload>>(emptyMap()) }
     var arrangePickMarquee by remember { mutableStateOf<Rect?>(null) }
@@ -117,6 +118,7 @@ fun CanvasWorkspace(
         if (!quickShapePointerDown || quickShapeRevision != revision || quickShapeSnapped) return@LaunchedEffect
         val shape = detectQuickShape(quickShapeRawPoints) ?: return@LaunchedEffect
         quickShapeSnapped = true
+        quickShapeResult = shape
         inProgress.clear()
         inProgress.addAll(shape.points)
         state.statusMessage = "QuickShape: ${shape.type.label} — lift to place"
@@ -783,11 +785,17 @@ fun CanvasWorkspace(
                             state.moveSelection(moveDelta.x.toInt(), moveDelta.y.toInt())
                         } else if (state.tool == Tool.Select && inProgress.isNotEmpty()) {
                             state.selectArea(inProgress.toList())
-                        } else state.recordStroke(inProgress.toList(), stabilize = !quickShapeSnapped)
+                        } else {
+                            val promoted = quickShapeSnapped && quickShapeResult?.let { result ->
+                                state.commitQuickShape(result, state.color, state.brushSize, state.brushOpacity)
+                            } == true
+                            if (!promoted) state.recordStroke(inProgress.toList(), stabilize = !quickShapeSnapped)
+                        }
                     } finally {
                         quickShapePointerDown = false
                         quickShapeRawPoints = emptyList()
                         quickShapeSnapped = false
+                        quickShapeResult = null
                         quickShapeRevision++
                         inProgress.clear()
                         moveDelta = Offset.Zero

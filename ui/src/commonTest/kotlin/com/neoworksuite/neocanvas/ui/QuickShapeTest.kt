@@ -1,5 +1,9 @@
 package com.neoworksuite.neocanvas.ui
 
+import androidx.compose.ui.graphics.Color
+import com.neoworksuite.neocanvas.core.model.CanvasDocument
+import com.neoworksuite.neocanvas.core.model.DocumentHistory
+import com.neoworksuite.neocanvas.core.model.LayerPayload
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -8,8 +12,46 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
 
 class QuickShapeTest {
+    @Test
+    fun held_line_commits_one_editable_object_and_no_raster_stroke() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(200, 200)))
+        val result = QuickShapeResult(
+            QuickShapeType.Line,
+            listOf(DrawPoint(10f, 20f), DrawPoint(90f, 60f)),
+        )
+
+        assertTrue(state.commitQuickShape(result, Color(0xff336699), 6f, .4f))
+        val layer = state.document.layers.single()
+        val line = assertIs<LayerPayload.ShapeObject>(layer.payload)
+        assertEquals(10f, line.x)
+        assertEquals(20f, line.y)
+        assertEquals(80f, line.width)
+        assertEquals(40f, line.height)
+        assertEquals(6f, line.strokeWidth)
+        assertEquals(.4f, layer.opacity)
+        assertTrue(state.tileStore.keys.isEmpty())
+        assertTrue(state.objectEditorVisible)
+        assertTrue(state.undo())
+        assertTrue(state.document.layers.isEmpty())
+    }
+
+    @Test
+    fun unsupported_or_invalid_quick_shape_leaves_raster_fallback_to_the_caller() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(200, 200)))
+        val circle = QuickShapeResult(
+            QuickShapeType.Circle,
+            listOf(DrawPoint(10f, 20f), DrawPoint(90f, 60f)),
+        )
+
+        assertFalse(state.commitQuickShape(circle, Color.Red, 6f, 1f))
+        assertTrue(state.document.layers.isEmpty())
+        assertTrue(state.tileStore.keys.isEmpty())
+    }
+
     @Test
     fun rough_line_snaps_to_line() {
         val points = listOf(

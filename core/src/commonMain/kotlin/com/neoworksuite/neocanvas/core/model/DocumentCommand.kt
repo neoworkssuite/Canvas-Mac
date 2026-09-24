@@ -98,12 +98,24 @@ class UpdateEditableObjects(updates: Map<String, LayerPayload>) : DocumentComman
     }
 }
 
-data class AddShapeLayer(val layerId: String, val name: String, val shape: LayerPayload.ShapeObject, val insertionIndex: Int? = null) : DocumentCommand {
+data class AddShapeLayer(
+    val layerId: String,
+    val name: String,
+    val shape: LayerPayload.ShapeObject,
+    val insertionIndex: Int? = null,
+    val opacity: Float = 1f,
+) : DocumentCommand {
+    init {
+        require(opacity in 0f..1f)
+    }
+
     override fun apply(document: CanvasDocument): CanvasDocument {
         require(document.layers.none { it.id == layerId })
         val index = insertionIndex ?: document.layers.size
         require(index in 0..document.layers.size)
-        return document.copy(layers = document.layers.toMutableList().apply { add(index, Layer(layerId, name, payload = shape)) })
+        return document.copy(layers = document.layers.toMutableList().apply {
+            add(index, Layer(layerId, name, opacity = opacity, payload = shape))
+        })
     }
 }
 
