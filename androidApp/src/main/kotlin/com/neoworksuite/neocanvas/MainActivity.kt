@@ -12,6 +12,7 @@ class MainActivity : ComponentActivity() {
     private var imageCallback: ((Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit)? = null
     private var documentCallback: ((Result<com.neoworksuite.neocanvas.core.store.LoadResult?>) -> Unit)? = null
     private var psdCallback: ((Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit)? = null
+    private var brushCallback: ((Result<com.neoworksuite.neocanvas.ui.PendingBrushImport?>) -> Unit)? = null
     private val imagePicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         val callback = imageCallback
         imageCallback = null
@@ -56,6 +57,21 @@ class MainActivity : ComponentActivity() {
             com.neoworksuite.neocanvas.renderer.PsdCodec.decode(bytes)
         })
     }
+    private val brushPicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val callback = brushCallback
+        brushCallback = null
+        callback?.invoke(runCatching {
+            if (uri == null) return@runCatching null
+            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported.neobrush"
+            require(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)) {
+                "Choose a NeoCanvas .neobrush or .neobrushpack file."
+            }
+            val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                input.readBytes().also { require(it.size <= 25 * 1024 * 1024) { "Brush files must be 25 MB or smaller." } }
+            } ?: error("Unable to read selected brush file.")
+            com.neoworksuite.neocanvas.ui.PendingBrushImport(name, bytes)
+        })
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val actions = AndroidEditorFileActions(
@@ -73,6 +89,10 @@ class MainActivity : ComponentActivity() {
             psdPicker = { callback ->
                 psdCallback = callback
                 psdPicker.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream"))
+            },
+            brushPicker = { callback ->
+                brushCallback = callback
+                brushPicker.launch(arrayOf("application/octet-stream", "*/*"))
             },
             fileSharer = { file, mimeType ->
                 val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)

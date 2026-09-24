@@ -20,6 +20,7 @@ class AndroidEditorFileActions(private val localDirectory: File,
     private val imagePicker: (((Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) -> Unit)? = null,
     private val documentPicker: (((Result<LoadResult?>) -> Unit) -> Unit)? = null,
     private val psdPicker: (((Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) -> Unit)? = null,
+    private val brushPicker: (((Result<com.neoworksuite.neocanvas.ui.PendingBrushImport?>) -> Unit) -> Unit)? = null,
     private val fileSharer: ((File, String) -> Unit)? = null,
 ) : EditorFileActions {
     override val supportsPsdImport = true
@@ -202,6 +203,18 @@ class AndroidEditorFileActions(private val localDirectory: File,
     override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
         psdPicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("PSD picker unavailable.")))
     }
+    override fun openBrushFile(onResult: (Result<com.neoworksuite.neocanvas.ui.PendingBrushImport?>) -> Unit) {
+        brushPicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("Brush picker unavailable.")))
+    }
+    override fun shareBrushFile(name: String, bytes: ByteArray): SaveResult {
+        if (!(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true))) {
+            return SaveResult.Failure("Use a NeoCanvas brush filename.")
+        }
+        val safeName = name.substringAfterLast('/').substringAfterLast('\\')
+        val target = File(localDirectory, "exports/$safeName")
+        return writeStorageFile(target, bytes, "Could not prepare brush file")
+            .also { result -> if (result == SaveResult.Success) fileSharer?.invoke(target, "application/octet-stream") }
+    }
     override fun loadPalette(): List<String> = File(localDirectory, "palette.txt").let {
         if (it.exists()) it.readLines() else emptyList()
     }
@@ -216,6 +229,9 @@ class AndroidEditorFileActions(private val localDirectory: File,
     private val documents = AndroidDocumentStore()
     private val documentFile get() = File(localDirectory, "NeoCanvas.neocanvas")
     private fun exportFile(extension: String) = File(localDirectory, "NeoCanvas-export.$extension")
+    override fun loadBrushLibrary(): ByteArray? = File(localDirectory, "brush-library.txt").takeIf { it.isFile }?.readBytes()
+    override fun saveBrushLibrary(bytes: ByteArray): SaveResult =
+        writeStorageFile(File(localDirectory, "brush-library.txt"), bytes, "Could not save custom brushes")
     private fun versionDirectory(documentId: String) = File(localDirectory, "versions/${safeStorageId(documentId)}")
     private fun safeStorageId(value: String): String = value.map { character ->
         if (character.isLetterOrDigit() || character == '-' || character == '_' || character == '.') character else '_'

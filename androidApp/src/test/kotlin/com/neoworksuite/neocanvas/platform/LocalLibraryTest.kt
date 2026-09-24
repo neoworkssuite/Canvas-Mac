@@ -24,6 +24,8 @@ class LocalLibraryTest {
             assertEquals(SaveResult.Success, actions.deleteDormantLayer(document.id, "layer/1"))
             assertNull(actions.loadDormantLayer(document.id, "layer/1"))
             assertEquals(SaveResult.Success, actions.deleteVersion(document.id, version.id))
+            assertEquals(SaveResult.Success, actions.saveBrushLibrary(byteArrayOf(4, 5)))
+            assertContentEquals(byteArrayOf(4, 5), actions.loadBrushLibrary())
         } finally { directory.deleteRecursively() }
     }
 
