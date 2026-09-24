@@ -81,6 +81,7 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 minLines = 2,
                 maxLines = 6,
                 enabled = !locked,
+                colors = studioTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             ObjectSlider("Size", text.fontSize, 6f..256f, text.fontSize.toInt().toString() + " px", !locked, state::setActiveTextSize)

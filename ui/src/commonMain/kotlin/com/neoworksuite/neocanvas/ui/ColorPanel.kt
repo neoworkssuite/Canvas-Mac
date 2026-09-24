@@ -333,6 +333,7 @@ private fun ValueModePanel(state: EditorState, hsv: Hsv, choose: (Hsv) -> Unit) 
                     },
                     singleLine = true,
                     label = { Text("Hex #RRGGBB") },
+                    colors = studioTextFieldColors(),
                     isError = parseColorHex(hex) == null,
                     modifier = Modifier.fillMaxWidth(),
                 )

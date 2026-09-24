@@ -233,7 +233,8 @@ fun GalleryScreen(
             onDismissRequest = { renameTarget = null },
             containerColor = NeoCanvasColors.panel,
             title = { Text("Rename artwork", color = NeoCanvasColors.paper) },
-            text = { OutlinedTextField(renameText, { renameText = it }, singleLine = true, label = { Text("Name") }) },
+            text = { OutlinedTextField(renameText, { renameText = it }, singleLine = true,
+                label = { Text("Name") }, colors = studioTextFieldColors()) },
             confirmButton = { TextButton(onClick = {
                 val result = actions.renameLocalDocument(original, renameText)
                 if (result == SaveResult.Success) {

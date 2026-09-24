@@ -21,12 +21,7 @@ internal fun LocalLibraryDialogs(state: EditorState) {
                     Text("Choose a new name. Existing artwork will not be overwritten.", color = NeoCanvasColors.muted)
                     OutlinedTextField(name, { name = it }, singleLine = true,
                         label = { Text("Document name") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = NeoCanvasColors.paper, unfocusedTextColor = NeoCanvasColors.paper,
-                            focusedBorderColor = NeoCanvasColors.accent, unfocusedBorderColor = NeoCanvasColors.muted,
-                            focusedLabelColor = NeoCanvasColors.accent, unfocusedLabelColor = NeoCanvasColors.muted,
-                            cursorColor = NeoCanvasColors.accent,
-                        ))
+                        colors = studioTextFieldColors())
                     state.libraryError?.let { Text(it, color = NeoCanvasColors.paper) }
                 }
             },

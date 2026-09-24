@@ -135,6 +135,7 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
             onValueChange = { library.query = it },
             singleLine = true,
             label = { Text("Search brushes") },
+            colors = studioTextFieldColors(),
             modifier = Modifier.fillMaxWidth().height(54.dp).semantics { contentDescription = "Search brush library" },
         )
         BrushShelfRow(library)
@@ -396,6 +397,7 @@ private fun BrushStudio(
                         onValueChange = { customName = it.take(80) },
                         singleLine = true,
                         label = { Text("Custom brush name") },
+                        colors = studioTextFieldColors(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(

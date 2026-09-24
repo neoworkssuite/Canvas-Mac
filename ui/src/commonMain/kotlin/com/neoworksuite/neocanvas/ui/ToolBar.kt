@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -458,6 +459,20 @@ fun studioSliderColors() = SliderDefaults.colors(
     thumbColor = NeoCanvasColors.paper,
     activeTrackColor = NeoCanvasColors.accent,
     inactiveTrackColor = NeoCanvasColors.track,
+)
+
+@Composable
+fun studioTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    disabledTextColor = NeoCanvasColors.muted,
+    errorTextColor = Color.White,
+    focusedBorderColor = NeoCanvasColors.accent,
+    unfocusedBorderColor = NeoCanvasColors.muted,
+    focusedLabelColor = Color.White,
+    unfocusedLabelColor = NeoCanvasColors.paper,
+    cursorColor = Color.White,
+    errorCursorColor = Color.White,
 )
 
 private enum class Glyph { Previous, Next, Gallery, ImportImage, New, Open, Save, Export, Brush, Eraser, Smudge, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }

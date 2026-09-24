@@ -82,6 +82,7 @@ fun WorkbenchPanel(state: EditorState, modifier: Modifier = Modifier, onClose: (
                 label = { Text("Add a note") },
                 minLines = 2,
                 maxLines = 4,
+                colors = studioTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

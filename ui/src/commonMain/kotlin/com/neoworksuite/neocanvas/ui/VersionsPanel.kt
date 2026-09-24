@@ -84,6 +84,7 @@ fun VersionsPanel(
                 singleLine = true,
                 label = { Text("Milestone name") },
                 placeholder = { Text("e.g. Colour approved") },
+                colors = studioTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -124,6 +125,7 @@ fun VersionsPanel(
                     singleLine = true,
                     label = { Text("New branch name") },
                     placeholder = { Text("e.g. Client B") },
+                    colors = studioTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

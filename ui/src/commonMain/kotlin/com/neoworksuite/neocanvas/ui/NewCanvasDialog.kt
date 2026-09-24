@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,6 +65,9 @@ internal fun orientCanvasDimensions(width: Int, height: Int, portrait: Boolean):
     return if (portrait) shortSide to longSide else longSide to shortSide
 }
 
+internal fun isValidCustomCanvasSize(width: Int, height: Int): Boolean =
+    width in 1..8192 && height in 1..8192 && width.toLong() * height <= 16_000_000L
+
 @Composable
 internal fun NewCanvasDialog(state: EditorState) {
     if (!state.newCanvasDialogVisible) return
@@ -73,16 +75,8 @@ internal fun NewCanvasDialog(state: EditorState) {
     var height by remember { mutableStateOf(state.document.height.toString()) }
     val w = width.toIntOrNull() ?: 0
     val h = height.toIntOrNull() ?: 0
-    val valid = w in 1..8192 && h in 1..8192 && w.toLong() * h <= 16_000_000
-    val colors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = NeoCanvasColors.paper,
-        unfocusedTextColor = NeoCanvasColors.paper,
-        focusedBorderColor = NeoCanvasColors.accent,
-        unfocusedBorderColor = NeoCanvasColors.muted,
-        focusedLabelColor = NeoCanvasColors.accent,
-        unfocusedLabelColor = NeoCanvasColors.muted,
-        cursorColor = NeoCanvasColors.accent,
-    )
+    val valid = isValidCustomCanvasSize(w, h)
+    val colors = studioTextFieldColors()
 
     fun applyOrientation(portrait: Boolean) {
         val oriented = orientCanvasDimensions(w, h, portrait)
@@ -115,7 +109,9 @@ internal fun NewCanvasDialog(state: EditorState) {
                     ) { applyOrientation(false) }
                 }
 
-                Text("PIXEL DIMENSIONS", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .8.sp)
+                Text("CUSTOM SIZE", color = NeoCanvasColors.accent, fontSize = 10.sp, letterSpacing = .8.sp,
+                    fontWeight = FontWeight.Bold)
+                Text("Enter exact width and height in pixels.", color = NeoCanvasColors.paper, fontSize = 11.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         width,
