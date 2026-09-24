@@ -9,6 +9,9 @@ import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.LayerGroup
 import com.neoworksuite.neocanvas.core.model.LayerMask
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.LineCap
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
 import kotlin.test.Test
@@ -178,6 +181,64 @@ class NeoCanvasPackageTest {
     }
 
     @Test
+    fun line_style_round_trips_while_legacy_and_unknown_values_use_safe_defaults() {
+        val line = LayerPayload.ShapeObject(
+            kind = ShapeKind.Line,
+            x = 10f,
+            y = 20f,
+            width = 120f,
+            height = -40f,
+            fillArgb = null,
+            strokeArgb = 0xff336699.toInt(),
+            strokeWidth = 7f,
+            lineStyle = LineStyle.Dashed,
+            lineCap = LineCap.Square,
+            startMarker = LineMarker.Arrow,
+            endMarker = LineMarker.None,
+            angleSnapping = false,
+        )
+        val document = CanvasDocument(
+            id = "styled-line",
+            width = 300,
+            height = 200,
+            layers = listOf(Layer("line-1", "Line", payload = line)),
+        )
+
+        val roundTrip = assertIs<LoadResult.Success>(
+            NeoCanvasPackage.read(NeoCanvasPackage.write(document, emptyMap())),
+        )
+        assertEquals(line, roundTrip.document.layers.single().payload)
+
+        val legacyManifest = shapeManifest()
+        val legacy = assertIs<LoadResult.Success>(NeoCanvasPackage.readMembers(mapOf(
+            "manifest.json" to legacyManifest.encodeToByteArray(),
+            "thumb.png" to transparentThumbnail(),
+            "assets/" to ByteArray(0),
+        )))
+        val legacyLine = assertIs<LayerPayload.ShapeObject>(legacy.document.layers.single().payload)
+        assertEquals(LineStyle.Solid, legacyLine.lineStyle)
+        assertEquals(LineCap.Round, legacyLine.lineCap)
+        assertEquals(LineMarker.None, legacyLine.startMarker)
+        assertEquals(LineMarker.None, legacyLine.endMarker)
+        assertTrue(legacyLine.angleSnapping)
+
+        val unknown = assertIs<LoadResult.Success>(NeoCanvasPackage.readMembers(mapOf(
+            "manifest.json" to legacyManifest.replace(
+                "\"cornerRadius\":0",
+                "\"cornerRadius\":0,\"lineStyle\":\"FutureStyle\",\"lineCap\":\"FutureCap\",\"startMarker\":\"FutureMarker\",\"endMarker\":\"Arrow\",\"angleSnapping\":false",
+            ).encodeToByteArray(),
+            "thumb.png" to transparentThumbnail(),
+            "assets/" to ByteArray(0),
+        )))
+        val unknownLine = assertIs<LayerPayload.ShapeObject>(unknown.document.layers.single().payload)
+        assertEquals(LineStyle.Solid, unknownLine.lineStyle)
+        assertEquals(LineCap.Round, unknownLine.lineCap)
+        assertEquals(LineMarker.None, unknownLine.startMarker)
+        assertEquals(LineMarker.Arrow, unknownLine.endMarker)
+        assertEquals(false, unknownLine.angleSnapping)
+    }
+
+    @Test
     fun future_format_version_returns_incompatible_error() {
         val result = NeoCanvasPackage.readMembers(
             mapOf(
@@ -219,6 +280,10 @@ class NeoCanvasPackageTest {
 
     private fun manifest(formatVersion: Int = 1, tile: String? = null): String = """
         {"formatVersion":$formatVersion,"document":{"id":"document-1","width":256,"height":256},"layers":[{"id":"layer-1","name":"Ink","visible":true,"opacity":1,"type":"raster","tiles":${if (tile == null) "[]" else "[\"$tile\"]"}}]}
+    """.trimIndent()
+
+    private fun shapeManifest(): String = """
+        {"formatVersion":2,"document":{"id":"legacy-line","width":300,"height":200},"layers":[{"id":"line-1","name":"Line","visible":true,"opacity":1,"type":"shape","shapeKind":"Line","x":10,"y":20,"width":120,"height":-40,"fillEnabled":false,"fillArgb":0,"strokeEnabled":true,"strokeArgb":-13408615,"strokeWidth":7,"rotationDegrees":0,"cornerRadius":0}]}
     """.trimIndent()
 
     private fun opaqueBlackTile(): ByteArray = ByteArray(NeoCanvasPackage.RGBA_TILE_BYTES).also {

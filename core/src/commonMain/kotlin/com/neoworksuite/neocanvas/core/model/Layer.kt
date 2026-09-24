@@ -15,6 +15,12 @@ enum class TextAlignment { Left, Center, Right }
 
 enum class ShapeKind { Rectangle, Ellipse, Line }
 
+enum class LineStyle { Solid, Dashed, Dotted }
+
+enum class LineCap { Round, Square, Butt }
+
+enum class LineMarker { None, Arrow }
+
 sealed interface LayerPayload {
     class Raster(tileAddresses: Set<TileAddress> = emptySet()) : LayerPayload {
         /** A collection snapshot, isolated from caller-owned mutable tile sets. */
@@ -68,6 +74,11 @@ sealed interface LayerPayload {
         val strokeWidth: Float = 0f,
         val rotationDegrees: Float = 0f,
         val cornerRadius: Float = 0f,
+        val lineStyle: LineStyle = LineStyle.Solid,
+        val lineCap: LineCap = LineCap.Round,
+        val startMarker: LineMarker = LineMarker.None,
+        val endMarker: LineMarker = LineMarker.None,
+        val angleSnapping: Boolean = true,
     ) : LayerPayload {
         init {
             require(x.isFinite() && y.isFinite() && width.isFinite() && height.isFinite())

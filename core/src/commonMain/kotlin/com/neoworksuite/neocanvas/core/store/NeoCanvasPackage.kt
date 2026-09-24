@@ -6,6 +6,9 @@ import com.neoworksuite.neocanvas.core.model.LayerBlendMode
 import com.neoworksuite.neocanvas.core.model.LayerGroup
 import com.neoworksuite.neocanvas.core.model.LayerMask
 import com.neoworksuite.neocanvas.core.model.LayerPayload
+import com.neoworksuite.neocanvas.core.model.LineCap
+import com.neoworksuite.neocanvas.core.model.LineMarker
+import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
 import com.neoworksuite.neocanvas.core.model.TileAddress
@@ -134,6 +137,11 @@ object NeoCanvasPackage {
                         strokeWidth = layerObject.float("strokeWidth"),
                         rotationDegrees = layerObject.float("rotationDegrees"),
                         cornerRadius = if ("cornerRadius" in layerObject.fields) layerObject.float("cornerRadius") else 0f,
+                        lineStyle = layerObject.enumOrDefault("lineStyle", LineStyle.Solid),
+                        lineCap = layerObject.enumOrDefault("lineCap", LineCap.Round),
+                        startMarker = layerObject.enumOrDefault("startMarker", LineMarker.None),
+                        endMarker = layerObject.enumOrDefault("endMarker", LineMarker.None),
+                        angleSnapping = if ("angleSnapping" in layerObject.fields) layerObject.boolean("angleSnapping") else true,
                     )
                 }
                 else -> throw PackageIncompatibleException("Unsupported layer type.")
@@ -257,6 +265,11 @@ object NeoCanvasPackage {
                     append(",\"strokeWidth\":").append(payload.strokeWidth)
                     append(",\"rotationDegrees\":").append(payload.rotationDegrees)
                     append(",\"cornerRadius\":").append(payload.cornerRadius)
+                    append(",\"lineStyle\":\"").append(payload.lineStyle.name).append('"')
+                    append(",\"lineCap\":\"").append(payload.lineCap.name).append('"')
+                    append(",\"startMarker\":\"").append(payload.startMarker.name).append('"')
+                    append(",\"endMarker\":\"").append(payload.endMarker.name).append('"')
+                    append(",\"angleSnapping\":").append(payload.angleSnapping)
                 }
             }
             append('}')
@@ -302,6 +315,11 @@ object NeoCanvasPackage {
 
 private class PackageIncompatibleException(message: String) : IllegalArgumentException(message)
 private class PackageCorruptException(message: String) : IllegalArgumentException(message)
+
+private inline fun <reified T : Enum<T>> JsonObject.enumOrDefault(name: String, default: T): T {
+    if (name !in fields) return default
+    return enumValues<T>().firstOrNull { it.name == string(name) } ?: default
+}
 
 private fun encodePng(width: Int, height: Int, pixels: ByteArray): ByteArray {
     require(pixels.size == width * height * 4)

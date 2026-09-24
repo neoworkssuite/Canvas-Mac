@@ -38,3 +38,6 @@ __pycache__/
 *.msi
 *.exe
 iosApp/NeoCanvas.xcodeproj/
+
+# Local superpowers execution ledgers
+.superpowers/
