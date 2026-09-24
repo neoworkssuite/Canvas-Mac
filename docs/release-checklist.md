@@ -42,6 +42,11 @@ The checked recovery and save/load items are covered by the shared regression su
 - [ ] Test portrait and landscape.
 - [ ] Test Liquify Push/Pinch/Expand/Twirl and other Pro modes.
 - [ ] Test text/shape direct manipulation and multi-object Arrange.
+- [ ] Draw a held QuickShape line, drag both endpoints with Apple Pencil, then edit length, angle, snap, dash, cap and arrowheads; confirm Undo/Redo and reopen preserve it.
+- [ ] Test Automatic, Left and Right interface placement in portrait and landscape; verify open panels move without closing or changing artwork.
+- [ ] Create a valid custom-size canvas and verify invalid/over-16-megapixel dimensions remain blocked.
+- [ ] Verify typed text is clearly white/high-contrast in New Canvas, editable Text, Colour Studio, Brush search/naming, Gallery rename, Versions and Workbench fields.
+- [ ] Confirm the toolbar colour swatch displays the active primary colour and opens responsive Colour Studio without lag.
 - [ ] Test Gallery rename, duplicate, Stack and trash deletion.
 - [ ] Export PNG, JPEG, PDF, TIFF and PSD and open each output.
 - [ ] Import a representative PSD and image.

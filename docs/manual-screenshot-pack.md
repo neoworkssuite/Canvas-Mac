@@ -14,6 +14,6 @@ The optional capture is isolated from ordinary push validation. A pack is upload
 
 ## Pack contents
 
-The pack contains Gallery light and dark appearances, Kids activities, New Canvas, the editor, Brush Library, Colour Studio, Layers, FX and Settings. `manifest.json` records the source commit, Simulator model, filenames, and pixel dimensions. `contact-sheet.html` provides a quick visual index.
+The pack contains Gallery light and dark appearances, Kids activities, New Canvas, the editor, Brush Library, Colour Studio, Layers, FX and Settings. For this release, also capture the explicit Custom Size fields, the active-colour toolbar swatch, an editable QuickShape line with endpoint handles and its Line controls, plus both Left and Right interface placements. `manifest.json` records the source commit, Simulator model, filenames, and pixel dimensions. `contact-sheet.html` provides a quick visual index.
 
 Keep these source PNGs unedited. Add arrows, numbers, captions, and crops to derived copies so the manual can be updated without repeating the capture.

@@ -10,10 +10,10 @@ This document reflects the current `ipad-gestures-phase1` product rather than th
 - Sparse-tile raster engine with undo/redo and bounded local layer storage.
 - Brush Library and Brush Studio.
 - Fill and configurable Eyedropper sampling.
-- QuickShape and drawing assistance: grid, symmetry and perspective guides.
+- QuickShape and drawing assistance: held lines become native editable objects; grid, symmetry and perspective guides remain available.
 - Rectangle, ellipse, lasso and automatic selections.
 - Move, scale, rotate, flip and selection transforms with live previews.
-- Editable Text and Shape objects with styling, direct manipulation, smart guides, snapping and multi-object Arrange.
+- Editable Text and Shape objects with styling, direct manipulation, smart guides, snapping and multi-object Arrange. Lines support endpoint editing, numeric length/angle, optional 15° snapping, solid/dashed/dotted strokes, cap styles, arrowheads and reverse direction.
 - Layer opacity, visibility, lock, alpha lock, clipping, blend modes, masks and groups.
 - Deep Layers memory management.
 - Live adjustments and FX.
@@ -25,7 +25,9 @@ This document reflects the current `ipad-gestures-phase1` product rather than th
 - PSD import/export with compatibility reporting.
 - PNG, JPEG, PDF and lossless TIFF export.
 - Pencil-friendly QuickMenu, canvas-only mode and multi-finger productivity gestures.
-- Portrait and landscape iPad layouts.
+- Portrait and landscape iPad layouts with persistent Automatic, Left-handed and Right-handed control placement.
+- Explicit custom canvas dimensions up to 8192 pixels per side and 16 megapixels, plus commercial presets.
+- High-contrast white text in editable input fields and a lightweight toolbar swatch that always shows the active colour.
 
 ## 1.0 commercial release gate
 
