@@ -12,6 +12,7 @@ import java.io.File
 class AndroidEditorFileActions(private val localDirectory: File,
     private val imagePicker: (((Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) -> Unit)? = null,
     private val documentPicker: (((Result<LoadResult?>) -> Unit) -> Unit)? = null,
+    private val fileSharer: ((File, String) -> Unit)? = null,
 ) : EditorFileActions {
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
@@ -137,6 +138,9 @@ class AndroidEditorFileActions(private val localDirectory: File,
     override fun open(): LoadResult = if (documentFile.exists()) openLocalDocument(documentFile.name)
     else LoadResult.Failure("No local NeoCanvas document has been saved yet.")
 
-    override fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
-        PngExporter.export(document, tiles) { bytes -> exportFile.parentFile?.mkdirs(); exportFile.writeBytes(bytes) }
+    override fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val result = PngExporter.export(document, tiles) { bytes -> exportFile.parentFile?.mkdirs(); exportFile.writeBytes(bytes) }
+        if (result == SaveResult.Success) fileSharer?.invoke(exportFile, "image/png")
+        return result
+    }
 }

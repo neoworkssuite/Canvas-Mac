@@ -1,6 +1,8 @@
 package com.neoworksuite.neocanvas
 
 import android.os.Bundle
+import android.content.Intent
+import androidx.core.content.FileProvider
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.neoworksuite.neocanvas.ui.NeoCanvasApp
@@ -54,6 +56,16 @@ class MainActivity : ComponentActivity() {
             documentPicker = { callback ->
                 documentCallback = callback
                 documentPicker.launch(arrayOf("application/octet-stream", "application/zip"))
+            },
+            fileSharer = { file, mimeType ->
+                val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                startActivity(Intent.createChooser(
+                    Intent(Intent.ACTION_SEND)
+                        .setType(mimeType)
+                        .putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                    "Share NeoCanvas artwork",
+                ))
             },
         )
         setContent {
