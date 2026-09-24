@@ -104,8 +104,7 @@ fun StudioTopBar(state: EditorState, compact: Boolean, modifier: Modifier = Modi
                 state.inspectorVisible &&
                 state.inspectorPanel == InspectorPanel.Brushes,
         ) {
-            state.activateTool(Tool.Brush)
-            state.toggleInspector(InspectorPanel.Brushes)
+            state.toggleBrushLibrary()
         }
         StudioButton(Glyph.Smudge, "Smudge", state.tool == Tool.Smudge) {
             state.activateTool(Tool.Smudge)

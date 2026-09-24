@@ -2665,13 +2665,6 @@ class EditorState(
     var gridGuideVisible: Boolean by mutableStateOf(false)
     var perspectiveGuideVisible: Boolean by mutableStateOf(false)
     var guideSpacing: Float by mutableFloatStateOf(128f)
-    internal var colourStudioMode: ColourStudioMode by mutableStateOf(ColourStudioMode.Disc)
-        private set
-
-    internal fun setColourStudioMode(mode: ColourStudioMode) {
-        colourStudioMode = mode
-        persistPreferences()
-    }
 
     fun resetPreferences() {
         fingerPaintingEnabled = true
@@ -2686,7 +2679,6 @@ class EditorState(
         gridGuideVisible = false
         perspectiveGuideVisible = false
         guideSpacing = 128f
-        colourStudioMode = ColourStudioMode.Disc
         automaticSelectionTolerancePercent = 12
         smoothResizing = true
         inspectorVisible = false
@@ -2715,7 +2707,6 @@ class EditorState(
                     "secondaryColor" to colorHex(secondaryColor),
                     "recentColors" to recentColors.joinToString(","),
                     "smoothResizing" to smoothResizing.toString(),
-                    "colourStudioMode" to colourStudioMode.name,
                 ),
             )
         }
@@ -2757,7 +2748,6 @@ class EditorState(
                 ?.take(12)
                 .orEmpty()
             smoothResizing = preferences["smoothResizing"]?.toBoolean() ?: smoothResizing
-            colourStudioMode = ColourStudioMode.stored(preferences["colourStudioMode"])
         } catch (_: Exception) {
             // Defaults remain active if a stored preference file cannot be read.
         }
@@ -2989,6 +2979,11 @@ class EditorState(
     fun toggleInspector(panel: InspectorPanel) {
         if (inspectorVisible && inspectorPanel == panel) hideInspector()
         else showInspector(panel)
+    }
+
+    fun toggleBrushLibrary() {
+        activateTool(Tool.Brush)
+        toggleInspector(InspectorPanel.Brushes)
     }
 
     fun selectLayer(id: String): Boolean {
