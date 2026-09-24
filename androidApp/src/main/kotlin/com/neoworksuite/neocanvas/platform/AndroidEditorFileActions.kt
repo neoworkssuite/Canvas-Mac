@@ -10,6 +10,8 @@ import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.renderer.EditableObjectRasterizer
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import java.io.File
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfDocument
 
 /** Tablet-safe local storage bridge. V1 keeps files in the app's local documents directory. */
 class AndroidEditorFileActions(private val localDirectory: File,
@@ -19,6 +21,8 @@ class AndroidEditorFileActions(private val localDirectory: File,
 ) : EditorFileActions {
     override val supportsPsdExport = true
     override val supportsTiffExport = true
+    override val supportsJpegExport = true
+    override val supportsPdfExport = true
     override val supportsEditableObjectPsdFlattening = true
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
@@ -156,6 +160,38 @@ class AndroidEditorFileActions(private val localDirectory: File,
         if (result == SaveResult.Success) fileSharer?.invoke(target, "image/tiff")
         return result
     }
+    override fun exportJpeg(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>, quality: Int): SaveResult = try {
+        val target = exportFile("jpg")
+        target.parentFile?.mkdirs()
+        val bitmap = renderBitmap(document, tiles)
+        try {
+            target.outputStream().use { output ->
+                check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), output)) {
+                    "Android could not encode JPEG output."
+                }
+            }
+        } finally { bitmap.recycle() }
+        fileSharer?.invoke(target, "image/jpeg")
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
+    }
+    override fun exportPdf(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult = try {
+        val target = exportFile("pdf")
+        target.parentFile?.mkdirs()
+        val bitmap = renderBitmap(document, tiles)
+        try {
+            PdfDocument().use { pdf ->
+                val page = pdf.startPage(PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create())
+                try { page.canvas.drawBitmap(bitmap, 0f, 0f, null) } finally { pdf.finishPage(page) }
+                target.outputStream().use(pdf::writeTo)
+            }
+        } finally { bitmap.recycle() }
+        fileSharer?.invoke(target, "application/pdf")
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PDF: " + (error.message ?: "unknown output error"))
+    }
     override fun exportPsd(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult = try {
         val target = exportFile("psd")
         val flattened = EditableObjectRasterizer.rasterize(document, tiles)
@@ -165,5 +201,18 @@ class AndroidEditorFileActions(private val localDirectory: File,
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
+    }
+    private fun renderBitmap(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): Bitmap {
+        val image = PngExporter.render(document, tiles)
+        val pixels = IntArray(image.width * image.height)
+        var source = 0
+        for (index in pixels.indices) {
+            val red = image.rgba[source++].toInt() and 255
+            val green = image.rgba[source++].toInt() and 255
+            val blue = image.rgba[source++].toInt() and 255
+            val alpha = image.rgba[source++].toInt() and 255
+            pixels[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+        }
+        return Bitmap.createBitmap(pixels, image.width, image.height, Bitmap.Config.ARGB_8888)
     }
 }
