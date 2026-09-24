@@ -55,7 +55,9 @@ class MainActivity : ComponentActivity() {
             },
             documentPicker = { callback ->
                 documentCallback = callback
-                documentPicker.launch(arrayOf("application/octet-stream", "application/zip"))
+                // NeoCanvas packages have no universally registered Android MIME type.
+                // The package reader validates the selected bytes before opening them.
+                documentPicker.launch(arrayOf("*/*"))
             },
             fileSharer = { file, mimeType ->
                 val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
