@@ -54,7 +54,7 @@ class EditorStateTest {
     fun hidden_line_cannot_be_edited() {
         val line = LayerPayload.ShapeObject(
             kind = ShapeKind.Line, x = 10f, y = 20f, width = 100f, height = 0f,
-            fillArgb = null, strokeArgb = 0xFFFFFFFF.toInt(),
+            fillArgb = null, strokeArgb = 0xFFFFFFFF.toInt(), strokeWidth = 4f,
         )
         val layer = Layer("line", "Hidden line", visible = false, payload = line)
         val state = EditorState(DocumentHistory(CanvasDocument("doc", 400, 300, listOf(layer))))
