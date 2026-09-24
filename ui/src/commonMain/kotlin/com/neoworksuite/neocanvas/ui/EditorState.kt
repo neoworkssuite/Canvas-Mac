@@ -824,6 +824,10 @@ class EditorState(
 
     private fun mutableActiveObjectLayer(action: String = "editing it"): Layer? {
         val layer = activeObjectLayer ?: return null
+        if (!layer.visible) {
+            statusMessage = "Show this object before " + action
+            return null
+        }
         if (layer.locked || isGroupLocked(layer)) {
             statusMessage = "Unlock this object before " + action
             return null
@@ -1022,6 +1026,10 @@ class EditorState(
     fun setActiveLineEndMarker(value: LineMarker): Boolean = updateActiveLine { it.copy(endMarker = value) }
 
     fun setActiveLineAngleSnapping(value: Boolean): Boolean = updateActiveLine { it.copy(angleSnapping = value) }
+
+    fun reportInvalidLineValue(label: String) {
+        statusMessage = "Enter a valid $label value"
+    }
 
     fun setActiveObjectOpacity(value: Float) {
         val layer = mutableActiveObjectLayer() ?: return

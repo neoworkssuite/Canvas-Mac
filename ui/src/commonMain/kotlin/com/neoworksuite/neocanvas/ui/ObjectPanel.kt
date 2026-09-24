@@ -12,16 +12,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neoworksuite.neocanvas.core.model.ShapeKind
@@ -35,7 +44,7 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
     val layer = state.activeObjectLayer
     val text = state.activeTextObject
     val shape = state.activeShapeObject
-    val locked = state.activeObjectLocked
+    val locked = state.activeObjectLocked || layer?.visible == false
 
     Column(
         modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -169,6 +178,15 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
             if (shape.kind == ShapeKind.Line) {
                 val metrics = lineMetrics(shape)
                 Text("LINE", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
+                LineNumericField(
+                    label = "Length",
+                    value = metrics.length,
+                    suffix = "px",
+                    range = 1f..(maxOf(state.document.width, state.document.height) * 2f),
+                    enabled = !locked,
+                    onCommit = { state.setActiveLineLength(it) },
+                    onInvalid = { state.reportInvalidLineValue("length") },
+                )
                 ObjectSlider(
                     "Length",
                     metrics.length,
@@ -176,6 +194,15 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                     metrics.length.toInt().toString() + " px",
                     !locked,
                     { state.setActiveLineLength(it) },
+                )
+                LineNumericField(
+                    label = "Angle",
+                    value = metrics.angleDegrees,
+                    suffix = "°",
+                    range = 0f..359.9f,
+                    enabled = !locked,
+                    onCommit = { state.setActiveLineAngle(it) },
+                    onInvalid = { state.reportInvalidLineValue("angle") },
                 )
                 ObjectSlider("Angle", metrics.angleDegrees, 0f..359.9f,
                     metrics.angleDegrees.toInt().toString() + "°", !locked, { state.setActiveLineAngle(it) })
@@ -300,6 +327,39 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
             )
         }
     }
+}
+
+internal fun parseLineNumericInput(
+    text: String,
+    range: ClosedFloatingPointRange<Float>,
+): Float? = text.trim().toFloatOrNull()?.takeIf { it.isFinite() && it in range }
+
+@Composable
+private fun LineNumericField(
+    label: String,
+    value: Float,
+    suffix: String,
+    range: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    onCommit: (Float) -> Unit,
+    onInvalid: () -> Unit,
+) {
+    var input by remember { mutableStateOf(value.toString()) }
+    LaunchedEffect(value) { input = value.toString() }
+    OutlinedTextField(
+        value = input,
+        onValueChange = { input = it },
+        label = { Text("$label ($suffix)") },
+        singleLine = true,
+        enabled = enabled,
+        isError = input.isNotBlank() && parseLineNumericInput(input, range) == null,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            parseLineNumericInput(input, range)?.let(onCommit) ?: onInvalid()
+        }),
+        colors = studioTextFieldColors(),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

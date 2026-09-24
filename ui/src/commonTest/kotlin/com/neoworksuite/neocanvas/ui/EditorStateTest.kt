@@ -51,6 +51,31 @@ class EditorStateTest {
     }
 
     @Test
+    fun hidden_line_cannot_be_edited() {
+        val line = LayerPayload.ShapeObject(
+            kind = ShapeKind.Line, x = 10f, y = 20f, width = 100f, height = 0f,
+            fillArgb = null, strokeArgb = 0xFFFFFFFF,
+        )
+        val layer = Layer("line", "Hidden line", visible = false, payload = line)
+        val state = EditorState(DocumentHistory(CanvasDocument("doc", 400, 300, listOf(layer))))
+
+        assertFalse(state.setActiveLineLength(200f))
+        assertEquals(line, state.activeShapeObject)
+        assertFalse(state.undo())
+        assertTrue(state.statusMessage.contains("Show"))
+    }
+
+    @Test
+    fun line_numeric_input_accepts_finite_in_range_values_only() {
+        assertEquals(125.5f, parseLineNumericInput("125.5", 1f..500f))
+        assertEquals(45f, parseLineNumericInput(" 45 ", 0f..359.9f))
+        assertEquals(null, parseLineNumericInput("NaN", 1f..500f))
+        assertEquals(null, parseLineNumericInput("0", 1f..500f))
+        assertEquals(null, parseLineNumericInput("360", 0f..359.9f))
+        assertEquals(null, parseLineNumericInput("abc", 0f..359.9f))
+    }
+
+    @Test
     fun closing_brush_library_keeps_selected_brush_active_on_canvas() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
         val selected = com.neoworksuite.neocanvas.brushes.BuiltInBrushes.ink
