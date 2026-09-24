@@ -181,10 +181,13 @@ class AndroidEditorFileActions(private val localDirectory: File,
         target.parentFile?.mkdirs()
         val bitmap = renderBitmap(document, tiles)
         try {
-            PdfDocument().use { pdf ->
+            val pdf = PdfDocument()
+            try {
                 val page = pdf.startPage(PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create())
                 try { page.canvas.drawBitmap(bitmap, 0f, 0f, null) } finally { pdf.finishPage(page) }
-                target.outputStream().use(pdf::writeTo)
+                target.outputStream().use { output -> pdf.writeTo(output) }
+            } finally {
+                pdf.close()
             }
         } finally { bitmap.recycle() }
         fileSharer?.invoke(target, "application/pdf")
