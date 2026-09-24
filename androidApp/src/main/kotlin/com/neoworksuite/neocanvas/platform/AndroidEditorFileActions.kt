@@ -11,6 +11,7 @@ import java.io.File
 /** Tablet-safe local storage bridge. V1 keeps files in the app's local documents directory. */
 class AndroidEditorFileActions(private val localDirectory: File,
     private val imagePicker: (((Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) -> Unit)? = null,
+    private val documentPicker: (((Result<LoadResult?>) -> Unit) -> Unit)? = null,
 ) : EditorFileActions {
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
@@ -111,6 +112,9 @@ class AndroidEditorFileActions(private val localDirectory: File,
     }
     override fun importImage(onResult: (Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) {
         imagePicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("Image picker unavailable.")))
+    }
+    override fun openDocumentFile(onResult: (Result<LoadResult?>) -> Unit) {
+        documentPicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("Document picker unavailable.")))
     }
     override fun loadPalette(): List<String> = File(localDirectory, "palette.txt").let {
         if (it.exists()) it.readLines() else emptyList()
