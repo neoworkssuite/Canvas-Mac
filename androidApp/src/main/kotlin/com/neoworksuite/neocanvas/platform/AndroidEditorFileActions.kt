@@ -17,8 +17,10 @@ import android.graphics.pdf.PdfDocument
 class AndroidEditorFileActions(private val localDirectory: File,
     private val imagePicker: (((Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit) -> Unit)? = null,
     private val documentPicker: (((Result<LoadResult?>) -> Unit) -> Unit)? = null,
+    private val psdPicker: (((Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) -> Unit)? = null,
     private val fileSharer: ((File, String) -> Unit)? = null,
 ) : EditorFileActions {
+    override val supportsPsdImport = true
     override val supportsPsdExport = true
     override val supportsTiffExport = true
     override val supportsJpegExport = true
@@ -126,6 +128,9 @@ class AndroidEditorFileActions(private val localDirectory: File,
     }
     override fun openDocumentFile(onResult: (Result<LoadResult?>) -> Unit) {
         documentPicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("Document picker unavailable.")))
+    }
+    override fun importPsd(onResult: (Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit) {
+        psdPicker?.invoke(onResult) ?: onResult(Result.failure(IllegalStateException("PSD picker unavailable.")))
     }
     override fun loadPalette(): List<String> = File(localDirectory, "palette.txt").let {
         if (it.exists()) it.readLines() else emptyList()

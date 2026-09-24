@@ -7,6 +7,18 @@ import java.nio.file.Files
 import kotlin.test.*
 
 class LocalLibraryTest {
+    @Test fun android_host_advertises_all_supported_tablet_export_and_psd_import_actions() {
+        val directory = Files.createTempDirectory("neocanvas-capabilities-test").toFile()
+        try {
+            val actions = AndroidEditorFileActions(directory)
+            assertTrue(actions.supportsPsdImport)
+            assertTrue(actions.supportsPsdExport)
+            assertTrue(actions.supportsJpegExport)
+            assertTrue(actions.supportsPdfExport)
+            assertTrue(actions.supportsTiffExport)
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun named_copies_round_trip_without_overwriting_or_traversing_paths() {
         val directory = Files.createTempDirectory("neocanvas-library-test").toFile()
         try {

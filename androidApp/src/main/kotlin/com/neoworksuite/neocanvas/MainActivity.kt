@@ -11,6 +11,7 @@ import com.neoworksuite.neocanvas.platform.AndroidEditorFileActions
 class MainActivity : ComponentActivity() {
     private var imageCallback: ((Result<com.neoworksuite.neocanvas.ui.ImportedImage?>) -> Unit)? = null
     private var documentCallback: ((Result<com.neoworksuite.neocanvas.core.store.LoadResult?>) -> Unit)? = null
+    private var psdCallback: ((Result<com.neoworksuite.neocanvas.renderer.PsdImportResult?>) -> Unit)? = null
     private val imagePicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         val callback = imageCallback
         imageCallback = null
@@ -45,6 +46,16 @@ class MainActivity : ComponentActivity() {
             }
         })
     }
+    private val psdPicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val callback = psdCallback
+        psdCallback = null
+        callback?.invoke(runCatching {
+            if (uri == null) return@runCatching null
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: error("Unable to read selected PSD.")
+            com.neoworksuite.neocanvas.renderer.PsdCodec.decode(bytes)
+        })
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val actions = AndroidEditorFileActions(
@@ -58,6 +69,10 @@ class MainActivity : ComponentActivity() {
                 // NeoCanvas packages have no universally registered Android MIME type.
                 // The package reader validates the selected bytes before opening them.
                 documentPicker.launch(arrayOf("*/*"))
+            },
+            psdPicker = { callback ->
+                psdCallback = callback
+                psdPicker.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream"))
             },
             fileSharer = { file, mimeType ->
                 val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
