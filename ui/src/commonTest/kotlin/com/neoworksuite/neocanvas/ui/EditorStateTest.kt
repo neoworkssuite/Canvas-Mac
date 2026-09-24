@@ -20,6 +20,20 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorStateTest {
+    @Test
+    fun closing_brush_library_keeps_selected_brush_active_on_canvas() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
+        val selected = com.neoworksuite.neocanvas.brushes.BuiltInBrushes.ink
+        state.selectBrush(selected)
+        state.showInspector(InspectorPanel.Brushes)
+
+        state.toggleBrushLibrary()
+
+        assertFalse(state.inspectorVisible)
+        assertEquals(Tool.Brush, state.tool)
+        assertEquals(selected, state.brush)
+    }
+
     @Test fun merge_down_flattens_two_layers_and_undo_restores_both_with_pixels() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
         state.addLayer()
