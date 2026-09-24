@@ -46,7 +46,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -275,15 +274,13 @@ private fun StudioColourButton(state: EditorState) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (active) NeoCanvasColors.panelRaised else Color.Transparent)
                 .clickable { state.toggleInspector(InspectorPanel.Colors) }
-                .semantics { contentDescription = "Open Colour Studio" },
+                .semantics { contentDescription = colourButtonDescription(state.color) },
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.size(36.dp)) {
-                val ring = Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red))
-                drawCircle(ring, radius = size.minDimension * .46f, style = Stroke(4.dp.toPx()))
-                drawCircle(state.color, radius = size.minDimension * .28f)
+                drawCircle(state.color, radius = size.minDimension * .36f)
                 drawCircle(if (active) NeoCanvasColors.accent else NeoCanvasColors.paper,
-                    radius = size.minDimension * .29f, style = Stroke(if (active) 2.dp.toPx() else 1.dp.toPx()))
+                    radius = size.minDimension * .38f, style = Stroke(if (active) 2.dp.toPx() else 1.dp.toPx()))
                 drawCircle(state.secondaryColor, radius = size.minDimension * .13f,
                     center = Offset(size.width * .76f, size.height * .76f))
                 drawCircle(NeoCanvasColors.paper, radius = size.minDimension * .14f,
@@ -292,6 +289,9 @@ private fun StudioColourButton(state: EditorState) {
         }
     }
 }
+
+internal fun colourButtonDescription(colour: Color): String =
+    "Colour ${colorHex(colour)}. Open Colour Studio"
 
 @Composable
 private fun StudioMenu(label: String, actions: List<Pair<String, () -> Unit>>, active: Boolean = false) {
