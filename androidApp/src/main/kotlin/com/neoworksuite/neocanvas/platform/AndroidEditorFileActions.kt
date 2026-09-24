@@ -5,6 +5,9 @@ import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.PngExporter
+import com.neoworksuite.neocanvas.renderer.TiffExporter
+import com.neoworksuite.neocanvas.renderer.PsdCodec
+import com.neoworksuite.neocanvas.renderer.EditableObjectRasterizer
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import java.io.File
 
@@ -14,6 +17,9 @@ class AndroidEditorFileActions(private val localDirectory: File,
     private val documentPicker: (((Result<LoadResult?>) -> Unit) -> Unit)? = null,
     private val fileSharer: ((File, String) -> Unit)? = null,
 ) : EditorFileActions {
+    override val supportsPsdExport = true
+    override val supportsTiffExport = true
+    override val supportsEditableObjectPsdFlattening = true
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
     private var currentDocumentFile: File? = null
@@ -130,7 +136,7 @@ class AndroidEditorFileActions(private val localDirectory: File,
     } catch (error: Exception) { SaveResult.Failure("Could not save palette: ${error.message}") }
     private val documents = AndroidDocumentStore()
     private val documentFile get() = File(localDirectory, "NeoCanvas.neocanvas")
-    private val exportFile get() = File(localDirectory, "NeoCanvas-export.png")
+    private fun exportFile(extension: String) = File(localDirectory, "NeoCanvas-export.$extension")
 
     override fun save(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult =
         saveTo(currentDocumentFile ?: File(localDirectory, "Untitled-${java.util.UUID.randomUUID()}.neocanvas"), document, tiles)
@@ -139,8 +145,25 @@ class AndroidEditorFileActions(private val localDirectory: File,
     else LoadResult.Failure("No local NeoCanvas document has been saved yet.")
 
     override fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
-        val result = PngExporter.export(document, tiles) { bytes -> exportFile.parentFile?.mkdirs(); exportFile.writeBytes(bytes) }
-        if (result == SaveResult.Success) fileSharer?.invoke(exportFile, "image/png")
+        val target = exportFile("png")
+        val result = PngExporter.export(document, tiles) { bytes -> target.parentFile?.mkdirs(); target.writeBytes(bytes) }
+        if (result == SaveResult.Success) fileSharer?.invoke(target, "image/png")
         return result
+    }
+    override fun exportTiff(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val target = exportFile("tiff")
+        val result = TiffExporter.export(document, tiles) { bytes -> target.parentFile?.mkdirs(); target.writeBytes(bytes) }
+        if (result == SaveResult.Success) fileSharer?.invoke(target, "image/tiff")
+        return result
+    }
+    override fun exportPsd(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult = try {
+        val target = exportFile("psd")
+        val flattened = EditableObjectRasterizer.rasterize(document, tiles)
+        target.parentFile?.mkdirs()
+        target.writeBytes(PsdCodec.encode(flattened.document, flattened.tiles))
+        fileSharer?.invoke(target, "image/vnd.adobe.photoshop")
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
     }
 }
