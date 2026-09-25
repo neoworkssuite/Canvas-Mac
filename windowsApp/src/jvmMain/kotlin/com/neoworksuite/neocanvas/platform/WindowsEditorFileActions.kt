@@ -19,11 +19,11 @@ import java.net.URI
 /** Windows-local chooser and file writer. It never leaves the device or retains an account. */
 class WindowsEditorFileActions(
     private val documents: com.neoworksuite.neocanvas.core.store.DocumentStore = WindowsDocumentStore(),
-    private val fileChooser: ((String, Int, String?) -> String?)? = null,
     private val appDataRoot: File = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas",
     ),
+    private val fileChooser: ((String, Int, String?) -> String?)? = null,
 ) : EditorFileActions {
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
