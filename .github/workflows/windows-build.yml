@@ -3,7 +3,7 @@ name: NeoCanvas Windows CI
 on:
   push:
     branches:
-      - windows-parity-phase1
+      - "windows-*"
       - main
   pull_request:
     branches:
@@ -45,6 +45,10 @@ jobs:
       - name: Verify Gradle project
         shell: pwsh
         run: .\gradlew.bat projects
+
+      - name: Verify Windows release contract
+        shell: pwsh
+        run: python scripts/verify-windows-release-contract.py
 
       - name: Run shared desktop tests
         shell: pwsh
