@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -86,6 +87,8 @@ import kotlinx.coroutines.delay
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
 private enum class ObjectDrag { None, Move, Scale, Rotate, LineStart, LineEnd, TextLeft, TextRight, TextTop, TextBottom }
+
+internal fun liveCanvasTileFilterQuality(): FilterQuality = FilterQuality.None
 
 /** Bounded document viewport. Strokes map to document pixels before the shared rasterizer stores them. */
 @Composable
@@ -1484,11 +1487,16 @@ private fun DrawScope.drawStoredTiles(
                         }
                         clipTileAlpha(maskedPixels, mask)
                     } else maskedPixels
+                    val tileImage = images.image(address, pixels)
                     drawImage(
-                        images.image(address, pixels),
-                        Offset(address.x * 256f, address.y * 256f),
+                        image = tileImage,
+                        srcOffset = IntOffset.Zero,
+                        srcSize = IntSize(tileImage.width, tileImage.height),
+                        dstOffset = IntOffset(address.x * 256, address.y * 256),
+                        dstSize = IntSize(256, 256),
                         alpha = effectiveOpacity,
                         blendMode = blendMode,
+                        filterQuality = liveCanvasTileFilterQuality(),
                     )
                 }
             }
