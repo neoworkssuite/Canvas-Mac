@@ -683,8 +683,6 @@ class EditorState(
             if (value == primaryColor) return
             previousColor = primaryColor
             primaryColor = value
-            val hex = colorHex(value)
-            recentColors = (listOf(hex) + recentColors.filterNot { it == hex }).take(12)
         }
     var brushSize: Float by mutableFloatStateOf(BuiltInBrushes.pencil.baseSize)
     var fillTolerance: Int by mutableIntStateOf(0)
@@ -867,6 +865,7 @@ class EditorState(
             alignment = TextAlignment.Center,
         )
         execute(AddTextLayer(id, "Text", payload))
+        recordUsedColour(color)
         activeLayerId = id
         clearSelection()
         openObjectEditor(id)
@@ -888,6 +887,7 @@ class EditorState(
             strokeWidth = if (kind == ShapeKind.Line) 6f else 0f,
         )
         execute(AddShapeLayer(id, shapeLayerName(kind), payload))
+        recordUsedColour(color)
         activeLayerId = id
         clearSelection()
         openObjectEditor(id)
@@ -917,6 +917,7 @@ class EditorState(
             strokeWidth = width.coerceIn(1f, 128f),
         )
         execute(AddShapeLayer(id, "Line", payload, opacity = opacity.coerceIn(0f, 1f)))
+        recordUsedColour(colour)
         activeLayerId = id
         clearSelection()
         openObjectEditor(id)
@@ -968,6 +969,30 @@ class EditorState(
         val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
         execute(UpdateTextLayer(layer.id, payload.copy(lineSpacing = value.coerceIn(.7f, 3f))))
+    }
+
+    fun setActiveTextTracking(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(tracking = value.coerceIn(-8f, 40f))))
+    }
+
+    fun setActiveTextBaselineOffset(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(baselineOffset = value.coerceIn(-256f, 256f))))
+    }
+
+    fun setActiveTextUnderline(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.underline != value) execute(UpdateTextLayer(layer.id, payload.copy(underline = value)))
+    }
+
+    fun setActiveTextUppercase(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.uppercase != value) execute(UpdateTextLayer(layer.id, payload.copy(uppercase = value)))
     }
 
     fun setActiveShapeKind(value: ShapeKind) {
@@ -1070,16 +1095,29 @@ class EditorState(
     fun useCurrentColourForActiveObject(asStroke: Boolean = false) {
         val layer = mutableActiveObjectLayer() ?: return
         val argb = composeColorArgb(color)
-        when (val payload = layer.payload) {
-            is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(colorArgb = argb)))
+        val changed = when (val payload = layer.payload) {
+            is LayerPayload.TextObject -> {
+                if (payload.colorArgb == argb) false else {
+                    execute(UpdateTextLayer(layer.id, payload.copy(colorArgb = argb)))
+                    true
+                }
+            }
             is LayerPayload.ShapeObject -> {
                 val next = if (asStroke || payload.kind == ShapeKind.Line) {
                     payload.copy(strokeArgb = argb, strokeWidth = payload.strokeWidth.coerceAtLeast(4f))
                 } else payload.copy(fillArgb = argb)
                 execute(UpdateShapeLayer(layer.id, next))
+                next != payload
             }
-            is LayerPayload.Raster -> Unit
+            is LayerPayload.Raster -> false
         }
+        if (changed) recordUsedColour(color)
+    }
+
+    private fun recordUsedColour(used: Color) {
+        val hex = colorHex(used)
+        recentColors = (listOf(hex) + recentColors.filterNot { it == hex }).take(12)
+        persistPreferences()
     }
 
     fun duplicateSelectedObjects(): Boolean {
@@ -3371,6 +3409,7 @@ class EditorState(
                 brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
             ) BuiltInBrushes.eraser else brush
             appendEditableStroke(layerId, layerBefore, points, stabilize, activeLayer, effectiveBrush, mode)
+            if (tool == Tool.Brush) recordUsedColour(color)
         } else if (tool == Tool.Liquify) {
             statusMessage = "Liquify " + liquifyMode.displayName.lowercase() + " applied"
         }
@@ -3702,6 +3741,7 @@ class EditorState(
             val before = tileStore.snapshot()
             tileStore.applyPatch(patch)
             execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+            recordUsedColour(color)
             statusMessage = "Filled connected colour on active layer"
         } else if (tool == Tool.Eyedropper) {
             val sampled = sampleEyedropperColor(x, y)

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
@@ -29,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -47,7 +50,7 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
     val locked = state.activeObjectLocked || layer?.visible == false
 
     Column(
-        modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -83,6 +86,8 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
         }
 
         if (text != null) {
+            var fontSearch by remember { mutableStateOf("") }
+            val fontFamilies = rememberNeoCanvasFontFamilies()
             OutlinedTextField(
                 value = text.text,
                 onValueChange = state::setActiveTextContent,
@@ -94,19 +99,27 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 modifier = Modifier.fillMaxWidth(),
             )
             ObjectSlider("Size", text.fontSize, 6f..256f, text.fontSize.toInt().toString() + " px", !locked, state::setActiveTextSize)
-            Text("FONT", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                ObjectAction("System", Modifier.weight(1f), text.fontFamily.equals("System", ignoreCase = true), !locked) {
-                    state.setActiveTextFontFamily("System")
-                }
-                ObjectAction("Sans", Modifier.weight(1f), text.fontFamily.equals("Sans", ignoreCase = true), !locked) {
-                    state.setActiveTextFontFamily("Sans")
-                }
-                ObjectAction("Serif", Modifier.weight(1f), text.fontFamily.equals("Serif", ignoreCase = true), !locked) {
-                    state.setActiveTextFontFamily("Serif")
-                }
-                ObjectAction("Mono", Modifier.weight(1f), text.fontFamily.equals("Mono", ignoreCase = true), !locked) {
-                    state.setActiveTextFontFamily("Mono")
+            Text("FONT · ${text.fontFamily}", color = NeoCanvasColors.faint, fontSize = 9.sp, letterSpacing = .7.sp)
+            OutlinedTextField(
+                value = fontSearch,
+                onValueChange = { fontSearch = it },
+                label = { Text("Search fonts") },
+                singleLine = true,
+                colors = studioTextFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            filteredTextFonts(fontSearch).chunked(2).forEach { choices ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    choices.forEach { choice ->
+                        FontAction(
+                            choice = choice,
+                            family = editableTextFontFamily(choice.name, fontFamilies),
+                            modifier = Modifier.weight(1f),
+                            selected = text.fontFamily.equals(choice.name, ignoreCase = true),
+                            enabled = !locked,
+                        ) { state.setActiveTextFontFamily(choice.name) }
+                    }
+                    if (choices.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -116,7 +129,14 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 ObjectAction("Italic", Modifier.weight(1f), text.italic, !locked) {
                     state.setActiveTextItalic(!text.italic)
                 }
+                ObjectAction("Underline", Modifier.weight(1f), text.underline, !locked) {
+                    state.setActiveTextUnderline(!text.underline)
+                }
+                ObjectAction("Uppercase", Modifier.weight(1f), text.uppercase, !locked) {
+                    state.setActiveTextUppercase(!text.uppercase)
+                }
             }
+            ObjectSlider("Tracking", text.tracking, -8f..40f, "${text.tracking.toInt()} px", !locked, state::setActiveTextTracking)
             ObjectSlider(
                 "Leading",
                 text.lineSpacing,
@@ -125,6 +145,10 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 !locked,
                 state::setActiveTextLineSpacing,
             )
+            ObjectSlider("Baseline", text.baselineOffset, -128f..128f, "${text.baselineOffset.toInt()} px", !locked, state::setActiveTextBaselineOffset)
+            ObjectSlider("Opacity", layer?.opacity ?: 1f, .05f..1f,
+                (((layer?.opacity ?: 1f) * 100).toInt()).toString() + "%", !locked,
+                state::setActiveObjectOpacity)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 ObjectAction("Left", Modifier.weight(1f), text.alignment == TextAlignment.Left, !locked) {
                     state.setActiveTextAlignment(TextAlignment.Left)
@@ -405,5 +429,26 @@ private fun ObjectAction(
             color = if (enabled) NeoCanvasColors.muted else NeoCanvasColors.faint,
             fontSize = 11.sp,
         )
+    }
+}
+
+@Composable
+private fun FontAction(
+    choice: TextFontChoice,
+    family: FontFamily,
+    modifier: Modifier = Modifier,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier.clip(RoundedCornerShape(9.dp))
+            .background(if (selected) NeoCanvasColors.accent.copy(alpha = .16f) else NeoCanvasColors.panelRaised)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text("Ag", color = NeoCanvasColors.paper, fontSize = 18.sp, fontFamily = family)
+        Text(choice.name + if (selected) " ✓" else "", color = NeoCanvasColors.muted, fontSize = 9.sp, fontFamily = family)
+        Text(choice.category.uppercase(), color = NeoCanvasColors.faint, fontSize = 7.sp)
     }
 }

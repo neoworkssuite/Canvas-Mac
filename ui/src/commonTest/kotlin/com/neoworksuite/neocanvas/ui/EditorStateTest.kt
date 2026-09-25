@@ -877,9 +877,17 @@ class EditorStateTest {
         state.setActiveTextBold(true)
         state.setActiveTextItalic(true)
         state.setActiveTextLineSpacing(1.75f)
+        state.setActiveTextTracking(3.5f)
+        state.setActiveTextBaselineOffset(-8f)
+        state.setActiveTextUnderline(true)
+        state.setActiveTextUppercase(true)
         assertTrue(state.activeTextObject!!.bold)
         assertTrue(state.activeTextObject!!.italic)
         assertEquals(1.75f, state.activeTextObject!!.lineSpacing)
+        assertEquals(3.5f, state.activeTextObject!!.tracking)
+        assertEquals(-8f, state.activeTextObject!!.baselineOffset)
+        assertTrue(state.activeTextObject!!.underline)
+        assertTrue(state.activeTextObject!!.uppercase)
 
         state.activeLayerId = "shape-1"
         state.setActiveShapeCornerRadius(36f)
@@ -1594,19 +1602,25 @@ class EditorStateTest {
     }
 
     @Test
-    fun colour_history_tracks_recent_primary_and_secondary_colours() {
+    fun colour_history_only_tracks_colours_committed_to_canvas() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(32, 32)))
+        state.addLayer()
         val original = state.color
 
         state.color = Color.Red
         state.color = Color.Blue
 
         assertEquals(Color.Red, state.previousColor)
-        assertEquals(listOf("#0000FF", "#FF0000"), state.recentColors)
+        assertTrue(state.recentColors.isEmpty())
+        state.recordStroke(listOf(DrawPoint(8f, 8f)))
+        assertEquals(listOf("#0000FF"), state.recentColors)
         state.setSecondaryFromPrimary()
         assertEquals(Color.Blue, state.secondaryColor)
 
         state.color = Color.Green
+        state.tool = Tool.Eraser
+        state.recordStroke(listOf(DrawPoint(8f, 8f)))
+        assertEquals(listOf("#0000FF"), state.recentColors)
         state.swapPrimarySecondaryColors()
         assertEquals(Color.Blue, state.color)
         assertEquals(Color.Green, state.secondaryColor)
