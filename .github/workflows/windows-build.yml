@@ -1,0 +1,58 @@
+name: NeoCanvas Windows CI
+
+on:
+  push:
+    branches:
+      - windows-parity-foundation
+      - windows-**
+  pull_request:
+    paths:
+      - "core/**"
+      - "brushes/**"
+      - "renderer/**"
+      - "ui/**"
+      - "windowsApp/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-package:
+    name: Windows tests and EXE package
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run desktop regression tests
+        shell: pwsh
+        run: .\gradlew.bat --stacktrace :core:desktopTest :brushes:desktopTest :renderer:desktopTest :ui:desktopTest :windowsApp:jvmTest
+
+      - name: Package NeoCanvas EXE
+        shell: pwsh
+        run: .\gradlew.bat --stacktrace :windowsApp:packageExe
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-Windows-${{ github.sha }}
+          path: windowsApp/build/compose/binaries/main/exe/
+          if-no-files-found: error
+          retention-days: 14
