@@ -478,6 +478,13 @@ class WindowsEditorFileActions(
         return result
     }
 
+    override fun openDocumentFile(onResult: (Result<LoadResult?>) -> Unit) {
+        onResult(runCatching {
+            val path = choose("Open NeoCanvas document", FileDialog.LOAD, null) ?: return@runCatching null
+            openPath(path)
+        })
+    }
+
     override fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
         val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".png" } ?: "Untitled.png"
         val path = choose("Export PNG", FileDialog.SAVE, suggested) ?: return SaveResult.Failure("Export cancelled.")
