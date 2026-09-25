@@ -56,14 +56,22 @@ jobs:
           if (-not (Test-Path $exe)) {
             throw "Packaged NeoCanvas runtime was not created: $exe"
           }
-          $output = & $exe --windows-self-test
-          $exit = $LASTEXITCODE
-          $output | Write-Host
-          if ($exit -ne 0) {
-            throw "Packaged NeoCanvas self-test exited with code $exit"
+          $report = Join-Path $env:RUNNER_TEMP "neocanvas-windows-self-test.txt"
+          if (Test-Path $report) { Remove-Item $report -Force }
+          $process = Start-Process -FilePath $exe -ArgumentList @(
+            "--windows-self-test",
+            "--windows-self-test-report=$report"
+          ) -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged NeoCanvas self-test exited with code $($process.ExitCode)"
           }
+          if (-not (Test-Path $report)) {
+            throw "Packaged NeoCanvas self-test did not create its report."
+          }
+          $output = Get-Content $report
+          $output | Write-Host
           if (($output -join "`n") -notmatch "NEOCANVAS_WINDOWS_SELF_TEST=PASS") {
-            throw "Packaged NeoCanvas self-test did not emit the PASS marker."
+            throw "Packaged NeoCanvas self-test report did not contain the PASS marker."
           }
 
       - name: Verify EXE installer exists
