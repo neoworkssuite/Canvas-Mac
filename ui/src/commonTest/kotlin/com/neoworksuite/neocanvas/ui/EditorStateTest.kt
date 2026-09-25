@@ -1604,6 +1604,7 @@ class EditorStateTest {
     @Test
     fun colour_history_only_tracks_colours_committed_to_canvas() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(32, 32)))
+        state.addLayer()
         val original = state.color
 
         state.color = Color.Red
