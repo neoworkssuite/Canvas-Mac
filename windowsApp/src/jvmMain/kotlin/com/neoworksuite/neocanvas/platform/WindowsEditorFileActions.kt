@@ -6,11 +6,14 @@ import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
+import com.neoworksuite.neocanvas.renderer.PdfExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
+import com.neoworksuite.neocanvas.renderer.TiffExporter
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.image.BufferedImage
 import java.io.File
 
 /** Windows-local chooser and file writer. It never leaves the device or retains an account. */
@@ -22,6 +25,10 @@ class WindowsEditorFileActions(
     override val supportsLocalLibrary = true
     override val supportsPsdImport = true
     override val supportsPsdExport = true
+    override val supportsJpegExport = true
+    override val supportsPdfExport = true
+    override val supportsTiffExport = true
+    override val supportsEditableObjectPsdFlattening = true
     private val libraryDirectory = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/Documents",
@@ -334,6 +341,66 @@ class WindowsEditorFileActions(
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
+    }
+    override fun exportJpeg(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+        quality: Int,
+    ): SaveResult = try {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".jpg" } ?: "Untitled.jpg"
+        val path = choose("Export JPEG", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("JPEG export cancelled.")
+        val image = PngExporter.render(document, tiles)
+        val buffered = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_RGB)
+        var offset = 0
+        for (y in 0 until image.height) {
+            for (x in 0 until image.width) {
+                val red = image.rgba[offset].toInt() and 0xff
+                val green = image.rgba[offset + 1].toInt() and 0xff
+                val blue = image.rgba[offset + 2].toInt() and 0xff
+                val alpha = image.rgba[offset + 3].toInt() and 0xff
+                val inv = 255 - alpha
+                val outR = (red * alpha + 255 * inv) / 255
+                val outG = (green * alpha + 255 * inv) / 255
+                val outB = (blue * alpha + 255 * inv) / 255
+                buffered.setRGB(x, y, (outR shl 16) or (outG shl 8) or outB)
+                offset += 4
+            }
+        }
+        val target = File(path.ensureExtension(".jpg"))
+        val writer = javax.imageio.ImageIO.getImageWritersByFormatName("jpeg").asSequence().firstOrNull()
+            ?: error("JPEG encoder is unavailable.")
+        javax.imageio.ImageIO.createImageOutputStream(target).use { stream ->
+            writer.output = stream
+            val params = writer.defaultWriteParam
+            if (params.canWriteCompressed()) {
+                params.compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT
+                params.compressionQuality = quality.coerceIn(1, 100) / 100f
+            }
+            writer.write(null, javax.imageio.IIOImage(buffered, null, null), params)
+        }
+        writer.dispose()
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportPdf(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".pdf" } ?: "Untitled.pdf"
+        val path = choose("Export PDF", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("PDF export cancelled.")
+        return PdfExporter.export(document, tiles) { bytes ->
+            File(path.ensureExtension(".pdf")).writeBytes(bytes)
+        }
+    }
+
+    override fun exportTiff(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".tiff" } ?: "Untitled.tiff"
+        val path = choose("Export TIFF", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("TIFF export cancelled.")
+        return TiffExporter.export(document, tiles) { bytes ->
+            File(path.ensureExtension(".tiff")).writeBytes(bytes)
+        }
     }
 
     private fun choose(title: String, mode: Int, suggested: String?): String? {
