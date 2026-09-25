@@ -116,6 +116,7 @@ fun CanvasWorkspace(
     var rapidHistoryFingerCount by remember { mutableIntStateOf(0) }
     var rapidHistoryRevision by remember { mutableIntStateOf(0) }
     var rapidHistoryTriggered by remember { mutableStateOf(false) }
+    var eraserPointerActive by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val textFontFamilies = rememberNeoCanvasFontFamilies()
@@ -185,10 +186,15 @@ fun CanvasWorkspace(
         val strokePreview = remember(previewPoints, document, state.tool, state.activeLayerId,
             state.brush, state.brushSize, state.brushOpacity, state.smudgeStrength,
             state.liquifySize, state.liquifyStrength, state.liquifyMode, state.color, state.selection, state.stabilization,
-            state.symmetry, quickShapeSnapped) {
-            when (state.tool) {
-                Tool.Smudge -> state.previewSmudge(previewPoints, stabilize = true)
-                Tool.Liquify -> state.previewLiquify(previewPoints, stabilize = true)
+            state.symmetry, quickShapeSnapped, eraserPointerActive) {
+            when {
+                eraserPointerActive -> state.previewStroke(
+                    previewPoints,
+                    stabilize = !quickShapeSnapped,
+                    toolOverride = Tool.Eraser,
+                )
+                state.tool == Tool.Smudge -> state.previewSmudge(previewPoints, stabilize = true)
+                state.tool == Tool.Liquify -> state.previewLiquify(previewPoints, stabilize = true)
                 else -> state.previewStroke(previewPoints, stabilize = !quickShapeSnapped)
             }
         }
@@ -224,7 +230,7 @@ fun CanvasWorkspace(
                             requireUnconsumed = false,
                             pass = PointerEventPass.Initial,
                         )
-                        var maxTouchCount = if (firstDown.type == PointerType.Stylus) 0 else 1
+                        var maxTouchCount = if (firstDown.type.isPenPointer()) 0 else 1
                         var multiTouchStartedAt = 0L
                         var lastEventTime = firstDown.uptimeMillis
                         var transformStarted = false
@@ -232,7 +238,7 @@ fun CanvasWorkspace(
                         var accumulatedZoom = 1f
                         var accumulatedRotation = 0f
                         var touchTravel = 0f
-                        var stylusSeen = firstDown.type == PointerType.Stylus
+                        var stylusSeen = firstDown.type.isPenPointer()
                         var threeFingerStart: Offset? = null
                         var threeFingerEnd: Offset? = null
                         var threeFingerLastX: Float? = null
@@ -247,13 +253,13 @@ fun CanvasWorkspace(
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             lastEventTime = event.changes.maxOfOrNull { it.uptimeMillis } ?: lastEventTime
-                            stylusSeen = stylusSeen || event.changes.any { it.pressed && it.type == PointerType.Stylus }
+                            stylusSeen = stylusSeen || event.changes.any { it.pressed && it.type.isPenPointer() }
 
-                            val touches = event.changes.filter { it.pressed && it.type != PointerType.Stylus }
+                            val touches = event.changes.filter { it.pressed && !it.type.isPenPointer() }
                             maxTouchCount = maxOf(maxTouchCount, touches.size)
                             if (touches.size >= 2 && multiTouchStartedAt == 0L) multiTouchStartedAt = lastEventTime
 
-                            event.changes.filter { it.type != PointerType.Stylus && (it.pressed || it.previousPressed) }
+                            event.changes.filter { !it.type.isPenPointer() && (it.pressed || it.previousPressed) }
                                 .forEach { touchTravel += (it.position - it.previousPosition).getDistance() }
 
                             val rapidFingers = if (shouldArmRapidHistoryGesture(
@@ -335,11 +341,11 @@ fun CanvasWorkspace(
                             } else if (multiTouchStartedAt != 0L) {
                                 // Keep the remaining finger from becoming a new stroke while a multi-touch
                                 // gesture is winding down.
-                                event.changes.filter { it.type != PointerType.Stylus && (it.pressed || it.previousPressed) }
+                                event.changes.filter { !it.type.isPenPointer() && (it.pressed || it.previousPressed) }
                                     .forEach { it.consume() }
                             }
 
-                            val anyTouchPressed = event.changes.any { it.pressed && it.type != PointerType.Stylus }
+                            val anyTouchPressed = event.changes.any { it.pressed && !it.type.isPenPointer() }
                             if (!anyTouchPressed && multiTouchStartedAt != 0L) {
                                 val duration = (lastEventTime - multiTouchStartedAt).coerceAtLeast(0L)
                                 val tapTravelLimit = viewConfiguration.touchSlop * maxOf(2, maxTouchCount) * 1.5f
@@ -417,13 +423,15 @@ fun CanvasWorkspace(
                 ) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
+                    val eraserPointer = down.type == PointerType.Eraser
+                    eraserPointerActive = eraserPointer
                     if (quickMenuAnchor != null) {
                         quickMenuAnchor = null
                         down.consume()
                         return@awaitEachGesture
                     }
                     if (shouldArmQuickMenu(
-                            isStylus = down.type == PointerType.Stylus,
+                            isStylus = down.type.isPenPointer(),
                             fingerPaintingEnabled = state.fingerPaintingEnabled,
                             tool = state.tool,
                             objectArrangePicking = state.objectArrangePicking,
@@ -436,7 +444,7 @@ fun CanvasWorkspace(
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                val pressedTouches = event.changes.count { it.pressed && it.type != PointerType.Stylus }
+                                val pressedTouches = event.changes.count { it.pressed && !it.type.isPenPointer() }
                                 if (pressedTouches > 1 ||
                                     (change.position - down.position).getDistance() > viewConfiguration.touchSlop
                                 ) {
@@ -453,7 +461,7 @@ fun CanvasWorkspace(
                         return@awaitEachGesture
                     }
                     if (
-                        down.type != PointerType.Stylus &&
+                        !down.type.isPenPointer() &&
                         !state.fingerPaintingEnabled &&
                         state.tool in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge, Tool.Liquify)
                     ) {
@@ -482,7 +490,7 @@ fun CanvasWorkspace(
                             normalizedPressure(pressure),
                         )
                     }
-                    val initial = point(down.position, if (down.type == PointerType.Stylus) down.pressure else 1f)
+                    val initial = point(down.position, if (down.type.isPenPointer()) down.pressure else 1f)
                     if (state.tool != Tool.Pan && (initial.x < 0f || initial.y < 0f ||
                         initial.x >= document.width || initial.y >= document.height)) return@awaitEachGesture
 
@@ -649,7 +657,7 @@ fun CanvasWorkspace(
                         inProgress += initial
                         quickShapeSnapped = false
                         quickShapePointerDown =
-                            state.quickShapeEnabled && state.tool == Tool.Brush && startingTransform == null &&
+                            !eraserPointer && state.quickShapeEnabled && state.tool == Tool.Brush && startingTransform == null &&
                                 startingObjectPayload == null && groupDrag == ObjectDrag.None
                         quickShapeRawPoints = if (quickShapePointerDown) listOf(initial) else emptyList()
                         quickShapeRevision++
@@ -658,7 +666,7 @@ fun CanvasWorkspace(
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id }
-                            val pressedTouches = event.changes.count { it.pressed && it.type != PointerType.Stylus }
+                            val pressedTouches = event.changes.count { it.pressed && !it.type.isPenPointer() }
                             if (change == null || change.isConsumed || pressedTouches > 1) {
                                 cancelled = true
                                 break
@@ -779,7 +787,7 @@ fun CanvasWorkspace(
                             } else if (state.tool == Tool.MoveSelection) {
                                 if (movingSelection) moveDelta += amount / gestureScale
                             } else if (change.position != previous) {
-                                val pressure = if (change.type == PointerType.Stylus && change.pressed) change.pressure
+                                val pressure = if (change.type.isPenPointer() && change.pressed) change.pressure
                                     else (quickShapeRawPoints.lastOrNull()?.pressure ?: inProgress.last().pressure)
                                 val drawnPoint = point(change.position, pressure)
                                 if (quickShapePointerDown && state.tool == Tool.Brush) {
@@ -825,7 +833,11 @@ fun CanvasWorkspace(
                             val promoted = quickShapeSnapped && quickShapeResult?.let { result ->
                                 state.commitQuickShape(result, state.color, state.brushSize, state.brushOpacity)
                             } == true
-                            if (!promoted) state.recordStroke(inProgress.toList(), stabilize = !quickShapeSnapped)
+                            if (!promoted) state.recordStroke(
+                                inProgress.toList(),
+                                stabilize = !quickShapeSnapped,
+                                toolOverride = if (eraserPointer) Tool.Eraser else null,
+                            )
                         }
                     } finally {
                         quickShapePointerDown = false
@@ -838,6 +850,7 @@ fun CanvasWorkspace(
                         movingSelection = false
                         objectGesturePreview = null
                         objectGroupGesturePreview = emptyMap()
+                        eraserPointerActive = false
                     }
                 }
             }.pointerInput(Unit) {
@@ -2162,6 +2175,9 @@ private fun ClipboardGestureMenu(
         }
     }
 }
+
+internal fun PointerType.isPenPointer(): Boolean =
+    this == PointerType.Stylus || this == PointerType.Eraser
 
 internal fun shouldArmQuickMenu(
     isStylus: Boolean,
