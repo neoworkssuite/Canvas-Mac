@@ -145,12 +145,12 @@ fun NeoCanvasApp(
                 text = {
                     Text(
                         update.releaseNotes?.take(700)
-                            ?: "A newer NeoCanvas release is available from the App Store.",
+                            ?: "A newer NeoCanvas release is available from " + fileActions.updateServiceDescription + ".",
                         color = NeoCanvasColors.muted,
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { state.openAvailableUpdate() }) { Text("Open App Store") }
+                    TextButton(onClick = { state.openAvailableUpdate() }) { Text(fileActions.updateActionLabel) }
                 },
                 dismissButton = {
                     TextButton(onClick = state::dismissUpdateNotice) { Text("Later") }
