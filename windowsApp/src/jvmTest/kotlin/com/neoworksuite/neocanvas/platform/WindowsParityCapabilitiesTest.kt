@@ -14,6 +14,7 @@ class WindowsParityCapabilitiesTest {
         assertTrue(actions.supportsJpegExport)
         assertTrue(actions.supportsTiffExport)
         assertTrue(actions.supportsPdfExport)
+        assertTrue(actions.supportsUpdateChecks)
     }
 
     @Test
