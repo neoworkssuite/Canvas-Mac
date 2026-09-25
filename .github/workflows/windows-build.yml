@@ -123,5 +123,6 @@ jobs:
             windowsApp/build/compose/binaries/main/exe/
             windowsApp/build/compose/binaries/main/msi/
             docs/WINDOWS_ACCEPTANCE.md
+            scripts/windows-acceptance.ps1
           if-no-files-found: error
           retention-days: 14
