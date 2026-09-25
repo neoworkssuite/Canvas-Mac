@@ -62,6 +62,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
@@ -115,6 +116,7 @@ fun CanvasWorkspace(
     var rapidHistoryTriggered by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
+    val textFontFamilies = rememberNeoCanvasFontFamilies()
 
     LaunchedEffect(quickShapePointerDown, quickShapeRevision, state.quickShapeEnabled, state.tool) {
         if (!quickShapePointerDown || !state.quickShapeEnabled || state.tool != Tool.Brush) return@LaunchedEffect
@@ -860,6 +862,7 @@ fun CanvasWorkspace(
                     transformPreview ?: movePreview ?: state.effectPreviewPatch ?: strokePreview,
                     tileImages,
                     textMeasurer,
+                    textFontFamilies,
                     editableObjectPreviewLayerId = if (objectGesturePreview != null) state.activeLayerId else null,
                     editableObjectPreview = objectGesturePreview,
                     editableObjectPreviews = objectGroupGesturePreview,
@@ -1434,6 +1437,7 @@ private fun DrawScope.drawStoredTiles(
     preview: com.neoworksuite.neocanvas.renderer.RasterPatch?,
     images: TileImageCache,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    textFontFamilies: Map<String, FontFamily>,
     editableObjectPreviewLayerId: String? = null,
     editableObjectPreview: LayerPayload? = null,
     editableObjectPreviews: Map<String, LayerPayload> = emptyMap(),
@@ -1479,21 +1483,24 @@ private fun DrawScope.drawStoredTiles(
                 withTransform({ rotate(payload.rotationDegrees, pivot = center) }) {
                     drawText(
                         textMeasurer = textMeasurer,
-                        text = payload.text,
-                        topLeft = Offset(payload.x, payload.y),
+                        text = if (payload.uppercase) payload.text.uppercase() else payload.text,
+                        topLeft = Offset(payload.x, payload.y + payload.baselineOffset),
                         style = TextStyle(
                             color = Color(payload.colorArgb).copy(
                                 alpha = Color(payload.colorArgb).alpha * effectiveOpacity,
                             ),
                             fontSize = payload.fontSize.toSp(),
-                            fontFamily = editableTextFontFamily(payload.fontFamily),
+                            fontFamily = editableTextFontFamily(payload.fontFamily, textFontFamilies),
                             fontWeight = if (payload.bold) FontWeight.Bold else FontWeight.Normal,
                             fontStyle = if (payload.italic) FontStyle.Italic else FontStyle.Normal,
                             lineHeight = (payload.fontSize * payload.lineSpacing).toSp(),
+                            letterSpacing = payload.tracking.toSp(),
+                            textDecoration = if (payload.underline) TextDecoration.Underline else TextDecoration.None,
                             textAlign = when (payload.alignment) {
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> TextAlign.Left
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> TextAlign.Center
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Right -> TextAlign.Right
+                                com.neoworksuite.neocanvas.core.model.TextAlignment.Justified -> TextAlign.Justify
                             },
                         ),
                         size = Size(payload.width, payload.height),
@@ -1506,13 +1513,6 @@ private fun DrawScope.drawStoredTiles(
                 drawEditableShape(payload, effectiveOpacity, blendMode)
         }
     }
-}
-
-private fun editableTextFontFamily(name: String): FontFamily = when (name.trim().lowercase()) {
-    "sans", "sans-serif", "sans serif" -> FontFamily.SansSerif
-    "serif" -> FontFamily.Serif
-    "mono", "monospace" -> FontFamily.Monospace
-    else -> FontFamily.Default
 }
 
 private fun DrawScope.drawEditableShape(

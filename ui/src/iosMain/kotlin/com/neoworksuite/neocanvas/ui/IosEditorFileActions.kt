@@ -775,6 +775,12 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
         "sans", "sans-serif", "sans serif" -> "Helvetica"
         "serif" -> "Times New Roman"
         "mono", "monospace" -> "Menlo"
+        "inter" -> "Inter"
+        "noto sans" -> "Noto Sans"
+        "lora" -> "Lora"
+        "playfair display" -> "Playfair Display"
+        "caveat" -> "Caveat"
+        "jetbrains mono" -> "JetBrains Mono"
         else -> "Helvetica Neue"
     }
     val requestedStyle = when {
@@ -800,9 +806,10 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
     canvas.translate(-centerX, -centerY)
     canvas.clipRect(Rect.makeXYWH(text.x, text.y, text.width, text.height))
 
-    val lines = wrapEditableText(text.text, font, text.width)
+    val renderedText = if (text.uppercase) text.text.uppercase() else text.text
+    val lines = wrapEditableText(renderedText, font, text.width)
     val lineHeight = text.fontSize * text.lineSpacing
-    var baseline = text.y + text.fontSize
+    var baseline = text.y + text.fontSize + text.baselineOffset
     for (line in lines) {
         if (baseline - text.fontSize > text.y + text.height) break
         val textLine = TextLine.make(line, font)
@@ -812,8 +819,12 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
                 text.x + (text.width - textLine.width) / 2f
             com.neoworksuite.neocanvas.core.model.TextAlignment.Right ->
                 text.x + text.width - textLine.width
+            com.neoworksuite.neocanvas.core.model.TextAlignment.Justified -> text.x
         }
         canvas.drawTextLine(textLine, drawX, baseline, paint)
+        if (text.underline) {
+            canvas.drawLine(drawX, baseline + text.fontSize * .08f, drawX + textLine.width, baseline + text.fontSize * .08f, paint)
+        }
         baseline += lineHeight
     }
     canvas.restore()

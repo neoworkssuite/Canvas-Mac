@@ -11,7 +11,7 @@ data class TileAddress(
     }
 }
 
-enum class TextAlignment { Left, Center, Right }
+enum class TextAlignment { Left, Center, Right, Justified }
 
 enum class ShapeKind { Rectangle, Ellipse, Line }
 
@@ -51,6 +51,15 @@ sealed interface LayerPayload {
         val bold: Boolean = false,
         val italic: Boolean = false,
         val lineSpacing: Float = 1.2f,
+        val tracking: Float = 0f,
+        val baselineOffset: Float = 0f,
+        val underline: Boolean = false,
+        val uppercase: Boolean = false,
+        val fontStyle: String = "Regular",
+        val kerning: List<TextKerningRange> = emptyList(),
+        val outline: Boolean = false,
+        val outlineWidth: Float = 1f,
+        val orientation: TextOrientation = TextOrientation.Horizontal,
     ) : LayerPayload {
         init {
             require(text.length <= 10_000)
@@ -60,6 +69,11 @@ sealed interface LayerPayload {
             require(width.isFinite() && height.isFinite() && width > 0f && height > 0f)
             require(rotationDegrees.isFinite())
             require(lineSpacing.isFinite() && lineSpacing in .7f..3f)
+            require(tracking.isFinite() && tracking in -8f..40f)
+            require(baselineOffset.isFinite() && baselineOffset in -256f..256f)
+            require(fontStyle.isNotBlank())
+            require(outlineWidth.isFinite() && outlineWidth in .25f..32f)
+            require(kerning == normalizeKerningRanges(text, kerning))
         }
     }
 

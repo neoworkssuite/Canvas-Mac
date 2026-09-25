@@ -877,15 +877,45 @@ class EditorStateTest {
         state.setActiveTextBold(true)
         state.setActiveTextItalic(true)
         state.setActiveTextLineSpacing(1.75f)
+        state.setActiveTextTracking(3.5f)
+        state.setActiveTextBaselineOffset(-8f)
+        state.setActiveTextUnderline(true)
+        state.setActiveTextUppercase(true)
         assertTrue(state.activeTextObject!!.bold)
         assertTrue(state.activeTextObject!!.italic)
         assertEquals(1.75f, state.activeTextObject!!.lineSpacing)
+        assertEquals(3.5f, state.activeTextObject!!.tracking)
+        assertEquals(-8f, state.activeTextObject!!.baselineOffset)
+        assertTrue(state.activeTextObject!!.underline)
+        assertTrue(state.activeTextObject!!.uppercase)
 
         state.activeLayerId = "shape-1"
         state.setActiveShapeCornerRadius(36f)
         assertEquals(36f, state.activeShapeObject!!.cornerRadius)
         assertTrue(state.undo())
         assertEquals(0f, state.activeShapeObject!!.cornerRadius)
+    }
+
+    @Test
+    fun selected_text_kerning_is_range_scoped_and_undoable() {
+        val original = LayerPayload.TextObject(text = "AVATAR")
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "kerning",
+            width = 640,
+            height = 480,
+            layers = listOf(Layer("text-1", "Title", payload = original)),
+        )))
+        state.activeLayerId = "text-1"
+        state.setActiveTextSelection(TextEditSelection(0, 2))
+
+        state.setActiveTextKerning(-2.5f)
+
+        assertEquals(
+            listOf(com.neoworksuite.neocanvas.core.model.TextKerningRange(0, 2, -2.5f)),
+            state.activeTextObject!!.kerning,
+        )
+        assertTrue(state.undo())
+        assertEquals(original, state.activeTextObject)
     }
 
     @Test
@@ -1594,19 +1624,25 @@ class EditorStateTest {
     }
 
     @Test
-    fun colour_history_tracks_recent_primary_and_secondary_colours() {
+    fun colour_history_only_tracks_colours_committed_to_canvas() {
         val state = EditorState(DocumentHistory(CanvasDocument.blank(32, 32)))
+        state.addLayer()
         val original = state.color
 
         state.color = Color.Red
         state.color = Color.Blue
 
         assertEquals(Color.Red, state.previousColor)
-        assertEquals(listOf("#0000FF", "#FF0000"), state.recentColors)
+        assertTrue(state.recentColors.isEmpty())
+        state.recordStroke(listOf(DrawPoint(8f, 8f)))
+        assertEquals(listOf("#0000FF"), state.recentColors)
         state.setSecondaryFromPrimary()
         assertEquals(Color.Blue, state.secondaryColor)
 
         state.color = Color.Green
+        state.tool = Tool.Eraser
+        state.recordStroke(listOf(DrawPoint(8f, 8f)))
+        assertEquals(listOf("#0000FF"), state.recentColors)
         state.swapPrimarySecondaryColors()
         assertEquals(Color.Blue, state.color)
         assertEquals(Color.Green, state.secondaryColor)

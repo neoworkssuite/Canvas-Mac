@@ -11,6 +11,9 @@ import com.neoworksuite.neocanvas.core.model.LineMarker
 import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
+import com.neoworksuite.neocanvas.core.model.TextKerningRange
+import com.neoworksuite.neocanvas.core.model.TextOrientation
+import com.neoworksuite.neocanvas.core.model.normalizeKerningRanges
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import kotlin.math.min
 
@@ -120,6 +123,18 @@ object NeoCanvasPackage {
                         bold = if ("bold" in layerObject.fields) layerObject.boolean("bold") else false,
                         italic = if ("italic" in layerObject.fields) layerObject.boolean("italic") else false,
                         lineSpacing = if ("lineSpacing" in layerObject.fields) layerObject.float("lineSpacing") else 1.2f,
+                        tracking = if ("tracking" in layerObject.fields) layerObject.float("tracking") else 0f,
+                        baselineOffset = if ("baselineOffset" in layerObject.fields) layerObject.float("baselineOffset") else 0f,
+                        underline = if ("underline" in layerObject.fields) layerObject.boolean("underline") else false,
+                        uppercase = if ("uppercase" in layerObject.fields) layerObject.boolean("uppercase") else false,
+                        fontStyle = layerObject.optionalString("fontStyle")?.takeIf(String::isNotBlank) ?: "Regular",
+                        kerning = normalizeKerningRanges(
+                            layerObject.string("text"),
+                            layerObject.optionalKerningRanges(),
+                        ),
+                        outline = layerObject.optionalBoolean("outline") ?: false,
+                        outlineWidth = layerObject.optionalFloat("outlineWidth")?.coerceIn(.25f, 32f) ?: 1f,
+                        orientation = layerObject.optionalEnum("orientation", TextOrientation.Horizontal),
                     )
                 }
                 "shape" -> {
@@ -252,6 +267,22 @@ object NeoCanvasPackage {
                     append(",\"bold\":").append(payload.bold)
                     append(",\"italic\":").append(payload.italic)
                     append(",\"lineSpacing\":").append(payload.lineSpacing)
+                    append(",\"tracking\":").append(payload.tracking)
+                    append(",\"baselineOffset\":").append(payload.baselineOffset)
+                    append(",\"underline\":").append(payload.underline)
+                    append(",\"uppercase\":").append(payload.uppercase)
+                    append(",\"fontStyle\":\"").append(json(payload.fontStyle)).append('"')
+                    append(",\"kerning\":[")
+                    payload.kerning.forEachIndexed { kerningIndex, range ->
+                        if (kerningIndex > 0) append(',')
+                        append("{\"startUtf16\":").append(range.startUtf16)
+                        append(",\"endUtf16\":").append(range.endUtf16)
+                        append(",\"adjustment\":").append(range.adjustment).append('}')
+                    }
+                    append(']')
+                    append(",\"outline\":").append(payload.outline)
+                    append(",\"outlineWidth\":").append(payload.outlineWidth)
+                    append(",\"orientation\":\"").append(payload.orientation.name).append('"')
                 }
                 is LayerPayload.ShapeObject -> {
                     append(",\"type\":\"shape\"")
@@ -522,6 +553,23 @@ private fun JsonObject.string(key: String): String = value(key).asString()
 private fun JsonObject.boolean(key: String): Boolean = (value(key) as? JsonBoolean)?.value ?: throw PackageCorruptException("Manifest field '$key' must be a boolean.")
 private fun JsonObject.int(key: String): Int = (value(key) as? JsonNumber)?.value?.toIntOrNull() ?: throw PackageCorruptException("Manifest field '$key' must be an integer.")
 private fun JsonObject.float(key: String): Float = (value(key) as? JsonNumber)?.value?.toFloatOrNull()?.takeIf { it.isFinite() } ?: throw PackageCorruptException("Manifest field '$key' must be a number.")
+private fun JsonObject.optionalString(key: String): String? = (fields[key] as? JsonString)?.value
+private fun JsonObject.optionalBoolean(key: String): Boolean? = (fields[key] as? JsonBoolean)?.value
+private fun JsonObject.optionalFloat(key: String): Float? = (fields[key] as? JsonNumber)?.value?.toFloatOrNull()?.takeIf(Float::isFinite)
+private inline fun <reified T : Enum<T>> JsonObject.optionalEnum(key: String, fallback: T): T =
+    optionalString(key)?.let { name -> enumValues<T>().firstOrNull { it.name == name } } ?: fallback
+
+private fun JsonObject.optionalKerningRanges(): List<TextKerningRange> {
+    val values = (fields["kerning"] as? JsonArray)?.values ?: return emptyList()
+    return values.mapNotNull { value ->
+        val entry = value as? JsonObject ?: return@mapNotNull null
+        val start = (entry.fields["startUtf16"] as? JsonNumber)?.value?.toIntOrNull() ?: return@mapNotNull null
+        val end = (entry.fields["endUtf16"] as? JsonNumber)?.value?.toIntOrNull() ?: return@mapNotNull null
+        val adjustment = (entry.fields["adjustment"] as? JsonNumber)?.value?.toFloatOrNull()
+            ?.takeIf(Float::isFinite) ?: return@mapNotNull null
+        TextKerningRange(start, end, adjustment)
+    }
+}
 
 private class JsonParser(private val source: String) {
     private var index = 0

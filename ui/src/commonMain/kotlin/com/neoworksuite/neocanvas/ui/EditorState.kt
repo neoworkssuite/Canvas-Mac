@@ -48,6 +48,9 @@ import com.neoworksuite.neocanvas.core.model.MergeRasterLayerDown
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
+import com.neoworksuite.neocanvas.core.model.TextKerningRange
+import com.neoworksuite.neocanvas.core.model.TextOrientation
+import com.neoworksuite.neocanvas.core.model.normalizeKerningRanges
 import com.neoworksuite.neocanvas.core.model.UpdateTextLayer
 import com.neoworksuite.neocanvas.core.model.UpdateShapeLayer
 import com.neoworksuite.neocanvas.core.model.UpdateEditableObjects
@@ -683,8 +686,6 @@ class EditorState(
             if (value == primaryColor) return
             previousColor = primaryColor
             primaryColor = value
-            val hex = colorHex(value)
-            recentColors = (listOf(hex) + recentColors.filterNot { it == hex }).take(12)
         }
     var brushSize: Float by mutableFloatStateOf(BuiltInBrushes.pencil.baseSize)
     var fillTolerance: Int by mutableIntStateOf(0)
@@ -867,6 +868,7 @@ class EditorState(
             alignment = TextAlignment.Center,
         )
         execute(AddTextLayer(id, "Text", payload))
+        recordUsedColour(color)
         activeLayerId = id
         clearSelection()
         openObjectEditor(id)
@@ -888,6 +890,7 @@ class EditorState(
             strokeWidth = if (kind == ShapeKind.Line) 6f else 0f,
         )
         execute(AddShapeLayer(id, shapeLayerName(kind), payload))
+        recordUsedColour(color)
         activeLayerId = id
         clearSelection()
         openObjectEditor(id)
@@ -917,6 +920,7 @@ class EditorState(
             strokeWidth = width.coerceIn(1f, 128f),
         )
         execute(AddShapeLayer(id, "Line", payload, opacity = opacity.coerceIn(0f, 1f)))
+        recordUsedColour(colour)
         activeLayerId = id
         clearSelection()
         openObjectEditor(id)
@@ -927,7 +931,37 @@ class EditorState(
     fun setActiveTextContent(value: String) {
         val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
-        execute(UpdateTextLayer(layer.id, payload.copy(text = value.take(10_000))))
+        val clean = value.take(10_000)
+        if (clean == payload.text) return
+        val selection = activeTextSelection ?: TextEditSelection(payload.text.length, payload.text.length)
+        val kerning = remapKerningAfterEdit(payload.text, clean, selection, payload.kerning)
+        execute(UpdateTextLayer(layer.id, payload.copy(text = clean, kerning = kerning)))
+        activeTextSelection = TextEditSelection(
+            (selection.min + clean.length - payload.text.length).coerceIn(0, clean.length),
+            (selection.min + clean.length - payload.text.length).coerceIn(0, clean.length),
+        )
+    }
+
+    var activeTextSelection: TextEditSelection? by mutableStateOf(null)
+        private set
+
+    fun setActiveTextSelection(value: TextEditSelection) {
+        val text = activeTextObject?.text ?: return
+        activeTextSelection = TextEditSelection(
+            value.startUtf16.coerceIn(0, text.length),
+            value.endUtf16.coerceIn(0, text.length),
+        )
+    }
+
+    fun setActiveTextKerning(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        val selection = activeTextSelection ?: return
+        val start = if (selection.min == selection.max) (selection.min - 1).coerceAtLeast(0) else selection.min
+        val end = selection.max.coerceAtLeast(start + 1).coerceAtMost(payload.text.length)
+        if (start >= end) return
+        val next = normalizeKerningRanges(payload.text, payload.kerning + TextKerningRange(start, end, value))
+        if (next != payload.kerning) execute(UpdateTextLayer(layer.id, payload.copy(kerning = next)))
     }
 
     fun setActiveTextSize(value: Float) {
@@ -942,6 +976,13 @@ class EditorState(
         val clean = value.trim()
         if (clean.isEmpty() || clean == payload.fontFamily) return
         execute(UpdateTextLayer(layer.id, payload.copy(fontFamily = clean)))
+    }
+
+    fun setActiveTextFontStyle(value: String) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        val clean = value.trim()
+        if (clean.isNotEmpty() && clean != payload.fontStyle) execute(UpdateTextLayer(layer.id, payload.copy(fontStyle = clean)))
     }
 
     fun setActiveTextAlignment(value: TextAlignment) {
@@ -968,6 +1009,49 @@ class EditorState(
         val layer = mutableActiveObjectLayer() ?: return
         val payload = layer.payload as? LayerPayload.TextObject ?: return
         execute(UpdateTextLayer(layer.id, payload.copy(lineSpacing = value.coerceIn(.7f, 3f))))
+    }
+
+    fun setActiveTextTracking(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(tracking = value.coerceIn(-8f, 40f))))
+    }
+
+    fun setActiveTextBaselineOffset(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        execute(UpdateTextLayer(layer.id, payload.copy(baselineOffset = value.coerceIn(-256f, 256f))))
+    }
+
+    fun setActiveTextUnderline(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.underline != value) execute(UpdateTextLayer(layer.id, payload.copy(underline = value)))
+    }
+
+    fun setActiveTextUppercase(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.uppercase != value) execute(UpdateTextLayer(layer.id, payload.copy(uppercase = value)))
+    }
+
+    fun setActiveTextOutline(value: Boolean) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.outline != value) execute(UpdateTextLayer(layer.id, payload.copy(outline = value)))
+    }
+
+    fun setActiveTextOutlineWidth(value: Float) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        val clean = value.coerceIn(.25f, 32f)
+        if (payload.outlineWidth != clean) execute(UpdateTextLayer(layer.id, payload.copy(outlineWidth = clean)))
+    }
+
+    fun setActiveTextOrientation(value: TextOrientation) {
+        val layer = mutableActiveObjectLayer() ?: return
+        val payload = layer.payload as? LayerPayload.TextObject ?: return
+        if (payload.orientation != value) execute(UpdateTextLayer(layer.id, payload.copy(orientation = value)))
     }
 
     fun setActiveShapeKind(value: ShapeKind) {
@@ -1070,16 +1154,30 @@ class EditorState(
     fun useCurrentColourForActiveObject(asStroke: Boolean = false) {
         val layer = mutableActiveObjectLayer() ?: return
         val argb = composeColorArgb(color)
-        when (val payload = layer.payload) {
-            is LayerPayload.TextObject -> execute(UpdateTextLayer(layer.id, payload.copy(colorArgb = argb)))
+        val changed = when (val payload = layer.payload) {
+            is LayerPayload.TextObject -> {
+                if (payload.colorArgb == argb) false else {
+                    execute(UpdateTextLayer(layer.id, payload.copy(colorArgb = argb)))
+                    true
+                }
+            }
             is LayerPayload.ShapeObject -> {
                 val next = if (asStroke || payload.kind == ShapeKind.Line) {
                     payload.copy(strokeArgb = argb, strokeWidth = payload.strokeWidth.coerceAtLeast(4f))
                 } else payload.copy(fillArgb = argb)
                 execute(UpdateShapeLayer(layer.id, next))
+                next != payload
             }
-            is LayerPayload.Raster -> Unit
+            is LayerPayload.Raster -> false
         }
+        if (changed) recordUsedColour(color)
+    }
+
+    private fun recordUsedColour(used: Color) {
+        val hex = colorHex(used)
+        if (recentColors.firstOrNull() == hex) return
+        recentColors = (listOf(hex) + recentColors.filterNot { it == hex }).take(12)
+        persistPreferences()
     }
 
     fun duplicateSelectedObjects(): Boolean {
@@ -3371,6 +3469,7 @@ class EditorState(
                 brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
             ) BuiltInBrushes.eraser else brush
             appendEditableStroke(layerId, layerBefore, points, stabilize, activeLayer, effectiveBrush, mode)
+            if (tool == Tool.Brush) recordUsedColour(color)
         } else if (tool == Tool.Liquify) {
             statusMessage = "Liquify " + liquifyMode.displayName.lowercase() + " applied"
         }
@@ -3702,6 +3801,7 @@ class EditorState(
             val before = tileStore.snapshot()
             tileStore.applyPatch(patch)
             execute(ApplyRasterPatch(layer, tileStore.keys - before.keys, before.keys - tileStore.keys), before)
+            recordUsedColour(color)
             statusMessage = "Filled connected colour on active layer"
         } else if (tool == Tool.Eyedropper) {
             val sampled = sampleEyedropperColor(x, y)
