@@ -476,6 +476,36 @@ class EditorState(
     val supportsPdfExport: Boolean get() = fileActions.supportsPdfExport
     val supportsTiffExport: Boolean get() = fileActions.supportsTiffExport
 
+    val supportsFontImport: Boolean get() = fileActions.supportsFontImport
+    var importedFonts: List<ImportedFontFace> by mutableStateOf(emptyList())
+        private set
+
+    fun refreshImportedFonts() {
+        importedFonts = runCatching { fileActions.listImportedFonts() }.getOrDefault(emptyList())
+    }
+
+    fun importFont() {
+        if (!supportsFontImport) return
+        fileActions.openFontFile { picked ->
+            picked.onFailure { statusMessage = it.message ?: "Could not open font" }
+                .getOrNull()?.let { file ->
+                    when (val result = fileActions.installFont(file)) {
+                        is FontInstallResult.Success -> {
+                            refreshImportedFonts()
+                            statusMessage = "Imported ${result.faces.firstOrNull()?.family ?: file.name}"
+                        }
+                        is FontInstallResult.Failure -> statusMessage = result.message
+                    }
+                }
+        }
+    }
+
+    fun removeImportedFont(id: String) {
+        when (val result = fileActions.removeImportedFont(id)) {
+            SaveResult.Success -> { refreshImportedFonts(); statusMessage = "Font removed" }
+            is SaveResult.Failure -> statusMessage = result.message
+        }
+    }
     var psdCompatibilityVisible by mutableStateOf(false)
         private set
     var psdCompatibilityReport: com.neoworksuite.neocanvas.renderer.PsdCompatibilityReport? by mutableStateOf(null)
@@ -2910,6 +2940,7 @@ class EditorState(
     var palette: List<String> by mutableStateOf(emptyList())
         private set
     init {
+        refreshImportedFonts()
         try {
             val preferences = fileActions.loadPreferences()
             fingerPaintingEnabled = preferences["fingerPaintingEnabled"]?.toBoolean() ?: fingerPaintingEnabled
