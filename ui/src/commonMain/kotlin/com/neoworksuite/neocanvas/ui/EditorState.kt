@@ -3054,9 +3054,9 @@ class EditorState(
         val update = updateAvailable ?: return false
         val opened = fileActions.openExternalUrl(update.storeUrl)
         statusMessage = if (opened) {
-            "Opening the App Store for NeoCanvas " + update.version
+            "Opening " + fileActions.updateDestinationDescription + " for NeoCanvas " + update.version
         } else {
-            "Could not open the App Store"
+            "Could not open " + fileActions.updateDestinationDescription
         }
         return opened
     }
