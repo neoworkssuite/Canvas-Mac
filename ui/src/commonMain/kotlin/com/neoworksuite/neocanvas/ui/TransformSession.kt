@@ -1,7 +1,10 @@
 package com.neoworksuite.neocanvas.ui
 
 import com.neoworksuite.neocanvas.renderer.RasterMove
+import com.neoworksuite.neocanvas.renderer.RasterPatch
 import kotlin.math.roundToInt
+
+data class TransformPreview(val patch: RasterPatch, val selection: CanvasSelection)
 
 data class TransformSession(
     val sourceBounds: CanvasSelection,

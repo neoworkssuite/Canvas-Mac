@@ -19,6 +19,7 @@ class BrushLibraryState(
     private val catalog: BrushCatalog = BuiltInBrushes,
     initialSnapshot: ByteArray? = null,
     private val onPersist: (ByteArray) -> Unit = {},
+    private val onPersistDeferred: (((() -> ByteArray)) -> Unit)? = null,
 ) {
     private val restored = initialSnapshot?.let { runCatching { BrushLibrarySnapshotCodec.decode(it) }.getOrNull() }
     private val favouriteIds = mutableStateListOf<String>()
@@ -161,7 +162,14 @@ class BrushLibraryState(
     private fun slug(name: String): String = name.lowercase().map { if (it.isLetterOrDigit()) it else '-' }.joinToString("")
         .replace(Regex("-+"), "-").trim('-').ifEmpty { "brush" }
 
-    private fun persist() = onPersist(BrushLibrarySnapshotCodec.encode(favouriteIds, recentIds, customBrushes, installedPacks.map { it.pack }))
+    private fun persist() {
+        val favourites = favouriteIds.toList()
+        val recent = recentIds.toList()
+        val brushes = customBrushes.toList()
+        val packs = installedPacks.map { it.pack }
+        val encode = { BrushLibrarySnapshotCodec.encode(favourites, recent, brushes, packs) }
+        onPersistDeferred?.invoke(encode) ?: onPersist(encode())
+    }
 
     private fun compareVersions(a: String, b: String): Int {
         val left = a.split('.').map { it.toInt() }; val right = b.split('.').map { it.toInt() }

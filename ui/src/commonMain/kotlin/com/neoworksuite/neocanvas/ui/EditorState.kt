@@ -2260,6 +2260,9 @@ class EditorState(
         )
         return patch to session.sourceBounds.transformedTo(target, session.rotationDegrees)
     }
+    fun previewTransformState(): TransformPreview? = transformPatch()?.let { (patch, selection) ->
+        TransformPreview(patch, selection)
+    }
     fun previewTransform(): com.neoworksuite.neocanvas.renderer.RasterPatch? = transformPatch()?.first
     fun previewTransformSelection(): CanvasSelection? = transformPatch()?.second
     fun cancelTransform() {
@@ -2849,6 +2852,16 @@ class EditorState(
 
     fun persistBrushLibrarySnapshot(bytes: ByteArray) {
         when (val result = fileActions.saveBrushLibrary(bytes)) {
+            SaveResult.Success -> statusMessage = "Brush library saved locally"
+            is SaveResult.Failure -> statusMessage = result.message
+        }
+    }
+
+    suspend fun persistBrushLibrarySnapshotAsync(encode: () -> ByteArray) {
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            fileActions.saveBrushLibrary(encode())
+        }
+        when (result) {
             SaveResult.Success -> statusMessage = "Brush library saved locally"
             is SaveResult.Failure -> statusMessage = result.message
         }

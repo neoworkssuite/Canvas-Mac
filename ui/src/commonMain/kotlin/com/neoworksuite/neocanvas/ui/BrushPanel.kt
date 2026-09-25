@@ -33,12 +33,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +57,7 @@ import com.neoworksuite.neocanvas.renderer.Rasterizer
 import com.neoworksuite.neocanvas.renderer.TileStore
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.coroutines.launch
 
 private enum class BrushPanelPage { Library, Studio }
 
@@ -69,10 +72,13 @@ private enum class BrushStudioSection(val label: String) {
 
 @Composable
 fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
+    val persistenceScope = rememberCoroutineScope()
     val library = remember(state) {
         BrushLibraryState(
             initialSnapshot = state.loadBrushLibrarySnapshot(),
-            onPersist = state::persistBrushLibrarySnapshot,
+            onPersistDeferred = { encode ->
+                persistenceScope.launch { state.persistBrushLibrarySnapshotAsync(encode) }
+            },
         )
     }
     val pad = remember { BrushTestPadState() }
@@ -95,7 +101,9 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
 
     Column(modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BoxWithConstraints(Modifier.weight(1f)) { InspectorHeading("BRUSHES", library.allBrushes.size.toString() + " brushes") }
+            BoxWithConstraints(Modifier.weight(1f)) {
+                InspectorHeading("BRUSH LIBRARY", library.allBrushes.size.toString() + " brushes")
+            }
             BoxWithConstraints {
                 TextButton(onClick = { addMenu = true }, modifier = Modifier.semantics { contentDescription = "Add or import brush" }) {
                     StudioGlyph(Glyph.Add, NeoCanvasColors.accent, Modifier.size(22.dp))
@@ -145,7 +153,7 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             if (maxWidth >= 420.dp) {
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CategoryRail(library, Modifier.width(118.dp).fillMaxHeight())
+                    CategoryRail(library, Modifier.width(148.dp).fillMaxHeight())
                     BrushList(
                         state = state,
                         library = library,
@@ -264,7 +272,7 @@ private fun BrushPreset(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .background(if (selected) NeoCanvasColors.panelRaised else NeoCanvasColors.chrome)
+            .background(if (selected) NeoCanvasColors.accent.copy(alpha = .16f) else NeoCanvasColors.chrome)
             .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -496,20 +504,33 @@ private fun BrushTestPadCanvas(state: EditorState, pad: BrushTestPadState, modif
 
 @Composable
 private fun StrokePreview(brush: BrushDefinition, modifier: Modifier = Modifier) {
-    val images = remember { TileImageCache(4) }
-    val tiles = remember(brush) {
-        val store = TileStore()
-        val points = (0..48).map { index ->
-            val t = index / 48f
-            RasterPoint(12f + 296f * t, 36f + sin(t * 6.283f) * 9f, .18f + .82f * sin(t * 3.14159f))
-        }
-        store.applyPatch(Rasterizer.stroke(store, "preview", points, RasterColor(105, 213, 191),
-            brush.baseSize.coerceIn(3f, 34f), brush.opacity, BrushMode.PAINT, 320, 72, brush = brush))
-        store.snapshot().map { (key, bytes) -> key to images.image(key, bytes) }
-    }
     Canvas(modifier.clip(RoundedCornerShape(6.dp)).background(NeoCanvasColors.workspace)) {
-        withTransform({ scale(size.width / 320f, size.height / 72f, Offset.Zero) }) {
-            tiles.forEach { (key, bitmap) -> drawImage(bitmap, Offset(key.x * 256f, key.y * 256f)) }
+        val width = (brush.baseSize * .34f).coerceIn(2f, 13f)
+        val colour = NeoCanvasColors.paper.copy(alpha = (.42f + brush.opacity * .5f).coerceIn(.42f, .92f))
+        val steps = 24
+        var previous = Offset(size.width * .05f, size.height * .58f)
+        repeat(steps) { index ->
+            val t = (index + 1f) / steps
+            val jitter = sin((index + brush.id.length) * 1.9f) * brush.dynamics.jitter * size.height * .16f
+            val next = Offset(
+                size.width * (.05f + .90f * t),
+                size.height * (.58f - sin(t * 3.14159f) * .25f) + jitter,
+            )
+            drawLine(
+                color = colour,
+                start = previous,
+                end = next,
+                strokeWidth = width * (.45f + .55f * sin(t * 3.14159f)),
+                cap = if (brush.tip == com.neoworksuite.neocanvas.brushes.BrushTip.Pixel) StrokeCap.Square else StrokeCap.Round,
+            )
+            if (brush.dynamics.scatter > .2f && index % 4 == 0) {
+                drawCircle(
+                    color = colour.copy(alpha = colour.alpha * .65f),
+                    radius = width * .32f,
+                    center = next + Offset(0f, size.height * .18f),
+                )
+            }
+            previous = next
         }
     }
 }

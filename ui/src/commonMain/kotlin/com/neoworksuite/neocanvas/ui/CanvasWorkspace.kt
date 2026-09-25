@@ -191,12 +191,11 @@ fun CanvasWorkspace(
         val movePreview = remember(moveDelta, movingSelection, state.selection, state.activeLayerId, document) {
             if (movingSelection) state.previewSelectionMove(moveDelta.x.toInt(), moveDelta.y.toInt()) else null
         }
-        val transformPreview = remember(state.transformSession, state.activeLayerId, document, state.smoothResizing) {
-            state.previewTransform()
+        val transformState = remember(state.transformSession, state.activeLayerId, document, state.smoothResizing) {
+            state.previewTransformState()
         }
-        val transformSelection = remember(state.transformSession, document) {
-            state.previewTransformSelection()
-        }
+        val transformPreview = transformState?.patch
+        val transformSelection = transformState?.selection
 
         Canvas(
             Modifier.fillMaxSize().onSizeChanged { viewport = it }

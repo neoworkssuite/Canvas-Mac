@@ -284,10 +284,10 @@ fun NeoCanvasApp(
             val panelModifier = when (panel) {
                 InspectorPanel.Brushes ->
                     Modifier.align(overlayAlignment)
-                        .fillMaxWidth(.90f)
-                        .fillMaxHeight(.86f)
-                        .widthIn(max = 840.dp)
-                        .heightIn(max = 720.dp)
+                        .fillMaxWidth(if (compact) .94f else .76f)
+                        .fillMaxHeight(if (compact) .82f else .74f)
+                        .widthIn(max = 720.dp)
+                        .heightIn(max = 620.dp)
 
                 InspectorPanel.Colors ->
                     colourStudioBounds(compact).let { bounds ->
