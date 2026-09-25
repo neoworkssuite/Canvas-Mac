@@ -65,7 +65,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onSizeChanged
@@ -201,6 +203,21 @@ fun CanvasWorkspace(
 
         Canvas(
             Modifier.fillMaxSize().onSizeChanged { viewport = it }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                quickMenuPointerDown = false
+                                quickMenuCandidate = null
+                                quickMenuRevision++
+                                quickMenuAnchor = event.changes.firstOrNull()?.position
+                                if (quickMenuAnchor != null) state.statusMessage = "QuickMenu — choose an action"
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
                 .pointerInput(document.id, viewport) {
                     awaitEachGesture {
                         val firstDown = awaitFirstDown(
