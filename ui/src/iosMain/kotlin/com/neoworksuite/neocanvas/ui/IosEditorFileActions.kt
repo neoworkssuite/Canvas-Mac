@@ -23,12 +23,15 @@ import org.jetbrains.skia.Font
 import platform.CoreGraphics.CGRectMake
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontStyle
+import org.jetbrains.skia.FontSlant
 import org.jetbrains.skia.Data
+import platform.CoreFoundation.CFURLRef
 import platform.CoreText.CTFontManagerRegisterFontsForURL
 import platform.CoreText.CTFontManagerUnregisterFontsForURL
 import platform.CoreText.kCTFontManagerScopeProcess
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.Paint
+import org.jetbrains.skia.PaintMode
 import org.jetbrains.skia.Rect
 import org.jetbrains.skia.Surface
 import org.jetbrains.skia.TextLine
@@ -160,14 +163,14 @@ internal class IosEditorFileActions(
         val name = id.substringBefore('#')
         val path = join(fontsDirectory, name)
         val url = NSURL.fileURLWithPath(path)
-        CTFontManagerUnregisterFontsForURL(url, kCTFontManagerScopeProcess, null)
+        CTFontManagerUnregisterFontsForURL(url as CFURLRef, kCTFontManagerScopeProcess, null)
         return if (fm.removeItemAtPath(path, null)) SaveResult.Success else SaveResult.Failure("Could not remove this font.")
     }
 
     private fun fontFaces(path: String, sourceName: String, register: Boolean): List<ImportedFontFace> {
         val data = NSData.dataWithContentsOfFile(path)?.toByteArray() ?: return emptyList()
         val typeface = runCatching { FontMgr.default.makeFromData(Data.makeFromBytes(data)) }.getOrNull() ?: return emptyList()
-        if (register && !CTFontManagerRegisterFontsForURL(NSURL.fileURLWithPath(path), kCTFontManagerScopeProcess, null)) {
+        if (register && !CTFontManagerRegisterFontsForURL(NSURL.fileURLWithPath(path) as CFURLRef, kCTFontManagerScopeProcess, null)) {
             // A previously registered process font reports false; the parsed face remains usable.
         }
         val style = typeface.fontStyle.skiaStyleName()
@@ -863,6 +866,10 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
     val paint = Paint().apply {
         color = text.colorArgb
         isAntiAlias = true
+        if (text.outline) {
+            mode = PaintMode.STROKE
+            strokeWidth = text.outlineWidth
+        }
     }
 
     val centerX = text.x + text.width / 2f
@@ -873,7 +880,10 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
     canvas.translate(-centerX, -centerY)
     canvas.clipRect(Rect.makeXYWH(text.x, text.y, text.width, text.height))
 
-    val renderedText = if (text.uppercase) text.text.uppercase() else text.text
+    val sourceText = if (text.uppercase) text.text.uppercase() else text.text
+    val renderedText = if (text.orientation == com.neoworksuite.neocanvas.core.model.TextOrientation.Vertical) {
+        sourceText.toCharArray().joinToString("\n")
+    } else sourceText
     val lines = wrapEditableText(renderedText, font, text.width)
     val lineHeight = text.fontSize * text.lineSpacing
     var baseline = text.y + text.fontSize + text.baselineOffset
@@ -1024,9 +1034,9 @@ private class FontFilePickerDelegate(
 }
 
 private fun FontStyle.skiaStyleName(): String = when {
-    weight >= 700 && slant != 0 -> "Bold Italic"
+    weight >= 700 && slant != FontSlant.UPRIGHT -> "Bold Italic"
     weight >= 700 -> "Bold"
-    slant != 0 -> "Italic"
+    slant != FontSlant.UPRIGHT -> "Italic"
     else -> "Regular"
 }
 
