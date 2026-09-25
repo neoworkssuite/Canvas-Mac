@@ -31,6 +31,12 @@ class WindowsEditorFileActions(
     override val supportsPdfExport = true
     override val supportsTiffExport = true
     override val supportsEditableObjectPsdFlattening = true
+    override val supportsUpdateChecks = true
+    override val updateServiceDescription = "the NeoWorks Windows release service"
+    override val updateActionLabel = "Download update"
+    override val updateDestinationDescription = "the Windows update download"
+    override val updatePrivacyDescription =
+        "When update checks are enabled, NeoCanvas asks the NeoWorks Windows release service only for release metadata; no artwork or account data is sent."
     private val libraryDirectory = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/Documents",
@@ -358,6 +364,9 @@ class WindowsEditorFileActions(
         Desktop.getDesktop().browse(java.net.URI(url))
         true
     }.getOrDefault(false)
+    override fun checkForUpdate(onResult: (Result<com.neoworksuite.neocanvas.ui.AppUpdateInfo?>) -> Unit) {
+        WindowsUpdateService.check(onResult)
+    }
 
     private var currentDocumentPath: String? = null
 
