@@ -146,6 +146,10 @@ class NeoCanvasPackageTest {
                     bold = true,
                     italic = true,
                     lineSpacing = 1.65f,
+                    tracking = 2.5f,
+                    baselineOffset = -6f,
+                    underline = true,
+                    uppercase = true,
                 )),
                 Layer("shape-1", "Frame", payload = LayerPayload.ShapeObject(
                     kind = ShapeKind.Rectangle,
@@ -166,6 +170,10 @@ class NeoCanvasPackageTest {
         assertTrue(text.bold)
         assertTrue(text.italic)
         assertEquals(1.65f, text.lineSpacing)
+        assertEquals(2.5f, text.tracking)
+        assertEquals(-6f, text.baselineOffset)
+        assertTrue(text.underline)
+        assertTrue(text.uppercase)
         val shape = assertIs<LayerPayload.ShapeObject>(loaded.document.layers[1].payload)
         assertEquals(ShapeKind.Rectangle, shape.kind)
         assertEquals(null, shape.fillArgb)

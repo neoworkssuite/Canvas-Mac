@@ -631,13 +631,20 @@ internal fun StudioGlyph(glyph: Glyph, color: Color, modifier: Modifier = Modifi
             line(Offset(w * .37f, h * .47f), Offset(w * .64f, h * .69f), 2.0f)
         }
         Glyph.Smudge -> {
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * .18f, h * .62f)
-                cubicTo(w * .34f, h * .34f, w * .52f, h * .74f, w * .82f, h * .38f)
+            val finger = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .31f, h * .82f)
+                cubicTo(w * .18f, h * .67f, w * .22f, h * .53f, w * .34f, h * .56f)
+                lineTo(w * .42f, h * .61f)
+                lineTo(w * .42f, h * .28f)
+                cubicTo(w * .42f, h * .14f, w * .60f, h * .14f, w * .60f, h * .28f)
+                lineTo(w * .60f, h * .49f)
+                cubicTo(w * .78f, h * .45f, w * .83f, h * .60f, w * .74f, h * .76f)
+                cubicTo(w * .67f, h * .87f, w * .43f, h * .89f, w * .31f, h * .82f)
+                close()
             }
-            drawPath(path, color, style = Stroke(3.3f, cap = StrokeCap.Round))
-            drawCircle(color.copy(alpha = .45f), w * .10f, Offset(w * .27f, h * .72f))
-            drawCircle(color.copy(alpha = .28f), w * .07f, Offset(w * .18f, h * .80f))
+            drawPath(finger, color, style = Stroke(2.2f, cap = StrokeCap.Round))
+            line(Offset(w * .18f, h * .31f), Offset(w * .31f, h * .25f), 1.5f)
+            line(Offset(w * .17f, h * .43f), Offset(w * .30f, h * .43f), 1.5f)
         }
         Glyph.Transform -> {
             val s = 2.1f
@@ -652,8 +659,18 @@ internal fun StudioGlyph(glyph: Glyph, color: Color, modifier: Modifier = Modifi
             line(Offset(w * .50f, h * .82f), Offset(w * .39f, h * .70f), s)
             line(Offset(w * .50f, h * .82f), Offset(w * .61f, h * .70f), s)
         }
-        Glyph.Undo -> { line(Offset(w * .78f, h * .35f), Offset(w * .35f, h * .35f)); line(Offset(w * .35f, h * .35f), Offset(w * .50f, h * .20f)); line(Offset(w * .35f, h * .35f), Offset(w * .50f, h * .50f)); line(Offset(w * .78f, h * .35f), Offset(w * .78f, h * .73f)) }
-        Glyph.Redo -> { line(Offset(w * .22f, h * .35f), Offset(w * .65f, h * .35f)); line(Offset(w * .65f, h * .35f), Offset(w * .50f, h * .20f)); line(Offset(w * .65f, h * .35f), Offset(w * .50f, h * .50f)); line(Offset(w * .22f, h * .35f), Offset(w * .22f, h * .73f)) }
+        Glyph.Undo -> {
+            val path = Path().apply { moveTo(w * .78f, h * .72f); cubicTo(w * .82f, h * .38f, w * .55f, h * .28f, w * .30f, h * .42f) }
+            drawPath(path, color, style = Stroke(2.4f, cap = StrokeCap.Round))
+            line(Offset(w * .30f, h * .42f), Offset(w * .47f, h * .22f), 2.4f)
+            line(Offset(w * .30f, h * .42f), Offset(w * .50f, h * .54f), 2.4f)
+        }
+        Glyph.Redo -> {
+            val path = Path().apply { moveTo(w * .22f, h * .72f); cubicTo(w * .18f, h * .38f, w * .45f, h * .28f, w * .70f, h * .42f) }
+            drawPath(path, color, style = Stroke(2.4f, cap = StrokeCap.Round))
+            line(Offset(w * .70f, h * .42f), Offset(w * .53f, h * .22f), 2.4f)
+            line(Offset(w * .70f, h * .42f), Offset(w * .50f, h * .54f), 2.4f)
+        }
         Glyph.Fit -> {
             val s = 2.0f
             line(Offset(w * .14f, h * .36f), Offset(w * .14f, h * .14f), s)
