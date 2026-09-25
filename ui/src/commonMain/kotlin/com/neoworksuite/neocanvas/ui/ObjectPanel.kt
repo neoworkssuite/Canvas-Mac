@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
+import com.neoworksuite.neocanvas.core.model.TextOrientation
 import com.neoworksuite.neocanvas.core.model.LineCap
 import com.neoworksuite.neocanvas.core.model.LineMarker
 import com.neoworksuite.neocanvas.core.model.LineStyle
@@ -108,7 +110,20 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 colors = studioTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
-            filteredTextFonts(fontSearch).chunked(2).forEach { choices ->
+            if (state.supportsFontImport) {
+                ObjectAction("Import Font", Modifier.fillMaxWidth(), enabled = !locked) { state.importFont() }
+            }
+            val availableFonts = textFontChoices(state.importedFonts).let { fonts ->
+                val term = fontSearch.trim()
+                if (term.isEmpty()) fonts else fonts.filter {
+                    it.name.contains(term, true) || it.category.contains(term, true)
+                }
+            }
+            val resolvedFont = resolveTextFontChoice(text.fontFamily, text.fontStyle, state.importedFonts)
+            if (resolvedFont.missing) {
+                Text("MISSING FONT · using System", color = Color(0xFFFFB86B), fontSize = 9.sp)
+            }
+            availableFonts.chunked(2).forEach { choices ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     choices.forEach { choice ->
                         FontAction(
@@ -120,6 +135,15 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                         ) { state.setActiveTextFontFamily(choice.name) }
                     }
                     if (choices.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            availableFonts.firstOrNull { it.name.equals(text.fontFamily, true) }?.styles?.let { styles ->
+                Text("STYLE · ${text.fontStyle}", color = NeoCanvasColors.faint, fontSize = 9.sp)
+                styles.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        row.forEach { style -> ObjectAction(style, Modifier.weight(1f), text.fontStyle == style, !locked) { state.setActiveTextFontStyle(style) } }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -159,7 +183,17 @@ fun ObjectPanel(state: EditorState, modifier: Modifier = Modifier, onClose: () -
                 ObjectAction("Right", Modifier.weight(1f), text.alignment == TextAlignment.Right, !locked) {
                     state.setActiveTextAlignment(TextAlignment.Right)
                 }
+                ObjectAction("Justify", Modifier.weight(1f), text.alignment == TextAlignment.Justified, !locked) {
+                    state.setActiveTextAlignment(TextAlignment.Justified)
+                }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                ObjectAction("Outline", Modifier.weight(1f), text.outline, !locked) { state.setActiveTextOutline(!text.outline) }
+                ObjectAction("Horizontal", Modifier.weight(1f), text.orientation == TextOrientation.Horizontal, !locked) { state.setActiveTextOrientation(TextOrientation.Horizontal) }
+                ObjectAction("Vertical", Modifier.weight(1f), text.orientation == TextOrientation.Vertical, !locked) { state.setActiveTextOrientation(TextOrientation.Vertical) }
+            }
+            if (text.outline) ObjectSlider("Outline width", text.outlineWidth, .25f..16f, "${text.outlineWidth} px", !locked, state::setActiveTextOutlineWidth)
+            ObjectSlider("Kerning", text.kerning.lastOrNull()?.adjustment ?: 0f, -16f..16f, "${text.kerning.lastOrNull()?.adjustment ?: 0f} px", !locked, state::setActiveTextKerning)
             ObjectAction("Use Current Colour", Modifier.fillMaxWidth(), enabled = !locked) { state.useCurrentColourForActiveObject() }
         }
 
