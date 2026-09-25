@@ -7,10 +7,14 @@ import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
+import com.neoworksuite.neocanvas.renderer.TiffExporter
+import com.neoworksuite.neocanvas.ui.PendingBrushImport
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
+import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.image.BufferedImage
 import java.io.File
 
 /** Windows-local chooser and file writer. It never leaves the device or retains an account. */
@@ -22,6 +26,9 @@ class WindowsEditorFileActions(
     override val supportsLocalLibrary = true
     override val supportsPsdImport = true
     override val supportsPsdExport = true
+    override val supportsJpegExport = true
+    override val supportsTiffExport = true
+    override val supportsEditableObjectPsdFlattening = true
     private val libraryDirectory = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/Documents",
@@ -284,12 +291,72 @@ class WindowsEditorFileActions(
         })
     }
     private val palettePreferences by lazy { java.util.prefs.Preferences.userRoot().node("com/neoworksuite/neocanvas") }
+    private val brushLibraryFile get() = File(libraryDirectory.parentFile, "brush-library.bin")
+
     override fun loadPalette(): List<String> = palettePreferences.get("palette", "").split(',').filter { it.isNotBlank() }
     override fun savePalette(colors: List<String>): SaveResult = try {
         palettePreferences.put("palette", colors.joinToString(","))
         palettePreferences.flush()
         SaveResult.Success
     } catch (error: Exception) { SaveResult.Failure("Could not save palette: ${error.message}") }
+
+    override fun loadBrushLibrary(): ByteArray? = runCatching {
+        brushLibraryFile.takeIf(File::isFile)?.readBytes()
+    }.getOrNull()
+
+    override fun saveBrushLibrary(bytes: ByteArray): SaveResult = try {
+        brushLibraryFile.parentFile?.mkdirs()
+        brushLibraryFile.writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save custom brushes: " + (error.message ?: "storage error"))
+    }
+
+    override fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
+        onResult(runCatching {
+            val selected = choose("Import NeoCanvas brush", FileDialog.LOAD, null) ?: return@runCatching null
+            val file = File(selected)
+            require(file.name.endsWith(".neobrush", true) || file.name.endsWith(".neobrushpack", true)) {
+                "Choose a .neobrush or .neobrushpack file."
+            }
+            require(file.length() <= 25L * 1024L * 1024L) { "Brush file is too large." }
+            PendingBrushImport(file.name, file.readBytes())
+        })
+    }
+
+    override fun shareBrushFile(name: String, bytes: ByteArray): SaveResult = try {
+        require(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)) {
+            "Use a NeoCanvas brush filename."
+        }
+        val safeName = File(name).name
+        val extension = if (safeName.endsWith(".neobrushpack", true)) ".neobrushpack" else ".neobrush"
+        val selected = choose("Export NeoCanvas brush", FileDialog.SAVE, safeName)
+            ?: return SaveResult.Failure("Brush export cancelled.")
+        File(selected.ensureExtension(extension)).writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export brush: " + (error.message ?: "output error"))
+    }
+
+    override fun loadPreferences(): Map<String, String> = palettePreferences.keys()
+        .filter { it.startsWith("pref.") }
+        .associate { it.removePrefix("pref.") to palettePreferences.get(it, "") }
+
+    override fun savePreferences(values: Map<String, String>): SaveResult = try {
+        palettePreferences.keys().filter { it.startsWith("pref.") }.forEach(palettePreferences::remove)
+        values.forEach { (key, value) -> palettePreferences.put("pref.$key", value) }
+        palettePreferences.flush()
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save preferences: " + (error.message ?: "storage error"))
+    }
+
+    override fun openExternalUrl(url: String): Boolean = runCatching {
+        require(url.startsWith("https://"))
+        Desktop.getDesktop().browse(java.net.URI(url))
+        true
+    }.getOrDefault(false)
+
     private var currentDocumentPath: String? = null
 
     override fun save(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
@@ -334,6 +401,57 @@ class WindowsEditorFileActions(
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
+    }
+    override fun exportJpeg(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+        quality: Int,
+    ): SaveResult = try {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".jpg" } ?: "Untitled.jpg"
+        val path = choose("Export JPEG", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("JPEG export cancelled.")
+        val image = PngExporter.render(document, tiles)
+        val buffered = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_RGB)
+        var offset = 0
+        for (y in 0 until image.height) {
+            for (x in 0 until image.width) {
+                val red = image.rgba[offset].toInt() and 0xff
+                val green = image.rgba[offset + 1].toInt() and 0xff
+                val blue = image.rgba[offset + 2].toInt() and 0xff
+                val alpha = image.rgba[offset + 3].toInt() and 0xff
+                val inv = 255 - alpha
+                val outR = (red * alpha + 255 * inv) / 255
+                val outG = (green * alpha + 255 * inv) / 255
+                val outB = (blue * alpha + 255 * inv) / 255
+                buffered.setRGB(x, y, (outR shl 16) or (outG shl 8) or outB)
+                offset += 4
+            }
+        }
+        val target = File(path.ensureExtension(".jpg"))
+        val writer = javax.imageio.ImageIO.getImageWritersByFormatName("jpeg").asSequence().firstOrNull()
+            ?: error("JPEG encoder is unavailable.")
+        javax.imageio.ImageIO.createImageOutputStream(target).use { stream ->
+            writer.output = stream
+            val params = writer.defaultWriteParam
+            if (params.canWriteCompressed()) {
+                params.compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT
+                params.compressionQuality = quality.coerceIn(1, 100) / 100f
+            }
+            writer.write(null, javax.imageio.IIOImage(buffered, null, null), params)
+        }
+        writer.dispose()
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportTiff(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".tiff" } ?: "Untitled.tiff"
+        val path = choose("Export TIFF", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("TIFF export cancelled.")
+        return TiffExporter.export(document, tiles) { bytes ->
+            File(path.ensureExtension(".tiff")).writeBytes(bytes)
+        }
     }
 
     private fun choose(title: String, mode: Int, suggested: String?): String? {
