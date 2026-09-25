@@ -1500,6 +1500,7 @@ private fun DrawScope.drawStoredTiles(
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> TextAlign.Left
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> TextAlign.Center
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Right -> TextAlign.Right
+                                com.neoworksuite.neocanvas.core.model.TextAlignment.Justified -> TextAlign.Justify
                             },
                         ),
                         size = Size(payload.width, payload.height),

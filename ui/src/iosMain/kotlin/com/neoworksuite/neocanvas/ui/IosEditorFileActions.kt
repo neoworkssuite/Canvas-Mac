@@ -819,6 +819,7 @@ private val ipadTextRasterizer = TextRasterizer { text, outputWidth, outputHeigh
                 text.x + (text.width - textLine.width) / 2f
             com.neoworksuite.neocanvas.core.model.TextAlignment.Right ->
                 text.x + text.width - textLine.width
+            com.neoworksuite.neocanvas.core.model.TextAlignment.Justified -> text.x
         }
         canvas.drawTextLine(textLine, drawX, baseline, paint)
         if (text.underline) {
