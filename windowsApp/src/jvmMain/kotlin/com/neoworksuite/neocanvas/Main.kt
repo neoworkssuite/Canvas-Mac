@@ -9,11 +9,18 @@ import androidx.compose.ui.window.application
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.platform.WindowsEditorFileActions
 import com.neoworksuite.neocanvas.platform.WindowsLaunchContract
+import com.neoworksuite.neocanvas.platform.WindowsSelfTest
 import com.neoworksuite.neocanvas.ui.NeoCanvasApp
 import com.neoworksuite.neocanvas.ui.neoCanvasIcon
 import com.neoworksuite.neocanvas.ui.rememberEditorState
 
-fun main(args: Array<String>) = application {
+fun main(args: Array<String>) {
+    if (WindowsLaunchContract.isSelfTest(args)) {
+        println(WindowsSelfTest.run())
+        return
+    }
+
+    application {
     val fileActions = remember { WindowsEditorFileActions() }
     val launchPath = remember { WindowsLaunchContract.documentArgument(args) }
     val launchResult = remember(launchPath) { launchPath?.let(fileActions::openPath) }
@@ -39,5 +46,6 @@ fun main(args: Array<String>) = application {
             state = editor,
             startInEditor = launchResult is LoadResult.Success,
         )
+    }
     }
 }
