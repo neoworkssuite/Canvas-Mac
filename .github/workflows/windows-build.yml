@@ -1,0 +1,93 @@
+name: NeoCanvas Windows CI
+
+on:
+  push:
+    branches:
+      - windows-parity-phase1
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  windows-validation:
+    name: Windows parity validation
+    runs-on: windows-latest
+    timeout-minutes: 30
+    concurrency:
+      group: neocanvas-windows-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout NeoCanvas
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Show Windows toolchain
+        shell: pwsh
+        run: |
+          Write-Host "=== Windows ==="
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
+          Write-Host ""
+          Write-Host "=== Java ==="
+          java -version
+          Write-Host ""
+          Write-Host "=== Gradle ==="
+          .\gradlew.bat --version
+
+      - name: Verify Gradle project
+        shell: pwsh
+        run: .\gradlew.bat projects
+
+      - name: Run shared desktop tests
+        shell: pwsh
+        run: .\gradlew.bat :core:desktopTest :brushes:desktopTest :renderer:desktopTest :ui:desktopTest :windowsApp:jvmTest
+
+      - name: Build runnable Windows application
+        shell: pwsh
+        run: .\gradlew.bat :windowsApp:createDistributable
+
+      - name: Verify runnable application
+        shell: pwsh
+        run: |
+          $exe = "windowsApp\build\compose\binaries\main\app\NeoCanvas\NeoCanvas.exe"
+          if (-not (Test-Path -LiteralPath $exe)) {
+            throw "NeoCanvas.exe was not created at $exe"
+          }
+          Get-Item $exe | Format-List FullName, Length, LastWriteTime
+
+      - name: Build Windows EXE installer
+        shell: pwsh
+        run: .\gradlew.bat :windowsApp:packageExe
+
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "windowsApp\build\compose\binaries\main\exe" -Filter "NeoCanvas-*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "NeoCanvas Windows installer was not created."
+          }
+          $installer | Format-List FullName, Length, LastWriteTime
+
+      - name: Upload runnable Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-Windows-Portable-${{ github.sha }}
+          path: windowsApp/build/compose/binaries/main/app/NeoCanvas/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-Windows-Installer-${{ github.sha }}
+          path: windowsApp/build/compose/binaries/main/exe/*.exe
+          if-no-files-found: error
+          retention-days: 14
