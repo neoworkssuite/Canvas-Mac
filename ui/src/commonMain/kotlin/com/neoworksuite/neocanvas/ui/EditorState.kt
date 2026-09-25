@@ -936,18 +936,18 @@ class EditorState(
         val selection = activeTextSelection ?: TextEditSelection(payload.text.length, payload.text.length)
         val kerning = remapKerningAfterEdit(payload.text, clean, selection, payload.kerning)
         execute(UpdateTextLayer(layer.id, payload.copy(text = clean, kerning = kerning)))
-        activeTextSelection = TextEditSelection(
+        mutableActiveTextSelection = TextEditSelection(
             (selection.min + clean.length - payload.text.length).coerceIn(0, clean.length),
             (selection.min + clean.length - payload.text.length).coerceIn(0, clean.length),
         )
     }
 
-    var activeTextSelection: TextEditSelection? by mutableStateOf(null)
-        private set
+    private var mutableActiveTextSelection: TextEditSelection? by mutableStateOf(null)
+    val activeTextSelection: TextEditSelection? get() = mutableActiveTextSelection
 
     fun setActiveTextSelection(value: TextEditSelection) {
         val text = activeTextObject?.text ?: return
-        activeTextSelection = TextEditSelection(
+        mutableActiveTextSelection = TextEditSelection(
             value.startUtf16.coerceIn(0, text.length),
             value.endUtf16.coerceIn(0, text.length),
         )
