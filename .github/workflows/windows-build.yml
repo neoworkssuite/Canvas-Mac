@@ -45,14 +45,83 @@ jobs:
         shell: pwsh
         run: .\gradlew.bat --stacktrace :core:desktopTest :brushes:desktopTest :renderer:desktopTest :ui:desktopTest :windowsApp:jvmTest
 
-      - name: Package NeoCanvas EXE
+      - name: Create runnable Windows app and EXE package
         shell: pwsh
-        run: .\gradlew.bat --stacktrace :windowsApp:packageExe
+        run: .\gradlew.bat --stacktrace :windowsApp:createDistributable :windowsApp:packageExe
+
+      - name: Run packaged Windows self-test
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "windowsApp\build\compose\binaries\main\app\NeoCanvas\NeoCanvas.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Packaged NeoCanvas runtime was not created: $exe"
+          }
+          $output = & $exe --windows-self-test
+          $exit = $LASTEXITCODE
+          $output | Write-Host
+          if ($exit -ne 0) {
+            throw "Packaged NeoCanvas self-test exited with code $exit"
+          }
+          if (($output -join "`n") -notmatch "NEOCANVAS_WINDOWS_SELF_TEST=PASS") {
+            throw "Packaged NeoCanvas self-test did not emit the PASS marker."
+          }
+
+      - name: Verify EXE installer exists
+        shell: pwsh
+        run: |
+          $installer = "windowsApp\build\compose\binaries\main\exe\NeoCanvas-1.0.0.exe"
+          if (-not (Test-Path $installer)) {
+            throw "Expected Windows installer was not created: $installer"
+          }
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
           name: NeoCanvas-Windows-${{ github.sha }}
           path: windowsApp/build/compose/binaries/main/exe/
+          if-no-files-found: error
+          retention-days: 14
+
+  hardware-acceptance-package:
+    name: Windows hardware acceptance bundle
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[windows]')
+    needs: test-and-package
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build EXE and MSI acceptance installers
+        shell: pwsh
+        run: .\gradlew.bat --stacktrace :windowsApp:packageExe :windowsApp:packageMsi
+
+      - name: Verify acceptance installers
+        shell: pwsh
+        run: |
+          $exe = "windowsApp\build\compose\binaries\main\exe\NeoCanvas-1.0.0.exe"
+          $msi = "windowsApp\build\compose\binaries\main\msi\NeoCanvas-1.0.0.msi"
+          if (-not (Test-Path $exe)) { throw "Acceptance EXE installer missing." }
+          if (-not (Test-Path $msi)) { throw "Acceptance MSI installer missing." }
+          Get-Item $exe, $msi | Format-Table Name, Length, LastWriteTime
+
+      - name: Upload Windows hardware acceptance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoCanvas-Windows-Acceptance-${{ github.sha }}
+          path: |
+            windowsApp/build/compose/binaries/main/exe/
+            windowsApp/build/compose/binaries/main/msi/
+            docs/WINDOWS_ACCEPTANCE.md
           if-no-files-found: error
           retention-days: 14
