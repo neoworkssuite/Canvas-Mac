@@ -80,8 +80,11 @@ fun rememberEditorState(fileActions: EditorFileActions = UnavailableEditorFileAc
 fun NeoCanvasApp(
     fileActions: EditorFileActions = UnavailableEditorFileActions,
     state: EditorState = rememberEditorState(fileActions),
+    startInEditor: Boolean = false,
 ) = MaterialTheme {
-    var destination by remember { mutableStateOf(AppDestination.Gallery) }
+    var destination by remember {
+        mutableStateOf(if (startInEditor) AppDestination.Editor else AppDestination.Gallery)
+    }
     LocalLibraryDialogs(state)
     NewCanvasDialog(state)
     LaunchedEffect(state) {
