@@ -21,6 +21,17 @@ class TransformSessionTest {
         before.forEach { (key, pixels) -> assertContentEquals(pixels, state.tileStore.read(key)) }
     }
 
+    @Test fun combined_transform_preview_produces_pixels_and_outline_together() {
+        val state = state()
+        state.beginTransform()
+        state.updateTransform(translationX = 3f, translationY = 2f, scale = 1.5f, rotationDegrees = 20f)
+
+        val preview = assertNotNull(state.previewTransformState())
+
+        assertTrue(preview.patch.keys.isNotEmpty())
+        assertEquals(state.previewTransformSelection(), preview.selection)
+    }
+
     @Test fun apply_is_one_undo_entry_and_cancelled_transform_is_not_history() {
         val state = state()
         val before = state.tileStore.snapshot()

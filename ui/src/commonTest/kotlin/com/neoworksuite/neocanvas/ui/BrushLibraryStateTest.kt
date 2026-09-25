@@ -8,9 +8,29 @@ import com.neoworksuite.neocanvas.renderer.RasterPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BrushLibraryStateTest {
+    @Test
+    fun usage_persistence_encoding_can_be_deferred_off_the_selection_path() {
+        var deferred: (() -> ByteArray)? = null
+        var persisted: ByteArray? = null
+        val state = BrushLibraryState(
+            onPersist = { persisted = it },
+            onPersistDeferred = { deferred = it },
+        )
+
+        state.choose(BuiltInBrushes.ink)
+
+        assertNull(persisted)
+        val encode = assertNotNull(deferred)
+        val restored = BrushLibraryState(initialSnapshot = encode())
+        restored.showRecent()
+        assertEquals(listOf(BuiltInBrushes.ink.id), restored.visibleBrushes.map { it.id })
+    }
+
     @Test
     fun favourites_recents_and_custom_brushes_survive_snapshot_reload() {
         var persisted: ByteArray? = null
