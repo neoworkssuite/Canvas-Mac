@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -96,9 +97,11 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BoxWithConstraints(Modifier.weight(1f)) { InspectorHeading("BRUSHES", library.allBrushes.size.toString() + " brushes") }
             BoxWithConstraints {
-                TextButton(onClick = { addMenu = true }, modifier = Modifier.semantics { contentDescription = "Add or import brush" }) { Text("＋") }
+                TextButton(onClick = { addMenu = true }, modifier = Modifier.semantics { contentDescription = "Add or import brush" }) {
+                    StudioGlyph(Glyph.Add, NeoCanvasColors.accent, Modifier.size(22.dp))
+                }
                 DropdownMenu(addMenu, { addMenu = false }, containerColor = NeoCanvasColors.panelRaised) {
-                    DropdownMenuItem(text = { Text("Import Brush or Pack") }, onClick = {
+                    BrushMenuItem("Import Brush or Pack", StudioMenuCommand.ImportBrush) {
                         addMenu = false
                         state.openBrushFile { result -> result.onSuccess { item ->
                             if (item != null) {
@@ -108,24 +111,24 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
                                     .onFailure { state.statusMessage = "This brush could not be opened" }
                             }
                         }.onFailure { state.statusMessage = it.message ?: "Brush import failed" } }
-                    })
-                    DropdownMenuItem(text = { Text("Create Brush") }, onClick = { addMenu = false; page = BrushPanelPage.Studio })
+                    }
+                    BrushMenuItem("Create Brush", StudioMenuCommand.CreateBrush) { addMenu = false; page = BrushPanelPage.Studio }
                     val selectedPack = library.installedPacks.firstOrNull { it.pack.manifest.id == library.selectedCategoryId }
                     if (selectedPack != null) {
-                        DropdownMenuItem(text = { Text("Share ${selectedPack.pack.manifest.name}") }, onClick = {
+                        BrushMenuItem("Share ${selectedPack.pack.manifest.name}", StudioMenuCommand.ShareBrush) {
                             addMenu = false
                             val bytes = library.exportPack(selectedPack.pack.manifest.id)
                             if (bytes != null) state.shareBrushFile(
                                 selectedPack.pack.manifest.name.replace(' ', '-') + ".neobrushpack",
                                 bytes,
                             )
-                        })
-                        DropdownMenuItem(text = { Text("Remove ${selectedPack.pack.manifest.name}") }, onClick = {
+                        }
+                        BrushMenuItem("Remove ${selectedPack.pack.manifest.name}", StudioMenuCommand.RemoveBrush) {
                             addMenu = false
                             val fallback = packManager.remove(selectedPack.pack.manifest.id, state.brush.id)
                             if (fallback != null) state.selectBrush(BuiltInBrushes.pencil)
                             state.statusMessage = "Removed ${selectedPack.pack.manifest.name}"
-                        })
+                        }
                     }
                 }
             }
@@ -163,6 +166,17 @@ fun BrushPanel(state: EditorState, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+@Composable
+private fun BrushMenuItem(label: String, command: StudioMenuCommand, onClick: () -> Unit) {
+    val presentation = menuPresentation(command)
+    val tint = if (presentation.destructive) Color(0xffff5b5b) else NeoCanvasColors.muted
+    DropdownMenuItem(
+        text = { Text(label, color = if (presentation.destructive) tint else NeoCanvasColors.paper) },
+        leadingIcon = { StudioGlyph(presentation.glyph, tint, Modifier.size(21.dp)) },
+        onClick = onClick,
+    )
 }
 
 @Composable

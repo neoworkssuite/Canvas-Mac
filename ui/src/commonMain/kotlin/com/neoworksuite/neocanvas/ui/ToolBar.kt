@@ -27,6 +27,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
@@ -134,23 +135,26 @@ private fun StudioActionsMenu(state: EditorState) {
     }
 
     Box {
+        StudioTooltip("Actions") {
         Box(
-            Modifier.height(52.dp)
+            Modifier.size(54.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(if (expanded) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
                 .clickable {
                     if (expanded) closeMenu() else expanded = true
                 }
                 .semantics { contentDescription = "Actions menu" }
-                .padding(horizontal = 11.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                if (state.hasUnsavedChanges) "Actions •" else "Actions",
-                color = if (expanded) NeoCanvasColors.ink else NeoCanvasColors.paper,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            StudioGlyph(Glyph.Ellipsis, if (expanded) NeoCanvasColors.ink else NeoCanvasColors.muted)
+            if (state.hasUnsavedChanges) {
+                Box(
+                    Modifier.size(7.dp).clip(CircleShape)
+                        .background(if (expanded) NeoCanvasColors.ink else NeoCanvasColors.accent)
+                        .align(Alignment.TopEnd).padding(7.dp),
+                )
+            }
+        }
         }
 
         DropdownMenu(
@@ -160,10 +164,10 @@ private fun StudioActionsMenu(state: EditorState) {
         ) {
             when (page) {
                 ActionMenuPage.Root -> {
-                    ActionSubmenuItem("Add / Import") { page = ActionMenuPage.Add }
-                    ActionSubmenuItem("Canvas") { page = ActionMenuPage.Canvas }
-                    ActionSubmenuItem("Drawing Assist") { page = ActionMenuPage.Assist }
-                    ActionSubmenuItem("Utility Tools") { page = ActionMenuPage.Tools }
+                    ActionSubmenuItem("Add / Import", StudioMenuCommand.AddImport) { page = ActionMenuPage.Add }
+                    ActionSubmenuItem("Canvas", StudioMenuCommand.Canvas) { page = ActionMenuPage.Canvas }
+                    ActionSubmenuItem("Drawing Assist", StudioMenuCommand.DrawingAssist) { page = ActionMenuPage.Assist }
+                    ActionSubmenuItem("Utility Tools", StudioMenuCommand.UtilityTools) { page = ActionMenuPage.Tools }
                     if (state.supportsVersions) {
                         ActionItem("Versions…") { closeMenu(); state.openVersions() }
                     }
@@ -173,7 +177,7 @@ private fun StudioActionsMenu(state: EditorState) {
                     if (state.recentEditableStrokes.isNotEmpty()) {
                         ActionItem("Recent Strokes…") { closeMenu(); state.openRecentStrokes() }
                     }
-                    ActionSubmenuItem("File / Export") { page = ActionMenuPage.File }
+                    ActionSubmenuItem("File / Export", StudioMenuCommand.FileExport) { page = ActionMenuPage.File }
                 }
                 ActionMenuPage.Add -> {
                     ActionBackItem { page = ActionMenuPage.Root }
@@ -193,20 +197,20 @@ private fun StudioActionsMenu(state: EditorState) {
                 }
                 ActionMenuPage.Assist -> {
                     ActionBackItem { page = ActionMenuPage.Root }
-                    ActionItem(if (state.gridGuideVisible) "Grid Guide ✓" else "Grid Guide") {
+                    ActionItem("Grid Guide", Glyph.Grid, selected = state.gridGuideVisible) {
                         closeMenu()
                         state.gridGuideVisible = !state.gridGuideVisible
                         state.persistPreferences()
                     }
-                    ActionItem(if (state.perspectiveGuideVisible) "Perspective Guide ✓" else "Perspective Guide") {
+                    ActionItem("Perspective Guide", selected = state.perspectiveGuideVisible) {
                         closeMenu()
                         state.perspectiveGuideVisible = !state.perspectiveGuideVisible
                         state.persistPreferences()
                     }
-                    ActionItem("Symmetry Off") { closeMenu(); state.symmetry = DrawingSymmetry.None }
-                    ActionItem("Vertical Symmetry") { closeMenu(); state.symmetry = DrawingSymmetry.Vertical }
-                    ActionItem("Horizontal Symmetry") { closeMenu(); state.symmetry = DrawingSymmetry.Horizontal }
-                    ActionItem("Four-way Symmetry") { closeMenu(); state.symmetry = DrawingSymmetry.Both }
+                    ActionItem("Symmetry Off", selected = state.symmetry == DrawingSymmetry.None) { closeMenu(); state.symmetry = DrawingSymmetry.None }
+                    ActionItem("Vertical Symmetry", selected = state.symmetry == DrawingSymmetry.Vertical) { closeMenu(); state.symmetry = DrawingSymmetry.Vertical }
+                    ActionItem("Horizontal Symmetry", selected = state.symmetry == DrawingSymmetry.Horizontal) { closeMenu(); state.symmetry = DrawingSymmetry.Horizontal }
+                    ActionItem("Four-way Symmetry", selected = state.symmetry == DrawingSymmetry.Both) { closeMenu(); state.symmetry = DrawingSymmetry.Both }
                 }
                 ActionMenuPage.Tools -> {
                     ActionBackItem { page = ActionMenuPage.Root }
@@ -243,27 +247,42 @@ private fun StudioActionsMenu(state: EditorState) {
 }
 
 @Composable
-private fun ActionItem(label: String, onClick: () -> Unit) {
+private fun ActionItem(
+    label: String,
+    glyph: Glyph? = null,
+    selected: Boolean = false,
+    destructive: Boolean = false,
+    submenu: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val tint = when {
+        destructive -> Color(0xffff5b5b)
+        selected -> NeoCanvasColors.accent
+        else -> NeoCanvasColors.muted
+    }
     DropdownMenuItem(
-        text = { Text(label, color = NeoCanvasColors.paper, fontSize = 14.sp) },
+        text = { Text(label, color = if (destructive) tint else NeoCanvasColors.paper, fontSize = 14.sp) },
+        leadingIcon = glyph?.let { icon -> { StudioGlyph(icon, tint, Modifier.size(21.dp)) } },
+        trailingIcon = when {
+            selected -> ({ Text("✓", color = NeoCanvasColors.accent) })
+            submenu -> ({ Text("›", color = NeoCanvasColors.muted, fontSize = 18.sp) })
+            else -> null
+        },
+        modifier = Modifier.semantics { this.selected = selected },
         onClick = onClick,
     )
 }
 
 @Composable
-private fun ActionSubmenuItem(label: String, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(label + "  ›", color = NeoCanvasColors.paper, fontSize = 14.sp) },
-        onClick = onClick,
-    )
+private fun ActionSubmenuItem(label: String, command: StudioMenuCommand, onClick: () -> Unit) {
+    val presentation = menuPresentation(command)
+    ActionItem(label, presentation.glyph, submenu = true, onClick = onClick)
 }
 
 @Composable
 private fun ActionBackItem(onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text("‹  Actions", color = NeoCanvasColors.accent, fontSize = 14.sp) },
-        onClick = onClick,
-    )
+    ActionItem("Actions", Glyph.Previous, onClick = onClick)
+    HorizontalDivider(color = NeoCanvasColors.line)
 }
 
 @Composable
@@ -475,8 +494,6 @@ fun studioTextFieldColors() = OutlinedTextFieldDefaults.colors(
     errorCursorColor = Color.White,
 )
 
-private enum class Glyph { Previous, Next, Gallery, ImportImage, New, Open, Save, Export, Brush, Eraser, Smudge, Transform, Fill, Eyedropper, Select, ClearSelection, Undo, Redo, Fit, Palette, Library, Layers, Fx, Settings }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StudioTooltip(label: String, content: @Composable () -> Unit) {
@@ -515,7 +532,7 @@ private fun BrandMark() = androidx.compose.foundation.Image(
 )
 
 @Composable
-private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(28.dp)) {
+internal fun StudioGlyph(glyph: Glyph, color: Color, modifier: Modifier = Modifier.size(28.dp)) = Canvas(modifier) {
     val w = size.width
     val h = size.height
     fun line(a: Offset, b: Offset, width: Float = 1.8f) = drawLine(color, a, b, width, StrokeCap.Round)
@@ -670,15 +687,72 @@ private fun StudioGlyph(glyph: Glyph, color: Color) = Canvas(Modifier.size(28.dp
         }
         Glyph.Settings -> {
             val s = 2.0f
-            line(Offset(w * .16f, h * .28f), Offset(w * .84f, h * .28f), s)
-            line(Offset(w * .16f, h * .50f), Offset(w * .84f, h * .50f), s)
-            line(Offset(w * .16f, h * .72f), Offset(w * .84f, h * .72f), s)
-            drawCircle(NeoCanvasColors.chrome, w * .075f, Offset(w * .36f, h * .28f))
-            drawCircle(color, w * .075f, Offset(w * .36f, h * .28f), style = Stroke(2.1f))
-            drawCircle(NeoCanvasColors.chrome, w * .075f, Offset(w * .65f, h * .50f))
-            drawCircle(color, w * .075f, Offset(w * .65f, h * .50f), style = Stroke(2.1f))
-            drawCircle(NeoCanvasColors.chrome, w * .075f, Offset(w * .47f, h * .72f))
-            drawCircle(color, w * .075f, Offset(w * .47f, h * .72f), style = Stroke(2.1f))
+            val c = Offset(w * .5f, h * .5f)
+            drawCircle(color, w * .24f, c, style = Stroke(s))
+            drawCircle(color, w * .08f, c, style = Stroke(s))
+            line(Offset(w * .5f, h * .12f), Offset(w * .5f, h * .26f), s)
+            line(Offset(w * .5f, h * .74f), Offset(w * .5f, h * .88f), s)
+            line(Offset(w * .12f, h * .5f), Offset(w * .26f, h * .5f), s)
+            line(Offset(w * .74f, h * .5f), Offset(w * .88f, h * .5f), s)
+            line(Offset(w * .23f, h * .23f), Offset(w * .33f, h * .33f), s)
+            line(Offset(w * .67f, h * .67f), Offset(w * .77f, h * .77f), s)
+            line(Offset(w * .77f, h * .23f), Offset(w * .67f, h * .33f), s)
+            line(Offset(w * .33f, h * .67f), Offset(w * .23f, h * .77f), s)
+        }
+        Glyph.Ellipsis -> {
+            drawCircle(color, w * .065f, Offset(w * .25f, h * .5f))
+            drawCircle(color, w * .065f, Offset(w * .5f, h * .5f))
+            drawCircle(color, w * .065f, Offset(w * .75f, h * .5f))
+        }
+        Glyph.Add -> {
+            line(Offset(w * .5f, h * .18f), Offset(w * .5f, h * .82f), 2.2f)
+            line(Offset(w * .18f, h * .5f), Offset(w * .82f, h * .5f), 2.2f)
+        }
+        Glyph.Canvas -> {
+            drawRoundRect(color, Offset(w * .16f, h * .18f), Size(w * .68f, h * .64f),
+                androidx.compose.ui.geometry.CornerRadius(3f, 3f), style = Stroke(2f))
+            line(Offset(w * .28f, h * .70f), Offset(w * .46f, h * .48f), 1.8f)
+            line(Offset(w * .46f, h * .48f), Offset(w * .58f, h * .61f), 1.8f)
+            line(Offset(w * .58f, h * .61f), Offset(w * .73f, h * .40f), 1.8f)
+        }
+        Glyph.Assist -> {
+            line(Offset(w * .2f, h * .8f), Offset(w * .8f, h * .2f), 2f)
+            drawCircle(color, w * .08f, Offset(w * .28f, h * .28f))
+            drawCircle(color, w * .055f, Offset(w * .73f, h * .7f))
+            drawCircle(color, w * .035f, Offset(w * .5f, h * .18f))
+        }
+        Glyph.Tools -> {
+            drawCircle(color, w * .18f, Offset(w * .34f, h * .34f), style = Stroke(2f))
+            line(Offset(w * .46f, h * .46f), Offset(w * .8f, h * .8f), 3f)
+            line(Offset(w * .62f, h * .25f), Offset(w * .78f, h * .41f), 2f)
+        }
+        Glyph.Import -> {
+            drawRoundRect(color, Offset(w * .18f, h * .18f), Size(w * .64f, h * .64f),
+                androidx.compose.ui.geometry.CornerRadius(3f, 3f), style = Stroke(1.8f))
+            line(Offset(w * .5f, h * .2f), Offset(w * .5f, h * .62f), 2f)
+            line(Offset(w * .34f, h * .47f), Offset(w * .5f, h * .63f), 2f)
+            line(Offset(w * .66f, h * .47f), Offset(w * .5f, h * .63f), 2f)
+        }
+        Glyph.Share -> {
+            drawRoundRect(color, Offset(w * .2f, h * .42f), Size(w * .6f, h * .4f),
+                androidx.compose.ui.geometry.CornerRadius(3f, 3f), style = Stroke(1.8f))
+            line(Offset(w * .5f, h * .64f), Offset(w * .5f, h * .16f), 2f)
+            line(Offset(w * .34f, h * .32f), Offset(w * .5f, h * .16f), 2f)
+            line(Offset(w * .66f, h * .32f), Offset(w * .5f, h * .16f), 2f)
+        }
+        Glyph.Delete -> {
+            drawRoundRect(color, Offset(w * .3f, h * .28f), Size(w * .4f, h * .56f),
+                androidx.compose.ui.geometry.CornerRadius(2f, 2f), style = Stroke(2f))
+            line(Offset(w * .22f, h * .28f), Offset(w * .78f, h * .28f), 2f)
+            line(Offset(w * .4f, h * .17f), Offset(w * .6f, h * .17f), 2f)
+        }
+        Glyph.Grid -> {
+            for (index in 1..2) {
+                val p = index / 3f
+                line(Offset(w * p, h * .16f), Offset(w * p, h * .84f), 1.7f)
+                line(Offset(w * .16f, h * p), Offset(w * .84f, h * p), 1.7f)
+            }
+            drawRect(color, Offset(w * .16f, h * .16f), Size(w * .68f, h * .68f), style = Stroke(1.7f))
         }
     }
 }
