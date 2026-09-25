@@ -12,6 +12,11 @@ class WindowsLaunchContractTest {
         assertNotEquals(WindowsLaunchContract.runtimeRelativePath, WindowsLaunchContract.installerRelativePath)
     }
 
+    @Test fun self_test_switch_is_explicit_and_case_insensitive() {
+        assertEquals(true, WindowsLaunchContract.isSelfTest(arrayOf("--WINDOWS-SELF-TEST")))
+        assertEquals(false, WindowsLaunchContract.isSelfTest(arrayOf("--safe", "drawing.neocanvas")))
+    }
+
     @Test fun document_association_selects_first_neocanvas_argument() {
         assertEquals(
             "C:\\Art\\Sketch.neocanvas",
