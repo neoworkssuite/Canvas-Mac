@@ -22,6 +22,7 @@ kotlin {
             implementation(project(":ui"))
             implementation(project(":renderer"))
             implementation(compose.desktop.currentOs)
+            implementation("org.apache.pdfbox:pdfbox:3.0.8")
         }
     }
 }
