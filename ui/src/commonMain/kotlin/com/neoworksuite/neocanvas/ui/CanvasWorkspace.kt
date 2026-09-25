@@ -424,7 +424,6 @@ fun CanvasWorkspace(
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val eraserPointer = down.type == PointerType.Eraser
-                    eraserPointerActive = eraserPointer
                     if (quickMenuAnchor != null) {
                         quickMenuAnchor = null
                         down.consume()
@@ -615,6 +614,7 @@ fun CanvasWorkspace(
                     }
 
                     down.consume()
+                    eraserPointerActive = eraserPointer
                     try {
                         inProgress.clear()
                         moveDelta = Offset.Zero
