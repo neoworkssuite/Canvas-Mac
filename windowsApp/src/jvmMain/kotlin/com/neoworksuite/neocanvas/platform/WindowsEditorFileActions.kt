@@ -382,11 +382,20 @@ class WindowsEditorFileActions(
         return result
     }
 
+    fun openPath(path: String): LoadResult {
+        val target = File(path).absoluteFile
+        if (!target.isFile) return LoadResult.Failure("NeoCanvas document was not found.")
+        if (!target.name.endsWith(".neocanvas", ignoreCase = true)) {
+            return LoadResult.Failure("Choose a NeoCanvas .neocanvas document.")
+        }
+        val result = documents.load(target.absolutePath)
+        if (result is LoadResult.Success) currentDocumentPath = target.absolutePath
+        return result
+    }
+
     override fun open(): LoadResult {
         val path = choose("Open NeoCanvas document", FileDialog.LOAD, null) ?: return LoadResult.Failure("Open cancelled.")
-        val result = documents.load(path)
-        if (result is LoadResult.Success) currentDocumentPath = path
-        return result
+        return openPath(path)
     }
 
     override fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
