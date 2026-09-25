@@ -16,6 +16,23 @@ internal data class TextFontChoice(
     val name: String,
     val category: String,
     val bundled: Boolean = true,
+    val styles: List<String> = listOf("Regular"),
+    val imported: Boolean = false,
+)
+
+data class ImportedFontFace(
+    val id: String,
+    val family: String,
+    val style: String,
+    val sourceName: String,
+)
+
+data class ResolvedTextFont(
+    val requestedFamily: String,
+    val requestedStyle: String,
+    val renderFamily: String,
+    val renderStyle: String,
+    val missing: Boolean,
 )
 
 internal val neoCanvasTextFonts = listOf(
@@ -35,6 +52,39 @@ internal fun filteredTextFonts(query: String): List<TextFontChoice> {
     val term = query.trim()
     return if (term.isEmpty()) neoCanvasTextFonts else neoCanvasTextFonts.filter {
         it.name.contains(term, ignoreCase = true) || it.category.contains(term, ignoreCase = true)
+    }
+}
+
+internal fun textFontChoices(imported: List<ImportedFontFace>): List<TextFontChoice> {
+    val merged = imported.groupBy { it.family.trim().lowercase() }.values.mapNotNull { faces ->
+        val family = faces.firstOrNull()?.family?.trim().orEmpty()
+        if (family.isEmpty()) null else TextFontChoice(
+            name = family,
+            category = "Imported",
+            bundled = false,
+            styles = faces.map { it.style.trim().ifEmpty { "Regular" } }.distinct().sorted(),
+            imported = true,
+        )
+    }.sortedBy { it.name.lowercase() }
+    val builtInNames = neoCanvasTextFonts.map { it.name.lowercase() }.toSet()
+    return neoCanvasTextFonts + merged.filterNot { it.name.lowercase() in builtInNames }
+}
+
+internal fun resolveTextFontChoice(
+    family: String,
+    style: String,
+    imported: List<ImportedFontFace>,
+): ResolvedTextFont {
+    val requestedFamily = family.trim().ifEmpty { "System" }
+    val requestedStyle = style.trim().ifEmpty { "Regular" }
+    val builtIn = neoCanvasTextFonts.any { it.name.equals(requestedFamily, ignoreCase = true) }
+    val face = imported.firstOrNull {
+        it.family.equals(requestedFamily, ignoreCase = true) && it.style.equals(requestedStyle, ignoreCase = true)
+    } ?: imported.firstOrNull { it.family.equals(requestedFamily, ignoreCase = true) }
+    return when {
+        builtIn -> ResolvedTextFont(requestedFamily, requestedStyle, requestedFamily, requestedStyle, false)
+        face != null -> ResolvedTextFont(requestedFamily, requestedStyle, face.family, face.style, false)
+        else -> ResolvedTextFont(requestedFamily, requestedStyle, "System", "Regular", true)
     }
 }
 
