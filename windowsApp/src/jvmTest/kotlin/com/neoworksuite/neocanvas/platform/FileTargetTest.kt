@@ -45,4 +45,25 @@ class FileTargetTest {
         actions.save(doc, emptyMap())
         assertEquals(listOf("first.neocanvas", "failed.neocanvas", "new.neocanvas"), writes)
     }
+
+    @Test fun associated_document_open_sets_future_save_target() {
+        val target = kotlin.io.path.createTempFile(suffix = ".neocanvas").toFile()
+        val writes = mutableListOf<String>()
+        val loaded = CanvasDocument.blank(16, 16)
+        val store = object : DocumentStore {
+            override fun save(path: String, document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+                writes += path
+                return SaveResult.Success
+            }
+            override fun load(path: String): LoadResult = LoadResult.Success(loaded, emptyMap())
+        }
+        try {
+            val actions = WindowsEditorFileActions(store)
+            assertIs<LoadResult.Success>(actions.openPath(target.absolutePath))
+            actions.save(loaded, emptyMap())
+            assertEquals(listOf(target.absolutePath), writes)
+        } finally {
+            target.delete()
+        }
+    }
 }
