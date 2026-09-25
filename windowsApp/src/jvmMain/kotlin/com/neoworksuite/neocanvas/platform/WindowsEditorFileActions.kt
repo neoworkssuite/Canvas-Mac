@@ -11,6 +11,8 @@ import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.renderer.TiffExporter
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
+import com.neoworksuite.neocanvas.ui.PendingBrushImport
+import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.image.BufferedImage
@@ -29,10 +31,17 @@ class WindowsEditorFileActions(
     override val supportsPdfExport = true
     override val supportsTiffExport = true
     override val supportsEditableObjectPsdFlattening = true
+    override val supportsUpdateChecks = true
+    override val updateServiceDescription = "the NeoWorks Windows release service"
+    override val updateActionLabel = "Download update"
+    override val updateDestinationDescription = "the Windows update download"
+    override val updatePrivacyDescription =
+        "When update checks are enabled, NeoCanvas asks the NeoWorks Windows release service only for release metadata; no artwork or account data is sent."
     private val libraryDirectory = File(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/Documents",
     )
+    private val brushLibraryFile get() = File(libraryDirectory.parentFile, "brush-library.bin")
     override fun resetDocumentTarget() { currentDocumentPath = null }
     override fun listLocalDocuments(): List<String> = libraryDirectory.listFiles().orEmpty()
         .filter { it.isFile && it.name.endsWith(".neocanvas", true) }
@@ -297,6 +306,65 @@ class WindowsEditorFileActions(
         palettePreferences.flush()
         SaveResult.Success
     } catch (error: Exception) { SaveResult.Failure("Could not save palette: ${error.message}") }
+    override fun loadBrushLibrary(): ByteArray? = runCatching {
+        brushLibraryFile.takeIf(File::isFile)?.readBytes()
+    }.getOrNull()
+
+    override fun saveBrushLibrary(bytes: ByteArray): SaveResult = try {
+        brushLibraryFile.parentFile?.mkdirs()
+        brushLibraryFile.writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save custom brushes: " + (error.message ?: "storage error"))
+    }
+
+    override fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
+        onResult(runCatching {
+            val selected = choose("Import NeoCanvas brush", FileDialog.LOAD, null) ?: return@runCatching null
+            val file = File(selected)
+            require(file.name.endsWith(".neobrush", true) || file.name.endsWith(".neobrushpack", true)) {
+                "Choose a .neobrush or .neobrushpack file."
+            }
+            require(file.length() <= 25L * 1024L * 1024L) { "Brush file is too large." }
+            PendingBrushImport(file.name, file.readBytes())
+        })
+    }
+
+    override fun shareBrushFile(name: String, bytes: ByteArray): SaveResult = try {
+        require(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)) {
+            "Use a NeoCanvas brush filename."
+        }
+        val safeName = File(name).name
+        val extension = if (safeName.endsWith(".neobrushpack", true)) ".neobrushpack" else ".neobrush"
+        val selected = choose("Export NeoCanvas brush", FileDialog.SAVE, safeName)
+            ?: return SaveResult.Failure("Brush export cancelled.")
+        File(selected.ensureExtension(extension)).writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export brush: " + (error.message ?: "output error"))
+    }
+
+    override fun loadPreferences(): Map<String, String> = palettePreferences.keys()
+        .filter { it.startsWith("pref.") }
+        .associate { it.removePrefix("pref.") to palettePreferences.get(it, "") }
+
+    override fun savePreferences(values: Map<String, String>): SaveResult = try {
+        palettePreferences.keys().filter { it.startsWith("pref.") }.forEach(palettePreferences::remove)
+        values.forEach { (key, value) -> palettePreferences.put("pref.$key", value) }
+        palettePreferences.flush()
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save preferences: " + (error.message ?: "storage error"))
+    }
+
+    override fun openExternalUrl(url: String): Boolean = runCatching {
+        require(url.startsWith("https://"))
+        Desktop.getDesktop().browse(java.net.URI(url))
+        true
+    }.getOrDefault(false)
+    override fun checkForUpdate(onResult: (Result<com.neoworksuite.neocanvas.ui.AppUpdateInfo?>) -> Unit) {
+        WindowsUpdateService.check(onResult)
+    }
     private var currentDocumentPath: String? = null
 
     override fun save(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
