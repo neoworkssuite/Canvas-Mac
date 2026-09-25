@@ -23,6 +23,10 @@ import org.jetbrains.skia.Font
 import platform.CoreGraphics.CGRectMake
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontStyle
+import org.jetbrains.skia.Data
+import platform.CoreText.CTFontManagerRegisterFontsForURL
+import platform.CoreText.CTFontManagerUnregisterFontsForURL
+import platform.CoreText.kCTFontManagerScopeProcess
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect
@@ -74,6 +78,7 @@ internal class IosEditorFileActions(
     private var activePsdPickerDelegate: PsdPickerDelegate? = null
     private var activeNeoCanvasPickerDelegate: NeoCanvasPickerDelegate? = null
     private var activeBrushPickerDelegate: BrushFilePickerDelegate? = null
+    private var activeFontPickerDelegate: FontFilePickerDelegate? = null
     private var currentDocumentName: String? = null
 
     private val documentsRoot: String
@@ -91,6 +96,7 @@ internal class IosEditorFileActions(
     private val brushLibraryPath: String get() = join(libraryDirectory, "brush-library.txt")
     private val preferencesPath: String get() = join(libraryDirectory, "preferences.txt")
     private val galleryStackPath: String get() = join(libraryDirectory, "gallery-stack.txt")
+    private val fontsDirectory: String get() = join(libraryDirectory, "Fonts")
     private val recoveryPath: String get() = join(recoveryDirectory, "last-session.neocanvas")
 
     override val supportsLocalLibrary: Boolean = true
@@ -107,6 +113,66 @@ internal class IosEditorFileActions(
     override val supportsTiffExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
     override val supportsUpdateChecks: Boolean = true
+    override val supportsFontImport: Boolean = true
+
+    override fun openFontFile(onResult: (Result<ImportedFontFile?>) -> Unit) {
+        val host = presenter() ?: return onResult(Result.failure(IllegalStateException("The iPad file picker is not ready yet.")))
+        val picker = UIDocumentPickerViewController(
+            documentTypes = listOf("public.truetype-font", "public.opentype-font", "public.font"),
+            inMode = UIDocumentPickerMode.UIDocumentPickerModeImport,
+        ).apply { allowsMultipleSelection = false; modalPresentationStyle = UIModalPresentationFullScreen }
+        val delegate = FontFilePickerDelegate(onResult) { activeFontPickerDelegate = null }
+        activeFontPickerDelegate = delegate
+        picker.delegate = delegate
+        host.presentViewController(picker, animated = true, completion = null)
+    }
+
+    override fun listImportedFonts(): List<ImportedFontFace> {
+        ensureDirectory(fontsDirectory)
+        return fm.contentsOfDirectoryAtPath(fontsDirectory, null).orEmpty().filterIsInstance<String>()
+            .filter { it.substringAfterLast('.', "").lowercase() in setOf("ttf", "otf", "ttc") }
+            .flatMap { name -> fontFaces(join(fontsDirectory, name), name, register = true) }
+    }
+
+    override fun installFont(file: ImportedFontFile): FontInstallResult {
+        val extension = file.name.substringAfterLast('.', "").lowercase()
+        if (extension !in setOf("ttf", "otf", "ttc")) return FontInstallResult.Failure("Choose a TTF, OTF, or TTC font file.")
+        val typeface = runCatching { FontMgr.default.makeFromData(Data.makeFromBytes(file.bytes)) }.getOrNull()
+            ?: return FontInstallResult.Failure("This font file is invalid or unsupported.")
+        val family = typeface.familyName.trim()
+        val style = typeface.fontStyle.skiaStyleName()
+        if (family.isEmpty()) return FontInstallResult.Failure("This font has no readable family name.")
+        if (listImportedFonts().any { it.family.equals(family, true) && it.style.equals(style, true) })
+            return FontInstallResult.Failure("$family $style is already imported.")
+        ensureDirectory(fontsDirectory)
+        val safe = file.name.substringAfterLast('/').substringAfterLast('\\').replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val target = join(fontsDirectory, "${time(null)}-$safe")
+        if (!writeBytes(target, file.bytes)) return FontInstallResult.Failure("Could not save the imported font.")
+        val faces = fontFaces(target, target.substringAfterLast('/'), register = true)
+        if (faces.isEmpty()) {
+            fm.removeItemAtPath(target, null)
+            return FontInstallResult.Failure("iPadOS could not register this font.")
+        }
+        return FontInstallResult.Success(faces)
+    }
+
+    override fun removeImportedFont(id: String): SaveResult {
+        val name = id.substringBefore('#')
+        val path = join(fontsDirectory, name)
+        val url = NSURL.fileURLWithPath(path)
+        CTFontManagerUnregisterFontsForURL(url, kCTFontManagerScopeProcess, null)
+        return if (fm.removeItemAtPath(path, null)) SaveResult.Success else SaveResult.Failure("Could not remove this font.")
+    }
+
+    private fun fontFaces(path: String, sourceName: String, register: Boolean): List<ImportedFontFace> {
+        val data = NSData.dataWithContentsOfFile(path)?.toByteArray() ?: return emptyList()
+        val typeface = runCatching { FontMgr.default.makeFromData(Data.makeFromBytes(data)) }.getOrNull() ?: return emptyList()
+        if (register && !CTFontManagerRegisterFontsForURL(NSURL.fileURLWithPath(path), kCTFontManagerScopeProcess, null)) {
+            // A previously registered process font reports false; the parsed face remains usable.
+        }
+        val style = typeface.fontStyle.skiaStyleName()
+        return listOf(ImportedFontFace("$sourceName#${typeface.familyName}#$style", typeface.familyName, style, sourceName))
+    }
 
     override fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
         val host = presenter()
@@ -129,6 +195,7 @@ internal class IosEditorFileActions(
         if (!(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)))
             return SaveResult.Failure("Use a NeoCanvas brush filename.")
         ensureDirectory(exportDirectory)
+        ensureDirectory(fontsDirectory)
         val safeName = name.substringAfterLast('/').substringAfterLast('\\')
         val path = join(exportDirectory, safeName)
         if (!writeBytes(path, bytes)) return SaveResult.Failure("Could not prepare the brush file.")
@@ -931,6 +998,36 @@ private class BrushFilePickerDelegate(
         controller.dismissViewControllerAnimated(true, null); finish(Result.success(null))
     }
     private fun finish(result: Result<PendingBrushImport?>) { onResult(result); onFinished() }
+}
+
+private class FontFilePickerDelegate(
+    private val onResult: (Result<ImportedFontFile?>) -> Unit,
+    private val onFinished: () -> Unit,
+) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+        controller.dismissViewControllerAnimated(true, null)
+        if (url == null) return finish(Result.failure(IllegalStateException("No font file was selected.")))
+        finish(runCatching {
+            val path = url.path ?: error("iPadOS could not resolve the selected font path.")
+            val name = path.substringAfterLast('/')
+            require(name.substringAfterLast('.', "").lowercase() in setOf("ttf", "otf", "ttc")) { "Choose a TTF, OTF, or TTC font file." }
+            val data = NSData.dataWithContentsOfFile(path) ?: error("iPadOS could not read the selected font.")
+            require(data.length <= 32uL * 1024uL * 1024uL) { "This font file is larger than 32 MiB." }
+            ImportedFontFile(name, data.toByteArray())
+        })
+    }
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+        controller.dismissViewControllerAnimated(true, null); finish(Result.success(null))
+    }
+    private fun finish(result: Result<ImportedFontFile?>) { onResult(result); onFinished() }
+}
+
+private fun FontStyle.skiaStyleName(): String = when {
+    weight >= 700 && slant != 0 -> "Bold Italic"
+    weight >= 700 -> "Bold"
+    slant != 0 -> "Italic"
+    else -> "Regular"
 }
 
 private class PsdPickerDelegate(
