@@ -107,6 +107,11 @@ interface EditorFileActions {
         onResult(runCatching { open() })
     }
     val supportsUpdateChecks: Boolean get() = false
+    val updateServiceDescription: String get() = "the NeoCanvas release service"
+    val updateActionLabel: String get() = "View update"
+    val updateDestinationDescription: String get() = "the update page"
+    val updatePrivacyDescription: String
+        get() = "NeoCanvas checks the configured release service only for version information; no artwork or account data is sent."
     fun checkForUpdate(onResult: (Result<AppUpdateInfo?>) -> Unit) {
         onResult(Result.success(null))
     }
