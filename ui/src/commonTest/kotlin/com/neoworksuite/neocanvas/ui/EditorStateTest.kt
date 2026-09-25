@@ -81,12 +81,26 @@ class EditorStateTest {
         val selected = com.neoworksuite.neocanvas.brushes.BuiltInBrushes.ink
         state.selectBrush(selected)
         state.showInspector(InspectorPanel.Brushes)
+        state.activateTool(Tool.Pan)
 
-        state.toggleBrushLibrary()
+        state.dismissInspectorToCanvas()
 
         assertFalse(state.inspectorVisible)
         assertEquals(Tool.Brush, state.tool)
         assertEquals(selected, state.brush)
+    }
+
+    @Test
+    fun dismissing_brush_library_restores_eraser_preset_mode() {
+        val state = EditorState(DocumentHistory(CanvasDocument.blank(16, 16)))
+        state.selectBrush(com.neoworksuite.neocanvas.brushes.BuiltInBrushes.eraser)
+        state.showInspector(InspectorPanel.Brushes)
+        state.activateTool(Tool.Pan)
+
+        state.dismissInspectorToCanvas()
+
+        assertFalse(state.inspectorVisible)
+        assertEquals(Tool.Eraser, state.tool)
     }
 
     @Test fun merge_down_flattens_two_layers_and_undo_restores_both_with_pixels() {
