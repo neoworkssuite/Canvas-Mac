@@ -10,11 +10,16 @@ import com.neoworksuite.neocanvas.renderer.PdfExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.renderer.TiffExporter
 import com.neoworksuite.neocanvas.ui.PendingBrushImport
+import com.neoworksuite.neocanvas.ui.ImportedFontFace
+import com.neoworksuite.neocanvas.ui.ImportedFontFile
+import com.neoworksuite.neocanvas.ui.FontInstallResult
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import java.awt.Desktop
 import java.awt.FileDialog
+import java.awt.Font
 import java.awt.Frame
+import java.awt.GraphicsEnvironment
 import java.awt.image.BufferedImage
 import java.io.File
 
@@ -24,6 +29,7 @@ class WindowsEditorFileActions(
     private val fileChooser: ((String, Int, String?) -> String?)? = null,
 ) : EditorFileActions {
     override val supportsSaveAs = true
+    override val supportsFontImport = true
     override val supportsLocalLibrary = true
     override val supportsPsdImport = true
     override val supportsPsdExport = true
@@ -41,6 +47,83 @@ class WindowsEditorFileActions(
         System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
         "NeoCanvas/Documents",
     )
+    private val fontsDirectory get() = File(libraryDirectory.parentFile, "Fonts")
+
+    override fun openFontFile(onResult: (Result<ImportedFontFile?>) -> Unit) {
+        onResult(runCatching {
+            val path = choose("Import font", FileDialog.LOAD, null) ?: return@runCatching null
+            val file = File(path)
+            require(file.extension.lowercase() in setOf("ttf", "otf", "ttc")) {
+                "Choose a TTF, OTF, or TTC font file."
+            }
+            require(file.length() <= 32L * 1024L * 1024L) { "This font file is larger than 32 MiB." }
+            ImportedFontFile(file.name, file.readBytes())
+        })
+    }
+
+    override fun listImportedFonts(): List<ImportedFontFace> {
+        fontsDirectory.mkdirs()
+        return fontsDirectory.listFiles().orEmpty()
+            .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf", "ttc") }
+            .mapNotNull(::fontFace)
+            .sortedWith(compareBy<ImportedFontFace> { it.family.lowercase() }.thenBy { it.style.lowercase() })
+    }
+
+    override fun installFont(file: ImportedFontFile): FontInstallResult = try {
+        val extension = file.name.substringAfterLast('.', "").lowercase()
+        if (extension !in setOf("ttf", "otf", "ttc")) {
+            return FontInstallResult.Failure("Choose a TTF, OTF, or TTC font file.")
+        }
+        val parsed = Font.createFont(Font.TRUETYPE_FONT, file.bytes.inputStream())
+        val family = parsed.family.trim()
+        val style = parsed.styleName()
+        if (family.isEmpty()) return FontInstallResult.Failure("This font has no readable family name.")
+        if (listImportedFonts().any { it.family.equals(family, true) && it.style.equals(style, true) }) {
+            return FontInstallResult.Failure("$family $style is already imported.")
+        }
+        fontsDirectory.mkdirs()
+        val safeName = file.name.substringAfterLast('/').substringAfterLast('\\')
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val target = File(fontsDirectory, System.currentTimeMillis().toString() + "-" + safeName)
+        target.writeBytes(file.bytes)
+        val face = fontFace(target) ?: run {
+            target.delete()
+            return FontInstallResult.Failure("Windows could not register this font.")
+        }
+        FontInstallResult.Success(listOf(face))
+    } catch (error: Exception) {
+        FontInstallResult.Failure("Could not import font: " + (error.message ?: "unsupported font"))
+    }
+
+    override fun removeImportedFont(id: String): SaveResult = try {
+        val sourceName = id.substringBefore('#')
+        if (sourceName != File(sourceName).name) return SaveResult.Failure("Invalid font entry.")
+        val target = File(fontsDirectory, sourceName)
+        if (!target.isFile) return SaveResult.Failure("Imported font was not found.")
+        if (target.delete()) SaveResult.Success else SaveResult.Failure("Could not remove this font.")
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not remove font: " + (error.message ?: "storage error"))
+    }
+
+    private fun fontFace(file: File): ImportedFontFace? = runCatching {
+        val font = Font.createFont(Font.TRUETYPE_FONT, file)
+        GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font)
+        val style = font.styleName()
+        ImportedFontFace(
+            id = file.name + "#" + font.family + "#" + style,
+            family = font.family,
+            style = style,
+            sourceName = file.name,
+        )
+    }.getOrNull()
+
+    private fun Font.styleName(): String = when {
+        isBold && isItalic -> "Bold Italic"
+        isBold -> "Bold"
+        isItalic -> "Italic"
+        else -> "Regular"
+    }
+
     override fun resetDocumentTarget() { currentDocumentPath = null }
     override fun listLocalDocuments(): List<String> = libraryDirectory.listFiles().orEmpty()
         .filter { it.isFile && it.name.endsWith(".neocanvas", true) }
