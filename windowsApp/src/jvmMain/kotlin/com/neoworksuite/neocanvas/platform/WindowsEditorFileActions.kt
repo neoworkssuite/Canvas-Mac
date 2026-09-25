@@ -19,6 +19,7 @@ import java.awt.FileDialog
 import java.awt.Font
 import java.awt.Frame
 import java.awt.RenderingHints
+import java.awt.font.TextAttribute
 import java.awt.geom.Rectangle2D
 import java.awt.image.BufferedImage
 import java.io.File
@@ -533,13 +534,11 @@ private val windowsTextRasterizer = TextRasterizer { text, outputWidth, outputHe
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
         val style = (if (text.bold) Font.BOLD else Font.PLAIN) or (if (text.italic) Font.ITALIC else Font.PLAIN)
-        val family = when (text.fontFamily.trim().lowercase()) {
-            "sans", "sans-serif", "sans serif", "system" -> Font.SANS_SERIF
-            "serif" -> Font.SERIF
-            "mono", "monospace" -> Font.MONOSPACED
-            else -> text.fontFamily
+        var font = windowsExportFont(text.fontFamily, style, text.fontSize)
+        if (text.tracking != 0f) {
+            val trackingEm = (text.tracking / text.fontSize).coerceIn(-0.2f, 1f)
+            font = font.deriveFont(mapOf(TextAttribute.TRACKING to trackingEm))
         }
-        val font = Font(family, style, text.fontSize.coerceAtLeast(1f).toInt())
         graphics.font = font
         graphics.color = Color(text.colorArgb, true)
 
@@ -549,9 +548,10 @@ private val windowsTextRasterizer = TextRasterizer { text, outputWidth, outputHe
         graphics.clip(Rectangle2D.Float(text.x, text.y, text.width, text.height))
 
         val metrics = graphics.fontMetrics
-        val lines = wrapWindowsText(text.text, metrics, text.width)
+        val renderedText = if (text.uppercase) text.text.uppercase() else text.text
+        val lines = wrapWindowsText(renderedText, metrics, text.width)
         val lineHeight = text.fontSize * text.lineSpacing
-        var baseline = text.y + text.fontSize
+        var baseline = text.y + text.fontSize + text.baselineOffset
         for (line in lines) {
             if (baseline - text.fontSize > text.y + text.height) break
             val lineWidth = metrics.stringWidth(line).toFloat()
@@ -561,6 +561,15 @@ private val windowsTextRasterizer = TextRasterizer { text, outputWidth, outputHe
                 com.neoworksuite.neocanvas.core.model.TextAlignment.Right -> text.x + text.width - lineWidth
             }
             graphics.drawString(line, drawX, baseline)
+            if (text.underline && line.isNotEmpty()) {
+                val underlineY = baseline + maxOf(1f, text.fontSize * .08f)
+                graphics.drawLine(
+                    drawX.toInt(),
+                    underlineY.toInt(),
+                    (drawX + lineWidth).toInt(),
+                    underlineY.toInt(),
+                )
+            }
             baseline += lineHeight
         }
     } finally {
@@ -578,6 +587,58 @@ private val windowsTextRasterizer = TextRasterizer { text, outputWidth, outputHe
             rgba[offset + 3] = (argb ushr 24).toByte()
         }
     }
+}
+
+
+
+private val bundledWindowsFontFiles = mapOf(
+    "inter" to "inter_variable.ttf",
+    "noto sans" to "noto_sans_variable.ttf",
+    "lora" to "lora_variable.ttf",
+    "playfair display" to "playfair_display_variable.ttf",
+    "caveat" to "caveat_variable.ttf",
+    "jetbrains mono" to "jetbrains_mono_variable.ttf",
+)
+
+private val bundledWindowsFontCache = mutableMapOf<String, Font>()
+
+internal fun windowsExportFont(familyName: String, style: Int, size: Float): Font {
+    val key = familyName.trim().lowercase()
+    val systemFamily = when (key) {
+        "sans", "sans-serif", "sans serif", "system" -> Font.SANS_SERIF
+        "serif" -> Font.SERIF
+        "mono", "monospace" -> Font.MONOSPACED
+        else -> null
+    }
+    if (systemFamily != null) return Font(systemFamily, style, size.coerceAtLeast(1f).toInt())
+
+    val bundledFile = bundledWindowsFontFiles[key]
+    if (bundledFile != null) {
+        val base = synchronized(bundledWindowsFontCache) {
+            bundledWindowsFontCache[key] ?: loadBundledWindowsFont(bundledFile)?.also {
+                bundledWindowsFontCache[key] = it
+            }
+        }
+        if (base != null) return base.deriveFont(style, size.coerceAtLeast(1f))
+    }
+
+    return Font(familyName.ifBlank { Font.SANS_SERIF }, style, size.coerceAtLeast(1f).toInt())
+}
+
+private fun loadBundledWindowsFont(fileName: String): Font? {
+    val loader = WindowsEditorFileActions::class.java.classLoader
+    val candidates = listOf(
+        "composeResources/com.neoworksuite.neocanvas.ui.resources/font/$fileName",
+        "composeResources/com/neoworksuite/neocanvas/ui/resources/font/$fileName",
+        "font/$fileName",
+    )
+    for (path in candidates) {
+        val stream = loader.getResourceAsStream(path) ?: continue
+        stream.use {
+            return runCatching { Font.createFont(Font.TRUETYPE_FONT, it) }.getOrNull()
+        }
+    }
+    return null
 }
 
 private fun wrapWindowsText(value: String, metrics: java.awt.FontMetrics, maxWidth: Float): List<String> {
