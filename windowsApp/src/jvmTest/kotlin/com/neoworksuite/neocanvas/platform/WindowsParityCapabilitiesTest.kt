@@ -13,7 +13,7 @@ class WindowsParityCapabilitiesTest {
         assertTrue(actions.supportsEditableObjectPsdFlattening)
         assertTrue(actions.supportsJpegExport)
         assertTrue(actions.supportsTiffExport)
-        assertFalse(actions.supportsPdfExport)
+        assertTrue(actions.supportsPdfExport)
     }
 
     @Test
