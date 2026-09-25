@@ -59,6 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.style.TextAlign
@@ -83,7 +85,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 private enum class TransformDrag { None, Move, Scale, Rotate }
-private enum class ObjectDrag { None, Move, Scale, Rotate, LineStart, LineEnd }
+private enum class ObjectDrag { None, Move, Scale, Rotate, LineStart, LineEnd, TextLeft, TextRight, TextTop, TextBottom }
 
 /** Bounded document viewport. Strokes map to document pixels before the shared rasterizer stores them. */
 @Composable
@@ -561,8 +563,15 @@ fun CanvasWorkspace(
                     }
                     val startingObjectGeometry = startingObjectPayload?.editableObjectGeometry()
                     val objectHandleRadius = 18f / gestureScale
+                    val textResizeHandles = (startingObjectPayload as? LayerPayload.TextObject)?.let {
+                        startingObjectGeometry?.textBoxHandles().orEmpty()
+                    }.orEmpty()
                     val objectDrag = when {
                         startingObjectGeometry == null -> ObjectDrag.None
+                        textResizeHandles.getOrNull(0)?.let { (initialOffset - it).getDistance() <= objectHandleRadius } == true -> ObjectDrag.TextLeft
+                        textResizeHandles.getOrNull(1)?.let { (initialOffset - it).getDistance() <= objectHandleRadius } == true -> ObjectDrag.TextRight
+                        textResizeHandles.getOrNull(2)?.let { (initialOffset - it).getDistance() <= objectHandleRadius } == true -> ObjectDrag.TextTop
+                        textResizeHandles.getOrNull(3)?.let { (initialOffset - it).getDistance() <= objectHandleRadius } == true -> ObjectDrag.TextBottom
                         startingObjectGeometry.isLine &&
                             (initialOffset - startingObjectGeometry.scaleHandles()[0]).getDistance() <= objectHandleRadius ->
                             ObjectDrag.LineStart
@@ -683,7 +692,8 @@ fun CanvasWorkspace(
                                             snapEditableObjectGroupRotation(rawRotationDelta)
                                         } else rawRotationDelta
                                     }
-                                    ObjectDrag.LineStart, ObjectDrag.LineEnd -> Unit
+                                    ObjectDrag.LineStart, ObjectDrag.LineEnd, ObjectDrag.TextLeft, ObjectDrag.TextRight,
+                                    ObjectDrag.TextTop, ObjectDrag.TextBottom -> Unit
                                     ObjectDrag.None -> Unit
                                 }
                                 objectGroupGesturePreview = startingGroupPayloads.mapValues { (_, payload) ->
@@ -740,6 +750,11 @@ fun CanvasWorkspace(
                                     ObjectDrag.LineEnd -> (startingObjectPayload as? LayerPayload.ShapeObject)?.let {
                                         lineWithEndpoint(it, moveStart = false, x = currentObjectPoint.x, y = currentObjectPoint.y)
                                     } ?: startingObjectPayload
+                                    ObjectDrag.TextLeft, ObjectDrag.TextRight, ObjectDrag.TextTop, ObjectDrag.TextBottom ->
+                                        (startingObjectPayload as? LayerPayload.TextObject)?.resizeTextBox(
+                                            objectDrag,
+                                            currentObjectPoint - initialOffset,
+                                        ) ?: startingObjectPayload
                                     ObjectDrag.None -> startingObjectPayload
                                 }
                             } else if (startingTransform != null && transformCenter != null) {
@@ -1480,10 +1495,23 @@ private fun DrawScope.drawStoredTiles(
 
             is com.neoworksuite.neocanvas.core.model.LayerPayload.TextObject -> {
                 val center = Offset(payload.x + payload.width / 2f, payload.y + payload.height / 2f)
+                val sourceText = if (payload.uppercase) payload.text.uppercase() else payload.text
+                val displayText = if (payload.orientation == com.neoworksuite.neocanvas.core.model.TextOrientation.Vertical) {
+                    sourceText.toCharArray().joinToString("\n")
+                } else sourceText
+                val annotatedText = if (payload.orientation == com.neoworksuite.neocanvas.core.model.TextOrientation.Horizontal && payload.kerning.isNotEmpty()) {
+                    AnnotatedString.Builder(displayText).apply {
+                        payload.kerning.forEach { range ->
+                            if (range.startUtf16 >= 0 && range.endUtf16 <= displayText.length) {
+                                addStyle(SpanStyle(letterSpacing = range.adjustment.toSp()), range.startUtf16, range.endUtf16)
+                            }
+                        }
+                    }.toAnnotatedString()
+                } else AnnotatedString(displayText)
                 withTransform({ rotate(payload.rotationDegrees, pivot = center) }) {
                     drawText(
                         textMeasurer = textMeasurer,
-                        text = if (payload.uppercase) payload.text.uppercase() else payload.text,
+                        text = annotatedText,
                         topLeft = Offset(payload.x, payload.y + payload.baselineOffset),
                         style = TextStyle(
                             color = Color(payload.colorArgb).copy(
@@ -1496,6 +1524,7 @@ private fun DrawScope.drawStoredTiles(
                             lineHeight = (payload.fontSize * payload.lineSpacing).toSp(),
                             letterSpacing = payload.tracking.toSp(),
                             textDecoration = if (payload.underline) TextDecoration.Underline else TextDecoration.None,
+                            drawStyle = if (payload.outline) Stroke(width = payload.outlineWidth) else androidx.compose.ui.graphics.drawscope.Fill,
                             textAlign = when (payload.alignment) {
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> TextAlign.Left
                                 com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> TextAlign.Center
@@ -2044,6 +2073,13 @@ private fun DrawScope.drawEditableObjectControls(payload: LayerPayload, scale: F
         drawCircle(accent, radius, handle)
     }
 
+    if (payload is LayerPayload.TextObject) {
+        geometry.textBoxHandles().forEach { handle ->
+            drawCircle(Color.Black, radius * 1.6f, handle)
+            drawCircle(Color.White, radius * .9f, handle)
+        }
+    }
+
     val topCenter = geometry.center + rotateOffset(
         Offset(0f, minOf(geometry.y, geometry.y + geometry.height) - geometry.center.y),
         geometry.rotationDegrees,
@@ -2052,6 +2088,31 @@ private fun DrawScope.drawEditableObjectControls(payload: LayerPayload, scale: F
     drawLine(accent, topCenter, rotateHandle, width)
     drawCircle(Color.Black, radius * 1.5f, rotateHandle)
     drawCircle(accent, radius, rotateHandle)
+}
+
+private fun EditableObjectGeometry.textBoxHandles(): List<Offset> = listOf(
+    center + rotateOffset(Offset(-width / 2f, 0f), rotationDegrees),
+    center + rotateOffset(Offset(width / 2f, 0f), rotationDegrees),
+    center + rotateOffset(Offset(0f, -height / 2f), rotationDegrees),
+    center + rotateOffset(Offset(0f, height / 2f), rotationDegrees),
+)
+
+private fun LayerPayload.TextObject.resizeTextBox(drag: ObjectDrag, delta: Offset): LayerPayload.TextObject {
+    val local = rotateOffset(delta, -rotationDegrees)
+    val minimum = maxOf(24f, fontSize * .75f)
+    return when (drag) {
+        ObjectDrag.TextLeft -> {
+            val next = (width - local.x).coerceAtLeast(minimum)
+            copy(x = x + width - next, width = next)
+        }
+        ObjectDrag.TextRight -> copy(width = (width + local.x).coerceAtLeast(minimum))
+        ObjectDrag.TextTop -> {
+            val next = (height - local.y).coerceAtLeast(minimum)
+            copy(y = y + height - next, height = next)
+        }
+        ObjectDrag.TextBottom -> copy(height = (height + local.y).coerceAtLeast(minimum))
+        else -> this
+    }
 }
 
 private fun applyViewportTransform(
