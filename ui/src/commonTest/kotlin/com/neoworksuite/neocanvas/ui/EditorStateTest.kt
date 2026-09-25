@@ -906,7 +906,7 @@ class EditorStateTest {
             layers = listOf(Layer("text-1", "Title", payload = original)),
         )))
         state.activeLayerId = "text-1"
-        state.setActiveTextSelection(TextEditSelection(0, 2))
+        state.updateActiveTextSelection(TextEditSelection(0, 2))
 
         state.setActiveTextKerning(-2.5f)
 
