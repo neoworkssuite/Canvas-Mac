@@ -9,23 +9,29 @@ import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
+import com.neoworksuite.neocanvas.ui.PendingBrushImport
+import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import java.net.URI
 
 /** Windows-local chooser and file writer. It never leaves the device or retains an account. */
 class WindowsEditorFileActions(
     private val documents: com.neoworksuite.neocanvas.core.store.DocumentStore = WindowsDocumentStore(),
     private val fileChooser: ((String, Int, String?) -> String?)? = null,
+    private val appDataRoot: File = File(
+        System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
+        "NeoCanvas",
+    ),
 ) : EditorFileActions {
     override val supportsSaveAs = true
     override val supportsLocalLibrary = true
     override val supportsPsdImport = true
     override val supportsPsdExport = true
-    private val libraryDirectory = File(
-        System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"),
-        "NeoCanvas/Documents",
-    )
+    private val libraryDirectory = File(appDataRoot, "Documents")
+    private val brushLibraryFile get() = File(libraryDirectory, "brush-library.txt")
+    private val preferencesFile get() = File(libraryDirectory, "preferences.txt")
     override fun resetDocumentTarget() { currentDocumentPath = null }
     override fun listLocalDocuments(): List<String> = libraryDirectory.listFiles().orEmpty()
         .filter { it.isFile && it.name.endsWith(".neocanvas", true) }
@@ -290,6 +296,75 @@ class WindowsEditorFileActions(
         palettePreferences.flush()
         SaveResult.Success
     } catch (error: Exception) { SaveResult.Failure("Could not save palette: ${error.message}") }
+
+    override fun loadBrushLibrary(): ByteArray? = runCatching {
+        brushLibraryFile.takeIf(File::isFile)?.readBytes()
+    }.getOrNull()
+
+    override fun saveBrushLibrary(bytes: ByteArray): SaveResult = try {
+        libraryDirectory.mkdirs()
+        brushLibraryFile.writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save custom brushes locally on Windows: " + (error.message ?: "storage error"))
+    }
+
+    override fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
+        onResult(runCatching {
+            val path = choose("Import NeoCanvas brush", FileDialog.LOAD, null) ?: return@runCatching null
+            val file = File(path)
+            require(file.isFile) { "Brush file was not found." }
+            require(file.name.endsWith(".neobrush", true) || file.name.endsWith(".neobrushpack", true)) {
+                "Choose a NeoCanvas brush or brush pack."
+            }
+            require(file.length() <= 25L * 1024L * 1024L) { "This brush file is larger than 25 MiB." }
+            PendingBrushImport(file.name, file.readBytes())
+        })
+    }
+
+    override fun shareBrushFile(name: String, bytes: ByteArray): SaveResult = try {
+        require(name.endsWith(".neobrush", true) || name.endsWith(".neobrushpack", true)) {
+            "Use a NeoCanvas brush filename."
+        }
+        val safeName = File(name).name
+        val path = choose("Export NeoCanvas brush", FileDialog.SAVE, safeName)
+            ?: return SaveResult.Failure("Brush export cancelled.")
+        val target = File(path.ensureExtension(if (safeName.endsWith(".neobrushpack", true)) ".neobrushpack" else ".neobrush"))
+        target.parentFile?.mkdirs()
+        target.writeBytes(bytes)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export brush file: " + (error.message ?: "storage error"))
+    }
+
+    override fun loadPreferences(): Map<String, String> = runCatching {
+        if (!preferencesFile.isFile) emptyMap()
+        else preferencesFile.readLines().mapNotNull { line ->
+            val split = line.indexOf('=')
+            if (split <= 0) null else line.substring(0, split) to line.substring(split + 1)
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    override fun savePreferences(values: Map<String, String>): SaveResult = try {
+        libraryDirectory.mkdirs()
+        val text = values.entries.sortedBy { it.key }.joinToString("\n") { entry ->
+            "${entry.key}=${entry.value}"
+        }
+        preferencesFile.writeText(text)
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not save NeoCanvas preferences on Windows: " + (error.message ?: "storage error"))
+    }
+
+    override fun openExternalUrl(url: String): Boolean = runCatching {
+        val target = URI(url)
+        if (target.scheme?.lowercase() !in setOf("https", "http")) return@runCatching false
+        if (!Desktop.isDesktopSupported()) return@runCatching false
+        val desktop = Desktop.getDesktop()
+        if (!desktop.isSupported(Desktop.Action.BROWSE)) return@runCatching false
+        desktop.browse(target)
+        true
+    }.getOrDefault(false)
     private var currentDocumentPath: String? = null
 
     override fun save(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
