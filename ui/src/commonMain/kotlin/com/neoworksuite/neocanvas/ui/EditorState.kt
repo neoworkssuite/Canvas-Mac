@@ -3404,9 +3404,14 @@ class EditorState(
         layer.groupId?.let { id -> document.groups.firstOrNull { it.id == id }?.locked } == true
 
     /** Rasterizes one completed gesture into sparse tiles and commits its address patch to history. */
-    fun recordStroke(points: List<DrawPoint>, stabilize: Boolean = true) {
+    fun recordStroke(
+        points: List<DrawPoint>,
+        stabilize: Boolean = true,
+        toolOverride: Tool? = null,
+    ) {
+        val strokeTool = toolOverride ?: tool
         val layerId = activeLayerId ?: return
-        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge, Tool.Liquify)) return
+        if (points.isEmpty() || strokeTool !in listOf(Tool.Brush, Tool.Eraser, Tool.Smudge, Tool.Liquify)) return
         if (!wakeLayer(layerId)) return
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return
         if (isGroupLocked(activeLayer)) {
@@ -3419,8 +3424,8 @@ class EditorState(
         }
 
         if (maskEditingLayerId == layerId) {
-            if (tool == Tool.Smudge || tool == Tool.Liquify) {
-                statusMessage = if (tool == Tool.Liquify)
+            if (strokeTool == Tool.Smudge || strokeTool == Tool.Liquify) {
+                statusMessage = if (strokeTool == Tool.Liquify)
                     "Liquify is unavailable while editing a mask"
                 else
                     "Smudge is unavailable while editing a mask"
@@ -3430,7 +3435,7 @@ class EditorState(
                 maskEditingLayerId = null
                 return
             }
-            val patch = previewStroke(points, stabilize) ?: return
+            val patch = previewStroke(points, stabilize, toolOverride = strokeTool) ?: return
             val before = tileStore.snapshot()
             val beforeKeys = tileStore.keys.filterTo(linkedSetOf()) { it.layerId == mask.id }
             if (tileStore.applyPatch(patch).isEmpty()) return
@@ -3448,24 +3453,24 @@ class EditorState(
             return
         }
 
-        val patch = when (tool) {
+        val patch = when (strokeTool) {
             Tool.Smudge -> previewSmudge(points, stabilize)
             Tool.Liquify -> previewLiquify(points, stabilize)
-            else -> previewStroke(points, stabilize)
+            else -> previewStroke(points, stabilize, toolOverride = strokeTool)
         }
         if (patch == null) return
         val before = tileStore.snapshot()
         val layerBefore = tileStore.snapshotLayer(layerId)
         if (tileStore.applyPatch(patch).isEmpty()) return
         val currentKeys = tileStore.keys
-        val editable = tool == Tool.Brush || tool == Tool.Eraser
+        val editable = strokeTool == Tool.Brush || strokeTool == Tool.Eraser
         execute(
             ApplyRasterPatch(layerId, currentKeys - before.keys, before.keys - currentKeys),
             before,
             preserveEditableStrokes = editable,
         )
         if (editable) {
-            val mode = if (tool == Tool.Eraser)
+            val mode = if (strokeTool == Tool.Eraser)
                 com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
             else com.neoworksuite.neocanvas.brushes.BrushMode.PAINT
             val effectiveBrush = if (
@@ -3473,8 +3478,8 @@ class EditorState(
                 brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
             ) BuiltInBrushes.eraser else brush
             appendEditableStroke(layerId, layerBefore, points, stabilize, activeLayer, effectiveBrush, mode)
-            if (tool == Tool.Brush) recordUsedColour(color)
-        } else if (tool == Tool.Liquify) {
+            if (strokeTool == Tool.Brush) recordUsedColour(color)
+        } else if (strokeTool == Tool.Liquify) {
             statusMessage = "Liquify " + liquifyMode.displayName.lowercase() + " applied"
         }
     }
@@ -3482,9 +3487,11 @@ class EditorState(
     fun previewStroke(
         points: List<DrawPoint>,
         stabilize: Boolean = true,
+        toolOverride: Tool? = null,
     ): com.neoworksuite.neocanvas.renderer.RasterPatch? {
+        val strokeTool = toolOverride ?: tool
         val layerId = activeLayerId ?: return null
-        if (points.isEmpty() || tool !in listOf(Tool.Brush, Tool.Eraser)) return null
+        if (points.isEmpty() || strokeTool !in listOf(Tool.Brush, Tool.Eraser)) return null
         val activeLayer = document.layers.firstOrNull { it.id == layerId && it.visible && !it.locked } ?: return null
         if (isGroupLocked(activeLayer)) return null
         val editingMask = maskEditingLayerId == layerId
@@ -3498,7 +3505,7 @@ class EditorState(
                 color.blue * .0722f
             ).coerceIn(0f, 1f)
         val targetColor = if (mask != null) {
-            val value = if (tool == Tool.Eraser) 255 else (maskLuma * 255f + .5f).toInt()
+            val value = if (strokeTool == Tool.Eraser) 255 else (maskLuma * 255f + .5f).toInt()
             RasterColor(value, value, value)
         } else {
             RasterColor(
@@ -3518,14 +3525,14 @@ class EditorState(
             size = brushSize,
             opacity = brushOpacity,
             mode = if (mask != null) com.neoworksuite.neocanvas.brushes.BrushMode.PAINT
-                else if (tool == Tool.Eraser) com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
+                else if (strokeTool == Tool.Eraser) com.neoworksuite.neocanvas.brushes.BrushMode.ERASE
                 else com.neoworksuite.neocanvas.brushes.BrushMode.PAINT,
             canvasWidth = document.width,
             canvasHeight = document.height,
             acceptsPixel = { x, y -> selection?.contains(x, y) ?: true },
             brush = if (mask != null && brush.mode == com.neoworksuite.neocanvas.brushes.BrushMode.ERASE)
                 BuiltInBrushes.pencil
-            else if (tool == Tool.Eraser && brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE)
+            else if (strokeTool == Tool.Eraser && brush.mode != com.neoworksuite.neocanvas.brushes.BrushMode.ERASE)
                 BuiltInBrushes.eraser
             else brush,
             symmetry = symmetry,
