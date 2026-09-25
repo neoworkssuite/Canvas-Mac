@@ -6,6 +6,7 @@ import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
+import com.neoworksuite.neocanvas.renderer.PdfExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
 import com.neoworksuite.neocanvas.renderer.TiffExporter
 import com.neoworksuite.neocanvas.ui.PendingBrushImport
@@ -27,6 +28,7 @@ class WindowsEditorFileActions(
     override val supportsPsdImport = true
     override val supportsPsdExport = true
     override val supportsJpegExport = true
+    override val supportsPdfExport = true
     override val supportsTiffExport = true
     override val supportsEditableObjectPsdFlattening = true
     private val libraryDirectory = File(
@@ -443,6 +445,15 @@ class WindowsEditorFileActions(
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportPdf(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".pdf" } ?: "Untitled.pdf"
+        val path = choose("Export PDF", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("PDF export cancelled.")
+        return PdfExporter.export(document, tiles) { bytes ->
+            File(path.ensureExtension(".pdf")).writeBytes(bytes)
+        }
     }
 
     override fun exportTiff(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
