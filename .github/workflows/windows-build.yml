@@ -3,7 +3,7 @@ name: NeoCanvas Windows CI
 on:
   push:
     branches:
-      - windows-parity-phase1
+      - "windows-*"
       - main
   pull_request:
     branches:
