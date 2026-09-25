@@ -270,6 +270,12 @@ fun NeoCanvasApp(
             }
         }
         if (state.inspectorVisible) {
+            Box(
+                Modifier.fillMaxSize().clickable(
+                    interactionSource = null,
+                    indication = null,
+                ) { state.dismissInspectorToCanvas() },
+            )
             val panel = state.inspectorPanel
             val overlayAlignment = when {
                 panel == InspectorPanel.Brushes && state.interfaceSide == InterfaceSide.Automatic -> Alignment.Center
@@ -346,7 +352,7 @@ fun NeoCanvasApp(
                     color = NeoCanvasColors.paper,
                     fontSize = 22.sp,
                     modifier = Modifier.align(Alignment.TopEnd)
-                        .clickable { state.hideInspector() }
+                        .clickable { state.dismissInspectorToCanvas() }
                         .padding(horizontal = 15.dp, vertical = 8.dp),
                 )
             }

@@ -3064,14 +3064,26 @@ class EditorState(
         inspectorVisible = false
     }
 
+    fun dismissInspectorToCanvas() {
+        val dismissedPanel = if (inspectorVisible) inspectorPanel else null
+        hideInspector()
+        if (dismissedPanel == InspectorPanel.Brushes) {
+            tool = if (brush == BuiltInBrushes.eraser) Tool.Eraser else Tool.Brush
+        }
+    }
+
     fun toggleInspector(panel: InspectorPanel) {
         if (inspectorVisible && inspectorPanel == panel) hideInspector()
         else showInspector(panel)
     }
 
     fun toggleBrushLibrary() {
-        activateTool(Tool.Brush)
-        toggleInspector(InspectorPanel.Brushes)
+        if (inspectorVisible && inspectorPanel == InspectorPanel.Brushes) {
+            dismissInspectorToCanvas()
+        } else {
+            activateTool(if (brush == BuiltInBrushes.eraser) Tool.Eraser else Tool.Brush)
+            showInspector(InspectorPanel.Brushes)
+        }
     }
 
     fun selectLayer(id: String): Boolean {
