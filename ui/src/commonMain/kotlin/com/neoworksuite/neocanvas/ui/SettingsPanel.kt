@@ -129,7 +129,7 @@ fun SettingsPanel(
         SettingsSection("UPDATES")
         SettingsToggle(
             "Automatic update checks",
-            "Ask " + fileActions.updateServiceDescription + " for the latest NeoCanvas version once per app session. No artwork or account data is sent.",
+            "Ask " + state.updateServiceDescription + " for the latest NeoCanvas version once per app session. No artwork or account data is sent.",
             state.automaticUpdateChecksEnabled,
         ) {
             state.automaticUpdateChecksEnabled = it
@@ -228,7 +228,7 @@ fun SettingsPanel(
             Text(
                 "No account, advertising SDK, telemetry service or cloud storage is required. " +
                     "Artwork stays on this device unless you explicitly import or export it. " +
-                    fileActions.updatePrivacyDescription,
+                    state.updatePrivacyDescription,
                 color = NeoCanvasColors.muted,
                 fontSize = 11.sp,
             )
