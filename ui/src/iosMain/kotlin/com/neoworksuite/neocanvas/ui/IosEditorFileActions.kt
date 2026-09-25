@@ -107,6 +107,11 @@ internal class IosEditorFileActions(
     override val supportsTiffExport: Boolean = true
     override val supportsEditableObjectPsdFlattening: Boolean = true
     override val supportsUpdateChecks: Boolean = true
+    override val updateServiceDescription: String = "Apple’s App Store service"
+    override val updateActionLabel: String = "Open App Store"
+    override val updateDestinationDescription: String = "the App Store"
+    override val updatePrivacyDescription: String =
+        "When update checks are enabled, NeoCanvas asks Apple’s App Store service only for the latest app version; no artwork is sent."
 
     override fun openBrushFile(onResult: (Result<PendingBrushImport?>) -> Unit) {
         val host = presenter()
