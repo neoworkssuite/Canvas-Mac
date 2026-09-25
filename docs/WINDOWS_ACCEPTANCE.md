@@ -4,6 +4,10 @@ Use this checklist only for deliberate `[windows]` acceptance checkpoints. Ordin
 
 ## Acceptance build
 
+## Automated prerequisites
+
+Before this checklist is used, Windows CI must already have passed the shared regression suite, created the runnable distributable, launched the packaged `NeoCanvas.exe --windows-self-test`, verified its PASS report, and produced the normal EXE installer. A `[windows]` checkpoint then builds both EXE and MSI acceptance installers.
+
 - Install the EXE or MSI from the `NeoCanvas-Windows-Acceptance-*` artifact.
 - Run `scripts/windows-acceptance.ps1` after installation and keep its report with the test evidence.
 - Test on Windows 11 with real mouse/keyboard and, when available, Surface Pen or Wacom hardware.
