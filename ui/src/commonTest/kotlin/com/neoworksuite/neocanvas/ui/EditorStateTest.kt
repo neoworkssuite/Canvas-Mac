@@ -897,6 +897,28 @@ class EditorStateTest {
     }
 
     @Test
+    fun selected_text_kerning_is_range_scoped_and_undoable() {
+        val original = LayerPayload.TextObject(text = "AVATAR")
+        val state = EditorState(DocumentHistory(CanvasDocument(
+            id = "kerning",
+            width = 640,
+            height = 480,
+            layers = listOf(Layer("text-1", "Title", payload = original)),
+        )))
+        state.activeLayerId = "text-1"
+        state.setActiveTextSelection(TextEditSelection(0, 2))
+
+        state.setActiveTextKerning(-2.5f)
+
+        assertEquals(
+            listOf(com.neoworksuite.neocanvas.core.model.TextKerningRange(0, 2, -2.5f)),
+            state.activeTextObject!!.kerning,
+        )
+        assertTrue(state.undo())
+        assertEquals(original, state.activeTextObject)
+    }
+
+    @Test
     fun editable_objects_align_to_visual_canvas_bounds_and_undo() {
         val text = LayerPayload.TextObject(
             text = "Rotate",
