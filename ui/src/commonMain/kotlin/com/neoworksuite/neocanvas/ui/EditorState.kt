@@ -105,6 +105,10 @@ class EditorState(
     val supportsLocalLibrary: Boolean get() = fileActions.supportsLocalLibrary
     val supportsVersions: Boolean get() = fileActions.supportsVersions
     val supportsUpdateChecks: Boolean get() = fileActions.supportsUpdateChecks
+    val updateServiceDescription: String get() = fileActions.updateServiceDescription
+    val updateActionLabel: String get() = fileActions.updateActionLabel
+    val updateDestinationDescription: String get() = fileActions.updateDestinationDescription
+    val updatePrivacyDescription: String get() = fileActions.updatePrivacyDescription
 
     var versionsVisible by mutableStateOf(false)
         private set
