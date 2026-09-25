@@ -136,25 +136,25 @@ private fun StudioActionsMenu(state: EditorState) {
 
     Box {
         StudioTooltip("Actions") {
-        Box(
-            Modifier.size(54.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (expanded) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
-                .clickable {
-                    if (expanded) closeMenu() else expanded = true
+            Box(
+                Modifier.size(54.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (expanded) NeoCanvasColors.accent else NeoCanvasColors.panelRaised)
+                    .clickable {
+                        if (expanded) closeMenu() else expanded = true
+                    }
+                    .semantics { contentDescription = "Actions menu" },
+                contentAlignment = Alignment.Center,
+            ) {
+                StudioGlyph(Glyph.Ellipsis, if (expanded) NeoCanvasColors.ink else NeoCanvasColors.muted)
+                if (state.hasUnsavedChanges) {
+                    Box(
+                        Modifier.size(7.dp).clip(CircleShape)
+                            .background(if (expanded) NeoCanvasColors.ink else NeoCanvasColors.accent)
+                            .align(Alignment.TopEnd).padding(7.dp),
+                    )
                 }
-                .semantics { contentDescription = "Actions menu" }
-            contentAlignment = Alignment.Center,
-        ) {
-            StudioGlyph(Glyph.Ellipsis, if (expanded) NeoCanvasColors.ink else NeoCanvasColors.muted)
-            if (state.hasUnsavedChanges) {
-                Box(
-                    Modifier.size(7.dp).clip(CircleShape)
-                        .background(if (expanded) NeoCanvasColors.ink else NeoCanvasColors.accent)
-                        .align(Alignment.TopEnd).padding(7.dp),
-                )
             }
-        }
         }
 
         DropdownMenu(
