@@ -16,7 +16,10 @@ import com.neoworksuite.neocanvas.ui.rememberEditorState
 
 fun main(args: Array<String>) {
     if (WindowsLaunchContract.isSelfTest(args)) {
-        println(WindowsSelfTest.run())
+        val report = WindowsSelfTest.run()
+        WindowsLaunchContract.selfTestReportPath(args)?.let { path ->
+            java.io.File(path).apply { parentFile?.mkdirs() }.writeText(report)
+        } ?: println(report)
         return
     }
 
