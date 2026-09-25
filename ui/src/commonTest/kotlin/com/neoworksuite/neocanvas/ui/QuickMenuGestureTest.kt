@@ -1,5 +1,6 @@
 package com.neoworksuite.neocanvas.ui
 
+import androidx.compose.ui.input.pointer.PointerType
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -21,5 +22,13 @@ class QuickMenuGestureTest {
         assertFalse(shouldArmQuickMenu(false, true, Tool.Brush, false))
         assertFalse(shouldArmQuickMenu(false, false, Tool.Pan, false))
         assertFalse(shouldArmQuickMenu(false, false, Tool.Brush, true))
+    }
+
+    @Test
+    fun stylus_and_inverted_eraser_are_both_pen_input() {
+        assertTrue(PointerType.Stylus.isPenPointer())
+        assertTrue(PointerType.Eraser.isPenPointer())
+        assertFalse(PointerType.Mouse.isPenPointer())
+        assertFalse(PointerType.Touch.isPenPointer())
     }
 }
