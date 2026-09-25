@@ -7,6 +7,14 @@ import com.neoworksuite.neocanvas.core.store.SaveResult
 
 /** Host bridge for explicit, local-only file actions. UI code never selects paths or uses a network. */
 interface EditorFileActions {
+    val supportsFontImport: Boolean get() = false
+    fun listImportedFonts(): List<ImportedFontFace> = emptyList()
+    fun openFontFile(onResult: (Result<ImportedFontFile?>) -> Unit) {
+        onResult(Result.failure(IllegalStateException("Font import is unavailable in this host.")))
+    }
+    fun installFont(file: ImportedFontFile): FontInstallResult =
+        FontInstallResult.Failure("Font import is unavailable in this host.")
+    fun removeImportedFont(id: String): SaveResult = SaveResult.Failure("Font removal is unavailable in this host.")
     val supportsLocalLibrary: Boolean get() = false
     fun listLocalDocuments(): List<String> = emptyList()
     fun openLocalDocument(name: String): LoadResult = LoadResult.Failure("Local library unavailable.")
@@ -115,8 +123,19 @@ interface EditorFileActions {
     fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult
 }
 
-data class LocalVersionEntry(
-    val id: String,
+data class ImportedFontFile(val name: String, val bytes: ByteArray) {
+    init {
+        require(name.isNotBlank())
+        require(bytes.size <= 32 * 1024 * 1024)
+    }
+}
+
+sealed interface FontInstallResult {
+    data class Success(val faces: List<ImportedFontFace>) : FontInstallResult
+    data class Failure(val message: String) : FontInstallResult
+}
+
+data class LocalVersionEntry(    val id: String,
     val label: String,
     val createdAtEpochMillis: Long,
     val branch: String = "Main",
