@@ -949,7 +949,7 @@ class EditorState(
     var activeTextSelection: TextEditSelection? by mutableStateOf(null)
         private set
 
-    fun setActiveTextSelection(value: TextEditSelection) {
+    fun updateActiveTextSelection(value: TextEditSelection) {
         val text = activeTextObject?.text ?: return
         activeTextSelection = TextEditSelection(
             value.startUtf16.coerceIn(0, text.length),
