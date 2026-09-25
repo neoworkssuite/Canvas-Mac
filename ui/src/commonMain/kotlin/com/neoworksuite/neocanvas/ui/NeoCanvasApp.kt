@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -226,6 +227,12 @@ fun NeoCanvasApp(
                 when (event.key) {
                     Key.Z -> { state.undo(); true }
                     Key.Y -> { state.redo(); true }
+                    Key.S -> {
+                        if (event.isShiftPressed) state.saveAs() else state.save()
+                        true
+                    }
+                    Key.O -> { state.open(); true }
+                    Key.N -> { state.newCanvasDialogVisible = true; true }
                     else -> false
                 }
             },
