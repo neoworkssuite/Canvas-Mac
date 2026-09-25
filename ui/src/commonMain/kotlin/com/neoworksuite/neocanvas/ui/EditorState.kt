@@ -1116,6 +1116,7 @@ class EditorState(
 
     private fun recordUsedColour(used: Color) {
         val hex = colorHex(used)
+        if (recentColors.firstOrNull() == hex) return
         recentColors = (listOf(hex) + recentColors.filterNot { it == hex }).take(12)
         persistPreferences()
     }
