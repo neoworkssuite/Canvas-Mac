@@ -15,6 +15,13 @@ class WindowsLaunchContractTest {
     @Test fun self_test_switch_is_explicit_and_case_insensitive() {
         assertEquals(true, WindowsLaunchContract.isSelfTest(arrayOf("--WINDOWS-SELF-TEST")))
         assertEquals(false, WindowsLaunchContract.isSelfTest(arrayOf("--safe", "drawing.neocanvas")))
+        assertEquals(
+            "C:\\Temp\\neocanvas-self-test.txt",
+            WindowsLaunchContract.selfTestReportPath(
+                arrayOf("--windows-self-test", "--windows-self-test-report=C:\\Temp\\neocanvas-self-test.txt"),
+            ),
+        )
+        assertNull(WindowsLaunchContract.selfTestReportPath(arrayOf("--windows-self-test")))
     }
 
     @Test fun document_association_selects_first_neocanvas_argument() {
