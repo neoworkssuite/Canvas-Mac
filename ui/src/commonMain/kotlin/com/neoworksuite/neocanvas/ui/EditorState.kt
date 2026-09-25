@@ -4057,6 +4057,12 @@ class EditorState(
         }
         acceptOpenResult(fileActions.open())
     }
+    /** Applies a document supplied by a native host, such as an OS file association launch. */
+    fun openProvidedDocument(result: LoadResult): Boolean {
+        acceptOpenResult(result)
+        return result is LoadResult.Success
+    }
+
     private fun acceptOpenResult(result: LoadResult) {
         when (result) {
             is LoadResult.Success -> {
