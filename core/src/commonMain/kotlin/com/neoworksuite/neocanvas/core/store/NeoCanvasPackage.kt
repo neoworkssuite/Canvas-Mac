@@ -120,6 +120,10 @@ object NeoCanvasPackage {
                         bold = if ("bold" in layerObject.fields) layerObject.boolean("bold") else false,
                         italic = if ("italic" in layerObject.fields) layerObject.boolean("italic") else false,
                         lineSpacing = if ("lineSpacing" in layerObject.fields) layerObject.float("lineSpacing") else 1.2f,
+                        tracking = if ("tracking" in layerObject.fields) layerObject.float("tracking") else 0f,
+                        baselineOffset = if ("baselineOffset" in layerObject.fields) layerObject.float("baselineOffset") else 0f,
+                        underline = if ("underline" in layerObject.fields) layerObject.boolean("underline") else false,
+                        uppercase = if ("uppercase" in layerObject.fields) layerObject.boolean("uppercase") else false,
                     )
                 }
                 "shape" -> {
@@ -252,6 +256,10 @@ object NeoCanvasPackage {
                     append(",\"bold\":").append(payload.bold)
                     append(",\"italic\":").append(payload.italic)
                     append(",\"lineSpacing\":").append(payload.lineSpacing)
+                    append(",\"tracking\":").append(payload.tracking)
+                    append(",\"baselineOffset\":").append(payload.baselineOffset)
+                    append(",\"underline\":").append(payload.underline)
+                    append(",\"uppercase\":").append(payload.uppercase)
                 }
                 is LayerPayload.ShapeObject -> {
                     append(",\"type\":\"shape\"")

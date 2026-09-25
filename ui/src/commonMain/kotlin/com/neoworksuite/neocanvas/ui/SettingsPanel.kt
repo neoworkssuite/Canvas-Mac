@@ -211,6 +211,19 @@ fun SettingsPanel(
             Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
+            Text("Fonts & licensing", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "Inter, Noto Sans, Lora, Playfair Display, Caveat and JetBrains Mono are bundled under the SIL Open Font License 1.1. " +
+                    "Complete copyright and licence notices are included with NeoCanvas. Apple system fonts are used through iPadOS and are not redistributed.",
+                color = NeoCanvasColors.muted,
+                fontSize = 11.sp,
+            )
+        }
+
+        Column(
+            Modifier.fillMaxWidth().background(NeoCanvasColors.panelRaised).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
             Text("Privacy by design", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Text(
                 "No account, advertising SDK, telemetry service or cloud storage is required. " +
