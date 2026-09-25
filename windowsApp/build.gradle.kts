@@ -33,13 +33,20 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "NeoCanvas"
-            packageVersion = "0.1.0"
+            packageVersion = "1.0.0"
             vendor = "NeoWorksSuite"
+            fileAssociation(
+                mimeType = "application/x-neocanvas",
+                extension = "neocanvas",
+                description = "NeoCanvas Document",
+                windowsIconFile = rootProject.file("assets/branding/neocanvas.ico"),
+            )
             windows {
                 iconFile.set(rootProject.file("assets/branding/neocanvas.ico"))
                 menuGroup = "NeoWorksSuite"
                 shortcut = true
                 menu = true
+                upgradeUuid = "A9E2E7D8-0F2E-4D85-A6A8-7A2FBA9E71C1"
             }
         }
     }
