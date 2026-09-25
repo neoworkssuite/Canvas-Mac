@@ -4,17 +4,33 @@ import com.neoworksuite.neocanvas.core.model.CanvasDocument
 import com.neoworksuite.neocanvas.core.model.TileAddress
 import com.neoworksuite.neocanvas.core.store.LoadResult
 import com.neoworksuite.neocanvas.core.store.SaveResult
+import com.neoworksuite.neocanvas.renderer.EditableObjectRasterizer
 import com.neoworksuite.neocanvas.renderer.GalleryThumbnail
 import com.neoworksuite.neocanvas.renderer.PngExporter
 import com.neoworksuite.neocanvas.renderer.PsdCodec
+import com.neoworksuite.neocanvas.renderer.TextRasterizer
+import com.neoworksuite.neocanvas.renderer.TiffExporter
 import com.neoworksuite.neocanvas.core.store.NeoCanvasPackage
 import com.neoworksuite.neocanvas.ui.EditorFileActions
 import com.neoworksuite.neocanvas.ui.PendingBrushImport
+import java.awt.Color
 import java.awt.Desktop
 import java.awt.FileDialog
+import java.awt.Font
 import java.awt.Frame
+import java.awt.RenderingHints
+import java.awt.geom.Rectangle2D
+import java.awt.image.BufferedImage
 import java.io.File
 import java.net.URI
+import javax.imageio.IIOImage
+import javax.imageio.ImageIO
+import javax.imageio.stream.FileImageOutputStream
+import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.PDPage
+import org.apache.pdfbox.pdmodel.PDPageContentStream
+import org.apache.pdfbox.pdmodel.common.PDRectangle
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
 
 /** Windows-local chooser and file writer. It never leaves the device or retains an account. */
 class WindowsEditorFileActions(
@@ -29,6 +45,10 @@ class WindowsEditorFileActions(
     override val supportsLocalLibrary = true
     override val supportsPsdImport = true
     override val supportsPsdExport = true
+    override val supportsJpegExport = true
+    override val supportsPdfExport = true
+    override val supportsTiffExport = true
+    override val supportsEditableObjectPsdFlattening = true
     private val libraryDirectory = File(appDataRoot, "Documents")
     private val brushLibraryFile get() = File(libraryDirectory, "brush-library.txt")
     private val preferencesFile get() = File(libraryDirectory, "preferences.txt")
@@ -398,14 +418,96 @@ class WindowsEditorFileActions(
     override fun exportPng(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
         val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".png" } ?: "Untitled.png"
         val path = choose("Export PNG", FileDialog.SAVE, suggested) ?: return SaveResult.Failure("Export cancelled.")
-        return PngExporter.export(document, tiles) { bytes -> File(path.ensureExtension(".png")).writeBytes(bytes) }
+        return PngExporter.export(document, tiles, textRasterizer = windowsTextRasterizer) { bytes ->
+            File(path.ensureExtension(".png")).writeBytes(bytes)
+        }
+    }
+
+    override fun exportJpeg(
+        document: CanvasDocument,
+        tiles: Map<TileAddress, ByteArray>,
+        quality: Int,
+    ): SaveResult = try {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".jpg" } ?: "Untitled.jpg"
+        val path = choose("Export JPEG", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("JPEG export cancelled.")
+        val flattened = PngExporter.render(document, tiles, textRasterizer = windowsTextRasterizer)
+        val image = BufferedImage(flattened.width, flattened.height, BufferedImage.TYPE_INT_RGB)
+        val pixels = IntArray(flattened.width * flattened.height)
+        var source = 0
+        for (index in pixels.indices) {
+            val red = flattened.rgba[source].toInt() and 255
+            val green = flattened.rgba[source + 1].toInt() and 255
+            val blue = flattened.rgba[source + 2].toInt() and 255
+            val alpha = flattened.rgba[source + 3].toInt() and 255
+            val inverse = 255 - alpha
+            val opaqueRed = (red * alpha + 255 * inverse + 127) / 255
+            val opaqueGreen = (green * alpha + 255 * inverse + 127) / 255
+            val opaqueBlue = (blue * alpha + 255 * inverse + 127) / 255
+            pixels[index] = (opaqueRed shl 16) or (opaqueGreen shl 8) or opaqueBlue
+            source += 4
+        }
+        image.setRGB(0, 0, flattened.width, flattened.height, pixels, 0, flattened.width)
+
+        val writer = ImageIO.getImageWritersByFormatName("jpeg").asSequence().firstOrNull()
+            ?: return SaveResult.Failure("No Windows JPEG encoder is available.")
+        try {
+            FileImageOutputStream(File(path.ensureExtension(".jpg"))).use { output ->
+                writer.output = output
+                val params = writer.defaultWriteParam
+                if (params.canWriteCompressed()) {
+                    params.compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT
+                    params.compressionQuality = quality.coerceIn(1, 100) / 100f
+                }
+                writer.write(null, IIOImage(image, null, null), params)
+            }
+        } finally {
+            writer.dispose()
+        }
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export JPEG: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportPdf(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult = try {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".pdf" } ?: "Untitled.pdf"
+        val path = choose("Export PDF", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("PDF export cancelled.")
+        val flattened = PngExporter.render(document, tiles, textRasterizer = windowsTextRasterizer)
+        val target = File(path.ensureExtension(".pdf"))
+        PDDocument().use { pdf ->
+            val page = PDPage(PDRectangle(flattened.width.toFloat(), flattened.height.toFloat()))
+            pdf.addPage(page)
+            val image = PDImageXObject.createFromByteArray(pdf, flattened.encode(), "NeoCanvas")
+            PDPageContentStream(pdf, page).use { content ->
+                content.drawImage(image, 0f, 0f, page.mediaBox.width, page.mediaBox.height)
+            }
+            pdf.save(target)
+        }
+        SaveResult.Success
+    } catch (error: Exception) {
+        SaveResult.Failure("Could not export PDF: " + (error.message ?: "unknown output error"))
+    }
+
+    override fun exportTiff(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult {
+        val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".tiff" } ?: "Untitled.tiff"
+        val path = choose("Export TIFF", FileDialog.SAVE, suggested)
+            ?: return SaveResult.Failure("TIFF export cancelled.")
+        return TiffExporter.export(document, tiles, textRasterizer = windowsTextRasterizer) { bytes ->
+            File(path.ensureExtension(".tiff")).writeBytes(bytes)
+        }
     }
 
     override fun exportPsd(document: CanvasDocument, tiles: Map<TileAddress, ByteArray>): SaveResult = try {
         val suggested = currentDocumentPath?.let { File(it).nameWithoutExtension + ".psd" } ?: "Untitled.psd"
         val path = choose("Export layered Photoshop PSD", FileDialog.SAVE, suggested)
             ?: return SaveResult.Failure("PSD export cancelled.")
-        File(path.ensureExtension(".psd")).writeBytes(PsdCodec.encode(document, tiles))
+        val flattened = EditableObjectRasterizer.rasterize(
+            document,
+            tiles,
+            textRasterizer = windowsTextRasterizer,
+        )
+        File(path.ensureExtension(".psd")).writeBytes(PsdCodec.encode(flattened.document, flattened.tiles))
         SaveResult.Success
     } catch (error: Exception) {
         SaveResult.Failure("Could not export PSD: " + (error.message ?: "unknown output error"))
@@ -421,4 +523,82 @@ class WindowsEditorFileActions(
         } finally { owner.dispose() }
     }
     private fun String.ensureExtension(extension: String): String = if (endsWith(extension, ignoreCase = true)) this else this + extension
+}
+
+
+private val windowsTextRasterizer = TextRasterizer { text, outputWidth, outputHeight ->
+    val image = BufferedImage(outputWidth, outputHeight, BufferedImage.TYPE_INT_ARGB)
+    val graphics = image.createGraphics()
+    try {
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        val style = (if (text.bold) Font.BOLD else Font.PLAIN) or (if (text.italic) Font.ITALIC else Font.PLAIN)
+        val family = when (text.fontFamily.trim().lowercase()) {
+            "sans", "sans-serif", "sans serif", "system" -> Font.SANS_SERIF
+            "serif" -> Font.SERIF
+            "mono", "monospace" -> Font.MONOSPACED
+            else -> text.fontFamily
+        }
+        val font = Font(family, style, text.fontSize.coerceAtLeast(1f).toInt())
+        graphics.font = font
+        graphics.color = Color(text.colorArgb, true)
+
+        val centerX = text.x + text.width / 2f
+        val centerY = text.y + text.height / 2f
+        graphics.rotate(Math.toRadians(text.rotationDegrees.toDouble()), centerX.toDouble(), centerY.toDouble())
+        graphics.clip(Rectangle2D.Float(text.x, text.y, text.width, text.height))
+
+        val metrics = graphics.fontMetrics
+        val lines = wrapWindowsText(text.text, metrics, text.width)
+        val lineHeight = text.fontSize * text.lineSpacing
+        var baseline = text.y + text.fontSize
+        for (line in lines) {
+            if (baseline - text.fontSize > text.y + text.height) break
+            val lineWidth = metrics.stringWidth(line).toFloat()
+            val drawX = when (text.alignment) {
+                com.neoworksuite.neocanvas.core.model.TextAlignment.Left -> text.x
+                com.neoworksuite.neocanvas.core.model.TextAlignment.Center -> text.x + (text.width - lineWidth) / 2f
+                com.neoworksuite.neocanvas.core.model.TextAlignment.Right -> text.x + text.width - lineWidth
+            }
+            graphics.drawString(line, drawX, baseline)
+            baseline += lineHeight
+        }
+    } finally {
+        graphics.dispose()
+    }
+
+    val pixels = IntArray(outputWidth * outputHeight)
+    image.getRGB(0, 0, outputWidth, outputHeight, pixels, 0, outputWidth)
+    ByteArray(pixels.size * 4).also { rgba ->
+        pixels.forEachIndexed { index, argb ->
+            val offset = index * 4
+            rgba[offset] = (argb ushr 16).toByte()
+            rgba[offset + 1] = (argb ushr 8).toByte()
+            rgba[offset + 2] = argb.toByte()
+            rgba[offset + 3] = (argb ushr 24).toByte()
+        }
+    }
+}
+
+private fun wrapWindowsText(value: String, metrics: java.awt.FontMetrics, maxWidth: Float): List<String> {
+    if (value.isEmpty()) return listOf("")
+    val output = mutableListOf<String>()
+    value.split('\n').forEach { paragraph ->
+        if (paragraph.isEmpty()) {
+            output += ""
+            return@forEach
+        }
+        var current = ""
+        paragraph.split(Regex("\\s+")).filter(String::isNotEmpty).forEach { word ->
+            val candidate = if (current.isEmpty()) word else "$current $word"
+            if (current.isNotEmpty() && metrics.stringWidth(candidate) > maxWidth) {
+                output += current
+                current = word
+            } else {
+                current = candidate
+            }
+        }
+        output += current
+    }
+    return output
 }
