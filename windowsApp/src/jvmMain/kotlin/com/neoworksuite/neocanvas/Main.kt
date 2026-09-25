@@ -1,25 +1,43 @@
 package com.neoworksuite.neocanvas
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
-import androidx.compose.runtime.remember
-import com.neoworksuite.neocanvas.ui.rememberEditorState
+import com.neoworksuite.neocanvas.core.store.LoadResult
+import com.neoworksuite.neocanvas.platform.WindowsEditorFileActions
+import com.neoworksuite.neocanvas.platform.WindowsLaunchContract
 import com.neoworksuite.neocanvas.ui.NeoCanvasApp
 import com.neoworksuite.neocanvas.ui.neoCanvasIcon
-import com.neoworksuite.neocanvas.platform.WindowsEditorFileActions
+import com.neoworksuite.neocanvas.ui.rememberEditorState
 
-fun main() = application {
+fun main(args: Array<String>) = application {
     val fileActions = remember { WindowsEditorFileActions() }
+    val launchPath = remember { WindowsLaunchContract.documentArgument(args) }
+    val launchResult = remember(launchPath) { launchPath?.let(fileActions::openPath) }
     val editor = rememberEditorState(fileActions)
     val windowState = remember { WindowState(placement = WindowPlacement.Maximized) }
+
+    LaunchedEffect(launchResult) {
+        launchResult?.let(editor::openProvidedDocument)
+    }
+
     Window(
         onCloseRequest = { editor.requestClose { exitApplication() } },
-        title = if (editor.hasUnsavedChanges) "NeoCanvas • Unsaved changes" else "NeoCanvas",
+        title = when {
+            editor.hasUnsavedChanges -> "NeoCanvas • Unsaved changes"
+            launchResult is LoadResult.Success -> "NeoCanvas • " + launchPath.orEmpty().substringAfterLast('\\').substringAfterLast('/')
+            else -> "NeoCanvas"
+        },
         icon = neoCanvasIcon(),
         state = windowState,
     ) {
-        NeoCanvasApp(fileActions, editor)
+        NeoCanvasApp(
+            fileActions = fileActions,
+            state = editor,
+            startInEditor = launchResult is LoadResult.Success,
+        )
     }
 }
