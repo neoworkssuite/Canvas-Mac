@@ -14,9 +14,12 @@ import com.neoworksuite.neocanvas.core.model.LineMarker
 import com.neoworksuite.neocanvas.core.model.LineStyle
 import com.neoworksuite.neocanvas.core.model.ShapeKind
 import com.neoworksuite.neocanvas.core.model.TextAlignment
+import com.neoworksuite.neocanvas.core.model.TextKerningRange
+import com.neoworksuite.neocanvas.core.model.TextOrientation
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -186,6 +189,42 @@ class NeoCanvasPackageTest {
             "assets/" to ByteArray(0),
         )))
         assertIs<LayerPayload.Raster>(legacy.document.layers.single().payload)
+    }
+
+    @Test
+    fun advanced_typography_round_trips_and_legacy_text_uses_safe_defaults() {
+        val payload = LayerPayload.TextObject(
+            text = "AV canvas",
+            fontFamily = "Imported Family",
+            fontStyle = "Semibold",
+            alignment = TextAlignment.Justified,
+            kerning = listOf(TextKerningRange(0, 2, -1.5f)),
+            outline = true,
+            outlineWidth = 2.25f,
+            orientation = TextOrientation.Vertical,
+        )
+        val document = CanvasDocument(
+            "advanced-type", 800, 600,
+            layers = listOf(Layer("text", "Text", payload = payload)),
+        )
+
+        val loaded = assertIs<LoadResult.Success>(
+            NeoCanvasPackage.read(NeoCanvasPackage.write(document, emptyMap())),
+        )
+        assertEquals(payload, loaded.document.layers.single().payload)
+
+        val legacyManifest = """{"formatVersion":2,"document":{"id":"legacy-type","width":800,"height":600},"groups":[],"layers":[{"id":"text","name":"Text","visible":true,"opacity":1,"type":"text","text":"Legacy","fontFamily":"System","fontSize":48,"colorArgb":-16777216,"x":0,"y":0,"width":640,"height":160,"rotationDegrees":0,"alignment":"Left"}]}"""
+        val legacy = assertIs<LoadResult.Success>(NeoCanvasPackage.readMembers(mapOf(
+            "manifest.json" to legacyManifest.encodeToByteArray(),
+            "thumb.png" to transparentThumbnail(),
+            "assets/" to ByteArray(0),
+        )))
+        val text = assertIs<LayerPayload.TextObject>(legacy.document.layers.single().payload)
+        assertEquals("Regular", text.fontStyle)
+        assertEquals(emptyList(), text.kerning)
+        assertFalse(text.outline)
+        assertEquals(1f, text.outlineWidth)
+        assertEquals(TextOrientation.Horizontal, text.orientation)
     }
 
     @Test
