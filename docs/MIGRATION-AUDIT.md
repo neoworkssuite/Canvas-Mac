@@ -264,3 +264,10 @@ rather than relabelling the existing iPad target. The private NeoWorks suite is
 valuable as feature reference and preserved history, but wholesale merging it
 into the NeoCanvas runtime would add unrelated products and is not justified by
 the evidence.
+
+Task 1 audit tooling and this document were committed as
+`abfc2b74970eb210f5462deb392fd418aa6b776f` on the isolated
+`codex/repository-consolidation` branch. Workflow run `36233934850` was
+dispatched against that exact commit: fast validation completed successfully;
+full iPad validation was still running when Task 1's local contract closed and
+must be reconciled before the final report.
