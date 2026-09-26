@@ -4,6 +4,8 @@ import plistlib
 import re
 import sys
 
+from verify_ipad_integrity import verify_ipad_integrity
+
 ROOT = Path(__file__).resolve().parents[1]
 
 def fail(message: str) -> None:
@@ -107,5 +109,9 @@ if "ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon" not in project_yml:
     fail("project.yml does not select the AppIcon asset catalog")
 if "CODE_SIGN_STYLE: Automatic" not in project_yml:
     fail("project.yml is not configured for automatic signing handoff")
+
+integrity_errors = verify_ipad_integrity(ROOT)
+if integrity_errors:
+    fail("; ".join(integrity_errors))
 
 print(f"NeoCanvas release contract OK: {marketing} ({build}) · {bundle}")
