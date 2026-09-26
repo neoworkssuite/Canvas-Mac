@@ -242,8 +242,21 @@ removed.
   Calendar, Writer, Sheets, PDF-suite and launcher branches remain outside this
   product migration unless a shared dependency is demonstrated.
 - All source repositories were unarchived and accessible during collection.
-- No preservation tags existed at collection time. Task 2 therefore creates
-  new annotated tags after one more live-head refresh.
+- No preservation tags existed at initial collection time. Task 2 refreshed
+  every target without finding drift, then created the annotated tags below.
+
+## Preservation references
+
+| Repository | Reference | Target SHA | Created UTC | Verification |
+|---|---|---|---|---|
+| `neoworkssuite/Canvas-Mac` | `archive/pre-consolidation-ipad` | `bbc11c370c0872effee19d8e676d86117b064673` | `2026-09-26T09:56:19Z` | `matching` |
+| `neoworkssuite/Canvas-Mac` | `archive/pre-consolidation-macos` | `2c5d93a07446b47c7bcf87c147d76ff6dfec125d` | `2026-09-26T09:56:19Z` | `matching` |
+| `neoworkssuite/Canvas-Mac` | `archive/pre-consolidation-windows` | `65120e86cf8a9f97f6873e597781938f30d31394` | `2026-09-26T09:56:19Z` | `matching` |
+| `neoworkssuite/Canvas_android` | `archive/pre-consolidation-android` | `74176a28397205b33907ca9e8cb312bdd418875a` | `2026-09-26T09:56:19Z` | `matching` |
+| `christianrobertson36/neoworks` | `archive/pre-consolidation-legacy-windows` | `803fc4ba359042a0843761286982b80e839395ae` | `2026-09-26T09:56:19Z` | `matching` |
+
+Verification is against each annotated tag's peeled commit, not merely its tag
+object SHA. Existing branches were not moved or deleted.
 
 ## Credential boundary
 
