@@ -2,9 +2,24 @@ name: NeoCanvas Android CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, ipad-dev, "android-**"]
+    paths:
+      - "core/**"
+      - "brushes/**"
+      - "renderer/**"
+      - "ui/**"
+      - "androidApp/**"
+      - "settings.gradle.kts"
+      - ".github/workflows/android-build.yml"
   pull_request:
-    branches: [main]
+    paths:
+      - "core/**"
+      - "brushes/**"
+      - "renderer/**"
+      - "ui/**"
+      - "androidApp/**"
+      - "settings.gradle.kts"
+      - ".github/workflows/android-build.yml"
   workflow_dispatch:
 
 jobs:
@@ -20,13 +35,11 @@ jobs:
           cache: gradle
       - name: Prepare Gradle wrapper
         run: chmod +x ./gradlew
-      - name: Verify Android repository boundary
-        shell: pwsh
-        run: ./scripts/verify-android-repository.ps1
+      - name: Verify canonical Android host
+        run: python3 scripts/verify_android_host.py
       - name: Run Android unit tests, lint, and assemble debug APK
         run: ./gradlew :androidApp:testDebugUnitTest :androidApp:lintDebug :androidApp:assembleDebug
       - name: Upload installable debug APK
-        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: neocanvas-android-debug-apk
