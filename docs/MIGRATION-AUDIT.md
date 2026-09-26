@@ -22,7 +22,23 @@ Status vocabulary in this document is evidence-based:
 | `christianrobertson36/neoworks` | Private | `main` | No | `803fc4ba359042a0843761286982b80e839395ae` | GitHub repository and ref APIs under the stored legacy identity |
 
 `neoworkssuite/NeoCanvas` did not exist when the approved design was prepared.
-Its state is deliberately re-checked in Task 3 rather than assumed here.
+Task 3 re-checked that absence immediately before creating the empty public
+canonical repository at <https://github.com/neoworkssuite/NeoCanvas>.
+
+### Canonical foundation result
+
+- `main` is the default branch at `59d93a0f0384edd65c9fd763b437a9e7ca66e0e7`.
+- `ipad-dev` was created from the refreshed iPad reference commit
+  `bbc11c370c0872effee19d8e676d86117b064673`.
+- `ipad-gestures-phase1` and every audited Windows/Apple/source branch remain
+  present at the exact source SHA.
+- All three Canvas-Mac preservation tags are present as annotated tags and peel
+  to their recorded commits.
+- GitHub accepted all nine portable source heads and all three source tags.
+  Server-owned `refs/pull/*` were rejected, as expected; those are GitHub pull
+  request caches rather than authored branches or tags.
+- `python scripts/verify-canonical-lineage.py docs/MIGRATION-AUDIT.md` completed
+  successfully against a clean temporary mirror clone.
 
 ## Branch and tag HEADs
 
