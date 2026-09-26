@@ -29,6 +29,22 @@ class IPadIntegrityContractTest(unittest.TestCase):
             errors = verify_ipad_integrity(root)
             self.assertTrue(any("sample" in error.lower() for error in errors))
 
+    def test_cached_brush_pack_generation_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("core", "brushes", "renderer", "ui"):
+                (root / name).mkdir()
+            (root / "iosApp/NeoCanvas").mkdir(parents=True)
+            workflow = root / ".github/workflows"
+            workflow.mkdir(parents=True)
+            (workflow / "ipad-build.yml").write_text(
+                "ipad-dev simulator physical iPad smoke Extended visual Upload iPad "
+                "NeoNaturePackArtifactTest",
+                encoding="utf-8",
+            )
+            errors = verify_ipad_integrity(root)
+            self.assertTrue(any("brush pack" in error.lower() for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,8 @@ def verify_ipad_integrity(root: Path) -> list[str]:
     missing_workflow = [item for item in required_evidence if item.lower() not in workflow_text.lower()]
     if missing_workflow:
         errors.append("iPad workflow is missing: " + ", ".join(missing_workflow))
+    if "NeoNaturePackArtifactTest" not in workflow_text or "--rerun-tasks" not in workflow_text:
+        errors.append("iPad workflow must rebuild the brush pack before artifact upload")
     if host.is_dir():
         for path in host.rglob("*"):
             if path.is_file() and any(term in path.name.lower() for term in ("sampleartwork", "showcaseartwork", "manualscreenshot")):
