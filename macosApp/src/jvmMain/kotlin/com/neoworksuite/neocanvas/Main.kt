@@ -1,8 +1,6 @@
 package com.neoworksuite.neocanvas
 
 import androidx.compose.runtime.remember
-import androidx.compose.ui.window.Item
-import androidx.compose.ui.window.Menu
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
