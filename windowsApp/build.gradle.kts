@@ -33,7 +33,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "NeoCanvas"
-            packageVersion = "0.1.0"
+            packageVersion = "1.0.0"
             vendor = "NeoWorksSuite"
             windows {
                 iconFile.set(rootProject.file("assets/branding/neocanvas.ico"))

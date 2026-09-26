@@ -1,6 +1,8 @@
 # NeoCanvas
 
-NeoCanvas is an offline-first drawing and creative studio for iPad, Android and Windows.
+NeoCanvas is an offline-first drawing and creative studio for iPad, macOS,
+Windows, and Android. The iPad implementation is the product reference while
+the other hosts move through evidence-based parity work.
 
 The project is a Kotlin and Compose Multiplatform application. It has no account,
 network, telemetry, or cloud-storage requirement; documents are designed to remain
@@ -14,7 +16,7 @@ local unless a person explicitly exports or copies them.
 - `ui` — shared Compose editor workspace
 - `androidApp` — Android host
 - `windowsApp` — Windows desktop host
-- `iosApp` — native iPad/iPhone host for the shared NeoCanvas editor
+- `iosApp` — native iPad host for the shared NeoCanvas editor
 
 ## Prerequisites
 
@@ -32,6 +34,21 @@ local unless a person explicitly exports or copies them.
 
 The Android test task should complete successfully. The Windows task opens a window
 titled `NeoCanvas`; close the window to end the task.
+
+## Development policy
+
+Feature work begins on `ipad-dev` and is accepted on iPad first. A feature is
+marked **PARITY-READY** only after its shared contract and required assets are
+documented for macOS, Windows, and Android. Promotion to `main` requires the
+applicable platform matrix or an explicit documented exception; source presence
+alone is not completion evidence.
+
+## Project records
+
+- [Migration audit](docs/MIGRATION-AUDIT.md)
+- [Platform parity](docs/PLATFORM-PARITY.md)
+- [Versioning](docs/VERSIONING.md)
+- [Release checklist](docs/release-checklist.md)
 
 
 ## Apple release validation

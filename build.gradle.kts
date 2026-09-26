@@ -9,5 +9,5 @@ plugins {
 
 allprojects {
     group = "com.neoworksuite.neocanvas"
-    version = "0.1.0"
+    version = "1.0.0"
 }
