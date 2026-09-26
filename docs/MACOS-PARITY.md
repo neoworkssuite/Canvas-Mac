@@ -16,14 +16,14 @@ evidence rather than code imported over newer shared behavior.
 
 | Capability | Status | Evidence |
 |---|---|---|
-| Shared canvas and editor UI | 🟡 | Host contract is present; native workflow pending |
-| App lifecycle and menu | 🟡 | `macosApp` packages through Compose Desktop/AppKit integration; native workflow pending |
-| DMG package | 🟡 | `:macosApp:packageDmg` configured; native workflow pending |
+| Shared canvas and editor UI | ✅ | Canonical run `36236949475` passed shared tests at `2c3b1d9` |
+| App lifecycle and menu | ✅ | Canonical run `36236949475` compiled the dedicated host at `2c3b1d9` |
+| DMG package | ✅ | Canonical run `36236949475` packaged and uploaded the DMG |
 | Native open/save/export panels | 🔴 | Dedicated macOS file-action bridge is not yet implemented |
 | Apple Pencil/touch input | N/A | macOS uses desktop pointer/tablet input rather than iPad touch APIs |
 | Mac App Store signing/notarisation | 🔴 | Requires distribution certificates and store configuration |
 
-Statuses must only move to green after the canonical macOS workflow proves the
-corresponding build or behavior. The first implementation deliberately uses
+Green statuses above are limited to behavior proven by canonical workflow run
+`36236949475`. The first implementation deliberately uses
 `UnavailableEditorFileActions`, so unsupported native file operations remain
 disabled rather than pretending Windows or UIKit APIs are macOS integrations.
