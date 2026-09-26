@@ -47,6 +47,10 @@ alone is not completion evidence.
 
 - [Migration audit](docs/MIGRATION-AUDIT.md)
 - [Platform parity](docs/PLATFORM-PARITY.md)
+- [PARITY-READY policy](docs/PARITY-READY.md)
+- [macOS parity](docs/MACOS-PARITY.md)
+- [Windows migration](docs/WINDOWS-MIGRATION.md)
+- [Android parity](docs/ANDROID-PARITY.md)
 - [Versioning](docs/VERSIONING.md)
 - [Release checklist](docs/release-checklist.md)
 

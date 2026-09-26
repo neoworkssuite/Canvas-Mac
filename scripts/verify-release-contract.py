@@ -5,6 +5,7 @@ import re
 import sys
 
 from verify_ipad_integrity import verify_ipad_integrity
+from verify_parity_docs import verify_parity_docs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,5 +114,8 @@ if "CODE_SIGN_STYLE: Automatic" not in project_yml:
 integrity_errors = verify_ipad_integrity(ROOT)
 if integrity_errors:
     fail("; ".join(integrity_errors))
+parity_errors = verify_parity_docs(ROOT)
+if parity_errors:
+    fail("; ".join(parity_errors))
 
 print(f"NeoCanvas release contract OK: {marketing} ({build}) · {bundle}")
