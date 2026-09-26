@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "NeoCanvas"
 
-include(":core", ":brushes", ":renderer", ":ui", ":androidApp", ":windowsApp")
+include(":core", ":brushes", ":renderer", ":ui", ":androidApp", ":windowsApp", ":macosApp")
