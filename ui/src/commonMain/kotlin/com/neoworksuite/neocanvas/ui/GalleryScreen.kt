@@ -51,8 +51,6 @@ fun GalleryScreen(
     actions: EditorFileActions,
     onNew: () -> Unit,
     onImportDocument: () -> Unit,
-    kidsModeEnabled: Boolean,
-    onKids: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
     var documents by remember { mutableStateOf(runCatching { actions.listLocalDocuments() }.getOrDefault(emptyList())) }
@@ -121,7 +119,6 @@ fun GalleryScreen(
                 if (stackOpen) GalleryAction("Back") { stackOpen = false; selected = emptySet() }
                 GalleryAction(if (selecting) "Done" else "Select") { selecting = !selecting; if (!selecting) selected = emptySet() }
                 GalleryAction("Open file") { onImportDocument() }
-                if (kidsModeEnabled) GalleryAction("Kids") { onKids() }
                 Button(onClick = onNew) { Text("+  New artwork") }
             }
 
@@ -161,14 +158,12 @@ fun GalleryScreen(
                     Image(neoCanvasIcon(), null, Modifier.size(112.dp))
                     Text("Your Gallery is ready", color = NeoCanvasColors.paper, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (kidsModeEnabled) "Create a canvas or open Kids activities. Everything stays local."
-                        else "Create a canvas. Everything stays local.",
+                        galleryEmptyStateMessage(),
                         color = NeoCanvasColors.muted,
                         modifier = Modifier.padding(10.dp),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = onNew) { Text("Create artwork") }
-                        if (kidsModeEnabled) Button(onClick = onKids) { Text("Kids activities") }
                     }
                 }
             } else {
@@ -279,6 +274,10 @@ fun GalleryScreen(
         dismissButton = { TextButton(onClick = { deleteTargets = emptySet() }) { Text("Cancel") } },
     )
 }
+
+internal fun galleryPrimaryActionLabels(): List<String> = listOf("Select", "Open file", "New artwork")
+
+internal fun galleryEmptyStateMessage(): String = "Create a canvas. Everything stays local."
 
 @Composable
 private fun KickstarterGalleryBanner(onOpen: () -> Unit) {

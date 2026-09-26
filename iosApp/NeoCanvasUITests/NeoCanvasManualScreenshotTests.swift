@@ -23,12 +23,6 @@ final class NeoCanvasManualScreenshotTests: XCTestCase {
         XCUIDevice.shared.appearance = .light
         sleep(2)
 
-        try tap("Kids activities")
-        XCTAssertTrue(app.staticTexts["Back to Gallery"].waitForExistence(timeout: 8))
-        try capture("10-kids-activities.png")
-        try tap("Back to Gallery")
-        XCTAssertTrue(app.staticTexts["Gallery"].waitForExistence(timeout: 8))
-
         try tap("Create artwork")
         XCTAssertTrue(app.staticTexts["New canvas"].waitForExistence(timeout: 8))
         try capture("03-new-canvas.png")

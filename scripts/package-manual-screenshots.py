@@ -21,7 +21,6 @@ REQUIRED_SCREENSHOTS = (
     "07-layers.png",
     "08-fx-adjustments.png",
     "09-settings.png",
-    "10-kids-activities.png",
 )
 
 

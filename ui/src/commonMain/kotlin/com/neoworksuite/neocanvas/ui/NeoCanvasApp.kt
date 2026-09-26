@@ -181,39 +181,7 @@ fun NeoCanvasApp(
                     if (opened) destination = AppDestination.Editor
                 }
             },
-            kidsModeEnabled = state.kidsModeEnabled,
-            onKids = { destination = AppDestination.Kids },
             onOpen = { name -> if (state.openFromGallery(name)) destination = AppDestination.Editor },
-        )
-    } else if (destination == AppDestination.Kids && !state.recoveryChecking && state.recoveryCandidate == null) {
-        KidsActivityScreen(
-            onBack = { destination = AppDestination.Gallery },
-            onStartPreset = { preset ->
-                val created = when (preset) {
-                    KidsCanvasPreset.FreeDraw -> state.newDocument(2048, 1536)
-                    KidsCanvasPreset.MirrorDraw -> state.newDocument(2048, 1536)
-                    KidsCanvasPreset.PixelArt -> state.newDocument(512, 512)
-                    KidsCanvasPreset.ComicCanvas -> state.newDocument(2400, 1600)
-                }
-                if (created) {
-                    state.tool = Tool.Brush
-                    state.symmetry = if (preset == KidsCanvasPreset.MirrorDraw)
-                        com.neoworksuite.neocanvas.renderer.DrawingSymmetry.Vertical
-                    else com.neoworksuite.neocanvas.renderer.DrawingSymmetry.None
-                    when (preset) {
-                        KidsCanvasPreset.PixelArt -> {
-                            state.brushSize = 16f
-                            state.stabilization = 0f
-                            state.smoothResizing = false
-                            state.statusMessage = "Kids Pixel Art canvas"
-                        }
-                        KidsCanvasPreset.MirrorDraw -> state.statusMessage = "Kids Mirror Draw — vertical symmetry is on"
-                        KidsCanvasPreset.ComicCanvas -> state.statusMessage = "Kids Comic Canvas"
-                        KidsCanvasPreset.FreeDraw -> state.statusMessage = "Kids Free Draw"
-                    }
-                    destination = AppDestination.Editor
-                }
-            },
         )
     } else BoxWithConstraints(
         Modifier.fillMaxSize()
@@ -490,4 +458,4 @@ fun NeoCanvasApp(
     }
 }
 
-private enum class AppDestination { Gallery, Kids, Editor }
+private enum class AppDestination { Gallery, Editor }

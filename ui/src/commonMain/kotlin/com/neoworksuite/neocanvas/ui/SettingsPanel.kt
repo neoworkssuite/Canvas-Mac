@@ -145,16 +145,6 @@ fun SettingsPanel(
             )
         }
 
-        SettingsSection("FAMILY")
-        SettingsToggle(
-            "Kids activities",
-            "Show the Kids activities entry in Gallery. Turn this off for a cleaner professional-only Gallery.",
-            state.kidsModeEnabled,
-        ) {
-            state.kidsModeEnabled = it
-            state.persistPreferences()
-        }
-
         SettingsSection("INTERFACE")
         Text("Drawing hand", color = NeoCanvasColors.paper, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Text(
