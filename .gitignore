@@ -41,3 +41,4 @@ iosApp/NeoCanvas.xcodeproj/
 
 # Local superpowers execution ledgers
 .superpowers/
+.worktrees/
