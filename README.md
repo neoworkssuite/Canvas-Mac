@@ -1,5 +1,9 @@
 # NeoCanvas
 
+> **Historical source repository:** This repository remains available to preserve
+> NeoCanvas history. Active cross-platform development now lives in
+> [neoworkssuite/NeoCanvas](https://github.com/neoworkssuite/NeoCanvas).
+
 NeoCanvas is an offline-first raster drawing studio for Android and Windows.
 
 The project is a Kotlin and Compose Multiplatform application. It has no account,
