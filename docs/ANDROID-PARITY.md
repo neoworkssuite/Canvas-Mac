@@ -27,11 +27,11 @@ overwriting newer `core`, `brushes`, `renderer`, or `ui` behavior.
 
 | Capability | Status | Evidence |
 |---|---|---|
-| Shared Android host contract | 🟡 | Local contract passes; canonical workflow pending |
-| Android unit tests and lint | 🟡 | Canonical workflow pending |
-| Debug APK | 🟡 | Canonical workflow pending |
+| Shared Android host contract | ✅ | Canonical run `36237376981` passed at `de44e91` |
+| Android unit tests and lint | ✅ | Canonical run `36237376981` passed |
+| Debug APK | ✅ | Canonical run `36237376981` assembled and uploaded the APK |
 | Play Store AAB/signing | 🔴 | Release keystore and store publishing are not configured |
 | Hardware stylus validation | 🟡 | Input bridge is present but no physical-device run is recorded |
 
-The source repository's run `36038830556` passed at the imported head. Canonical
-statuses move to green only when the integrated branch passes its own workflow.
+The source repository's run `36038830556` passed at the imported head. The
+integrated canonical host is independently proven by run `36237376981`.
