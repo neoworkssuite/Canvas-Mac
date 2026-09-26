@@ -12,12 +12,12 @@ The audit must refresh these values immediately before each migration action bec
 |---|---|---|---|
 | `neoworkssuite/Canvas-Mac` | `main` | `ipad-gestures-phase1` at `7d429d0c675a68a07ba28427c92621aa1997808a` | Accessible; primary source of truth |
 | `neoworkssuite/Canvas_android` | `main` | `74176a28397205b33907ca9e8cb312bdd418875a` | Accessible; Android source |
-| `christianrobertson36/neoworks` | Unknown | Unknown | Inaccessible with current credentials; GitHub returns 404 |
+| `christianrobertson36/neoworks` | `main` | `803fc4ba359042a0843761286982b80e839395ae` | Accessible through the stored `christianrobertson36` credential; private legacy Windows source |
 | `neoworkssuite/NeoCanvas` | N/A | N/A | Does not yet exist |
 
 Verified `Canvas-Mac` branches include `main`, `apple-platform`, `ipad-gestures-phase1`, `windows-export-parity`, `windows-host-parity`, `windows-parity-foundation`, `windows-parity-phase1`, and `windows-release-contract`.
 
-The complete migration audit will enumerate all branches, tags, modules, workflows, build scripts, platform hosts, duplicated code, and feature differences. The inaccessible `christianrobertson36/neoworks` repository is a hard audit gap: no claim of complete Windows consolidation may be made until access is restored or the user explicitly accepts that source as unavailable.
+The complete migration audit will enumerate all branches, tags, modules, workflows, build scripts, platform hosts, duplicated code, and feature differences. GitHub CLI stores credentials for both owners: use `neoworkssuite` for canonical-repository operations and temporarily switch to `christianrobertson36` only for legacy audit or preservation work, switching back immediately afterward.
 
 ## Governing Constraints
 
@@ -163,15 +163,9 @@ Before declaring migration success, verify:
 9. Preservation references resolve to their recorded SHAs.
 10. Any inaccessible or failing platform is explicitly reported rather than hidden.
 
-## Audit and Migration Blockers
+## Credential Boundary
 
-The current credentials cannot resolve `christianrobertson36/neoworks`. The likely causes are a private repository without collaborator access, a renamed/transferred repository, or an incorrect owner/name. Required resolution is one of:
-
-- grant the authenticated GitHub account read access;
-- transfer or mirror the repository into `neoworkssuite` while preserving history; or
-- provide the corrected repository URL.
-
-Until resolved, the canonical repository may be established and accessible sources may be audited, but Windows consolidation cannot be called complete.
+`christianrobertson36/neoworks` is private and is not visible while the `neoworkssuite` GitHub identity is active. The workstation already holds a valid separate `christianrobertson36` credential with repository access. Migration commands must select the identity appropriate to the repository and verify the active identity before any write. Never expose either stored token in logs, documentation, commits, or chat output.
 
 ## Final Handoff
 
